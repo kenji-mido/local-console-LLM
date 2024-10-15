@@ -20,10 +20,10 @@ from typing import Annotated
 from typing import Optional
 
 import typer
-from local_console.core.camera import get_qr_object
-from local_console.core.config import get_config
+from local_console.core.camera.qr import get_qr_object
+from local_console.core.config import config_obj
 from local_console.plugin import PluginBase
-from local_console.utils.local_network import get_my_ip_by_routing
+from local_console.utils.local_network import get_mqtt_ip
 from local_console.utils.local_network import is_localhost
 
 logger = logging.getLogger(__name__)
@@ -47,9 +47,9 @@ def qr(
         typer.Option(help="TCP port on which the MQTT broker is listening"),
     ] = None,
     enable_tls: Annotated[
-        Optional[bool],
-        typer.Option(help="Whether to connect using TLS"),
-    ] = None,
+        bool,
+        typer.Option("--tls", "-t", help="Whether to connect using TLS"),
+    ] = False,
     ntp_server: Annotated[
         str,
         typer.Option(help="NTP server to connect to for time synchronization"),
@@ -60,12 +60,12 @@ def qr(
     ] = None,
 ) -> None:
     # Take default values from the configured settings
-    config = get_config()
-    host = config.mqtt.host.ip_value if not host else host
-    port = config.mqtt.port if port is None else port
-    tls_enabled = config.is_tls_enabled if enable_tls is None else enable_tls
+    device_config = config_obj.get_active_device_config()
+    host = device_config.mqtt.host if not host else host
+    port = device_config.mqtt.port if port is None else port
+    tls_enabled = enable_tls
 
-    local_ip = get_my_ip_by_routing()
+    local_ip = get_mqtt_ip()
     if is_localhost(host) or host == local_ip:
         host = local_ip
 

@@ -15,6 +15,7 @@
 # SPDX-License-Identifier: Apache-2.0
 import logging
 import os
+import sys
 
 import trio
 import typer
@@ -31,6 +32,7 @@ def gui() -> None:
     os.environ["KIVY_NO_CONSOLELOG"] = "1"
     os.environ["KIVY_NO_FILELOG"] = "1"
     os.environ["KIVY_NO_CONFIG"] = "1"
+    os.environ["KCFG_KIVY_LOG_LEVEL"] = "warning"
 
     """
     This import must happen within this callback, as
@@ -39,7 +41,12 @@ def gui() -> None:
     """
     from local_console.gui.main import LocalConsoleGUIAPP
 
-    trio.run(LocalConsoleGUIAPP().app_main)
+    logging.getLogger("PIL").setLevel(logging.ERROR)
+
+    try:
+        trio.run(LocalConsoleGUIAPP().app_main)
+    except:
+        sys.exit(1)
 
 
 class GUICommand(PluginBase):

@@ -13,565 +13,472 @@
 # limitations under the License.
 #
 # SPDX-License-Identifier: Apache-2.0
-from contextlib import contextmanager
-from unittest.mock import MagicMock
+from unittest.mock import Mock
 from unittest.mock import patch
 
 import hypothesis.strategies as st
+import pytest
+import trio
 from hypothesis import given
-from local_console.core.config import config_to_schema
-from local_console.core.config import get_default_config
+from hypothesis import settings
+from hypothesis import strategies as st
+from local_console.core.config import config_obj
 from local_console.gui.controller.connection_screen import ConnectionScreenController
-from local_console.gui.model.connection_screen import ConnectionScreenModel
-from local_console.gui.utils.observer import Observer
-from pytest import fixture
-from pytest import mark
 
-from tests.strategies.configs import generate_invalid_hostname_long
+from tests.fixtures.camera import cs_init
+from tests.fixtures.camera import cs_init_context
+from tests.fixtures.gui import driver_context
 from tests.strategies.configs import generate_invalid_ip
-from tests.strategies.configs import generate_invalid_ip_long
-from tests.strategies.configs import generate_invalid_port_number
 from tests.strategies.configs import generate_random_characters
-from tests.strategies.configs import generate_valid_ip
-from tests.strategies.configs import generate_valid_ip_strict
 from tests.strategies.configs import generate_valid_port_number
 
 
-def mock_get_config():
-    return config_to_schema(get_default_config())
+@pytest.mark.trio
+async def test_initialization(cs_init) -> None:
+    with driver_context() as (driver, _):
+        driver.camera_state = cs_init
+        device = config_obj.get_active_device_config()
+        driver.camera_state.initialize_connection_variables("EVP1", device)
+        with patch(
+            "local_console.gui.controller.connection_screen.ConnectionScreenView"
+        ):
+            ConnectionScreenController(Mock(), driver)
+
+            assert driver.camera_state.mqtt_host.value == str(device.mqtt.host)
+            assert driver.camera_state.mqtt_port.value == device.mqtt.port
+            assert driver.camera_state.ntp_host.value == "pool.ntp.org"
+            assert driver.camera_state.ip_address.value == ""
+            assert driver.camera_state.subnet_mask.value == ""
+            assert driver.camera_state.gateway.value == ""
+            assert driver.camera_state.dns_server.value == ""
+            assert driver.camera_state.wifi_ssid.value == ""
+            assert driver.camera_state.wifi_password.value == ""
+
+            assert not driver.camera_state.is_connected.value
 
 
-@fixture(autouse=True)
-def fixture_get_config():
-    with patch(
-        "local_console.gui.model.connection_screen.get_config",
-        mock_get_config,
-    ) as _fixture:
-        yield _fixture
+# local_ip
 
 
-class ModelObserver(Observer):
-    def __init__(self):
-        self.is_called = False
-
-    def model_is_changed(self) -> None:
-        self.is_called = True
-
-
-@contextmanager
-def create_model() -> ConnectionScreenModel:
-    model = ConnectionScreenModel()
-    observer = ModelObserver()
-    model.add_observer(observer)
-    yield model
-    assert observer.is_called
-
-
-def test_initialization():
-    model = ConnectionScreenModel()
-    # Settings
-    assert model.mqtt_host == mock_get_config().mqtt.host.ip_value
-    assert model.mqtt_port == f"{mock_get_config().mqtt.port}"
-    assert model.ntp_host == "pool.ntp.org"
-    assert model.ip_address == ""
-    assert model.subnet_mask == ""
-    assert model.gateway == ""
-    assert model.dns_server == ""
-    assert model.wifi_ssid == ""
-    assert model.wifi_password == ""
-    assert model.wifi_password_hidden is True
-    assert model.wifi_icon_eye == "eye-off"
-    # Settings validity
-    assert not model.mqtt_host_error
-    assert not model.mqtt_port_error
-    assert not model.ntp_host_error
-    assert not model.ip_address_error
-    assert not model.subnet_mask_error
-    assert not model.gateway_error
-    assert not model.dns_server_error
-    # Others
-    assert not model.connected
-    assert model.warning_message == ""
+@pytest.mark.trio
+@given(ip=st.ip_addresses(v=4))
+async def test_local_ip_valid_update(ip: str):
+    with driver_context() as (driver, _):
+        with (
+            patch(
+                "local_console.gui.controller.connection_screen.ConnectionScreenView"
+            ),
+        ):
+            async with (
+                trio.open_nursery() as nursery,
+                cs_init_context() as camera,
+            ):
+                driver.camera_state = camera
+                device = config_obj.get_active_device_config()
+                driver.camera_state.initialize_connection_variables("EVP1", device)
+                ctrl = ConnectionScreenController(Mock(), driver)
+                # validate ip
+                assert ctrl.validate_all_settings()
+                nursery.cancel_scope.cancel()
 
 
-# local ip
-@given(st.ip_addresses(v=4))
-def test_local_ip_valid_updated(valid_ip: str):
-    with create_model() as model:
-        model.local_ip = valid_ip
-        assert model.local_ip == valid_ip
-        assert not model.mqtt_host_error
-        assert not model.mqtt_port_error
-        assert not model.ntp_host_error
-        assert not model.ip_address_error
-        assert not model.subnet_mask_error
-        assert not model.gateway_error
-        assert not model.dns_server_error
-        assert model.warning_message == "Warning, Local IP Address is updated."
+# mqtt_host
 
 
-# local ip
-@given(generate_invalid_ip())
-def test_local_ip_invalid_updated(invalid_ip: str):
-    with create_model() as model:
-        model.local_ip = invalid_ip
-        assert model.local_ip == invalid_ip
-        assert not model.mqtt_host_error
-        assert not model.mqtt_port_error
-        assert not model.ntp_host_error
-        assert not model.ip_address_error
-        assert not model.subnet_mask_error
-        assert not model.gateway_error
-        assert not model.dns_server_error
-        assert model.warning_message == "Warning, Local IP Address is updated."
+@pytest.mark.trio
+@given(ip=st.ip_addresses(v=4))
+async def test_mqtt_host_valid_update(ip: str):
+    with driver_context() as (driver, _):
+        with patch(
+            "local_console.gui.controller.connection_screen.ConnectionScreenView"
+        ):
+            async with (
+                trio.open_nursery() as nursery,
+                cs_init_context() as camera,
+            ):
+                driver.camera_state = camera
+                config = config_obj.get_config()
+                device = config_obj.get_active_device_config()
+                driver.camera_state.initialize_connection_variables(
+                    config.evp.iot_platform, device
+                )
+                ctrl = ConnectionScreenController(Mock(), driver)
+                # reset ip
+                ctrl.set_mqtt_host(str(ip))
+                # validate ip
+                assert ctrl.validate_all_settings()
+                # check warning raised if changed
+                ctrl.view.display_info.assert_not_called()
+                nursery.cancel_scope.cancel()
 
 
-# local ip
-def test_local_ip_not_updated():
-    with create_model() as model:
-        ip = model.local_ip
-        model.local_ip = ip
-        assert model.local_ip == ip
-        assert not model.mqtt_host_error
-        assert not model.mqtt_port_error
-        assert not model.ntp_host_error
-        assert not model.ip_address_error
-        assert not model.subnet_mask_error
-        assert not model.gateway_error
-        assert not model.dns_server_error
-        assert model.warning_message == ""
+@pytest.mark.trio
+@given(ip=generate_invalid_ip())
+async def test_mqtt_host_invalid_update(ip: str):
+    with driver_context() as (driver, _):
+        with patch(
+            "local_console.gui.controller.connection_screen.ConnectionScreenView"
+        ):
+            async with (
+                trio.open_nursery() as nursery,
+                cs_init_context() as camera,
+            ):
+                driver.camera_state = camera
+                device = config_obj.get_active_device_config()
+                driver.camera_state.initialize_connection_variables("EVP1", device)
+                ctrl = ConnectionScreenController(Mock(), driver)
+                # reset ip
+                ctrl.set_mqtt_host(str(ip))
+                # validate ip
+                assert not ctrl.validate_all_settings()
+                # check warning raised if changed
+                ctrl.view.display_error.assert_called_once_with(
+                    "Warning, invalid parameters:\n- MQTT host address"
+                )
+                nursery.cancel_scope.cancel()
 
 
-# local ip
-def test_local_ip_empty():
-    with create_model() as model:
-        model.local_ip = ""
-        assert model.local_ip == ""
-        assert not model.mqtt_host_error
-        assert not model.mqtt_port_error
-        assert not model.ntp_host_error
-        assert not model.ip_address_error
-        assert not model.subnet_mask_error
-        assert not model.gateway_error
-        assert not model.dns_server_error
-        assert (
-            model.warning_message
-            == "Warning, No Local IP Address.\nPlease check connectivity."
-        )
+# mqtt_port
 
 
-# List of addresses to check
-addresses_to_check = [
-    "1.2.3.4.5",  # DTSS-25
-    "1A.2B.3C.4D.5C",  # DTSS-26
-    "123.345.567.789",  # DTSS-44
-    "!@#$%^^",  # DTSS-45
-    "AB1.CD2.ED3.GH4",  # DTSS-47
-]
+@pytest.mark.trio
+@given(port=generate_valid_port_number())
+async def test_mqtt_port_valid_update(port: str):
+    with driver_context() as (driver, _):
+        with patch(
+            "local_console.gui.controller.connection_screen.ConnectionScreenView"
+        ):
+            async with (
+                trio.open_nursery() as nursery,
+                cs_init_context() as camera,
+            ):
+                driver.camera_state = camera
+                device = config_obj.get_active_device_config()
+                driver.camera_state.initialize_connection_variables("EVP1", device)
+                ctrl = ConnectionScreenController(Mock(), driver)
+                # reset ip
+                ctrl.set_mqtt_port(str(port))
+                # validate ip
+                assert ctrl.validate_all_settings()
+                # check warning raised if changed
+                ctrl.view.display_info.assert_not_called()
+                nursery.cancel_scope.cancel()
 
 
-# warning of local ip updated
-@mark.parametrize("invalid_ip", addresses_to_check)
-def test_local_ip_invalid_mqtt_ntp(invalid_ip: str):
-    with create_model() as model:
-        model.mqtt_host = invalid_ip
-        model.ntp_host = invalid_ip
-        model.local_ip = "192.168.11.11"
-        assert model.local_ip == "192.168.11.11"
-        assert model.mqtt_host == invalid_ip
-        assert model.mqtt_host_error
-        assert not model.mqtt_port_error
-        assert model.ntp_host == invalid_ip
-        assert model.ntp_host_error
-        assert not model.ip_address_error
-        assert not model.subnet_mask_error
-        assert not model.gateway_error
-        assert not model.dns_server_error
-        assert (
-            model.warning_message == "Warning, invalid parameters:"
-            "\n- MQTT host address"
-            "\n- NTP server address"
-            "\nWarning, Local IP Address is updated."
-        )
+@pytest.mark.trio
+async def test_mqtt_port_invalid_update(cs_init) -> None:
+    port = -1
+    with driver_context() as (driver, _):
+        with patch(
+            "local_console.gui.controller.connection_screen.ConnectionScreenView"
+        ):
+            driver.camera_state = cs_init
+            device = config_obj.get_active_device_config()
+            driver.camera_state.initialize_connection_variables("EVP1", device)
+            ctrl = ConnectionScreenController(Mock(), driver)
+            # reset ip
+            ctrl.set_mqtt_port(str(port))
+            # validate ip
+            assert not ctrl.validate_all_settings()
+            # check warning raised if changed
+            ctrl.view.display_error.assert_called_once_with(
+                "Warning, invalid parameters:\n- MQTT port"
+            )
 
 
-# warning of invalid mqtt host and ntp server
-@mark.parametrize("invalid_ip", addresses_to_check)
-def test_same_local_ip_invalid_mqtt_ntp(invalid_ip: str):
-    with create_model() as model:
-        ip = model.local_ip
-        model.mqtt_host = invalid_ip
-        model.ntp_host = invalid_ip
-        model.local_ip = ip
-        assert model.local_ip == ip
-        assert model.mqtt_host == invalid_ip
-        assert model.mqtt_host_error
-        assert not model.mqtt_port_error
-        assert model.ntp_host == invalid_ip
-        assert model.ntp_host_error
-        assert not model.ip_address_error
-        assert not model.subnet_mask_error
-        assert not model.gateway_error
-        assert not model.dns_server_error
-        assert (
-            model.warning_message == "Warning, invalid parameters:"
-            "\n- MQTT host address"
-            "\n- NTP server address"
-        )
+# ntp_host
+@pytest.mark.trio
+@given(ip=st.ip_addresses(v=4))
+async def test_ntp_host_valid_update(ip: str):
+    with driver_context() as (driver, _):
+        with patch(
+            "local_console.gui.controller.connection_screen.ConnectionScreenView"
+        ):
+            async with (
+                trio.open_nursery() as nursery,
+                cs_init_context() as camera,
+            ):
+                driver.camera_state = camera
+                device = config_obj.get_active_device_config()
+                driver.camera_state.initialize_connection_variables("EVP1", device)
+                ctrl = ConnectionScreenController(Mock(), driver)
+                # reset ip
+                ctrl.set_ntp_host(str(ip))
+                # validate ip
+                assert ctrl.validate_all_settings()
+                # check warning raised if changed
+                ctrl.view.display_info.assert_not_called()
+                nursery.cancel_scope.cancel()
 
 
-# warning of invalid mqtt port and local ip updated
-def test_local_ip_mqtt_port_all_characters():
-    with create_model() as model:
-        model.mqtt_port = "aaa"
-        model.local_ip = "192.168.11.11"
-        assert model.local_ip == "192.168.11.11"
-        assert model.mqtt_port == ""
-        assert not model.mqtt_host_error
-        assert model.mqtt_port_error
-        assert not model.ntp_host_error
-        assert not model.ip_address_error
-        assert not model.subnet_mask_error
-        assert not model.gateway_error
-        assert not model.dns_server_error
-        assert (
-            model.warning_message == "Warning, invalid parameters:"
-            "\n- MQTT port"
-            "\nWarning, Local IP Address is updated."
-        )
+@pytest.mark.trio
+@given(ip=generate_invalid_ip())
+async def test_ntp_host_invalid_update(ip: str):
+    with driver_context() as (driver, _):
+        with patch(
+            "local_console.gui.controller.connection_screen.ConnectionScreenView"
+        ):
+            async with (
+                trio.open_nursery() as nursery,
+                cs_init_context() as camera,
+            ):
+                driver.camera_state = camera
+                device = config_obj.get_active_device_config()
+                driver.camera_state.initialize_connection_variables("EVP1", device)
+                ctrl = ConnectionScreenController(Mock(), driver)
+                # reset ip
+                ctrl.set_ntp_host(str(ip))
+                # validate ip
+                assert not ctrl.validate_all_settings()
+                # check warning raised if changed
+                ctrl.view.display_error.assert_called_once_with(
+                    "Warning, invalid parameters:\n- NTP server address"
+                )
+                nursery.cancel_scope.cancel()
 
 
-# warning of invalid mqtt port and local ip updated
-def test_local_ip_mqtt_port_full_invalid():
-    with create_model() as model:
-        model.mqtt_port = "!@#$%^^"
-        model.local_ip = "192.168.11.11"
-        assert model.local_ip == "192.168.11.11"
-        assert model.mqtt_port == ""
-        assert not model.mqtt_host_error
-        assert model.mqtt_port_error
-        assert not model.ntp_host_error
-        assert not model.ip_address_error
-        assert not model.subnet_mask_error
-        assert not model.gateway_error
-        assert not model.dns_server_error
-        assert (
-            model.warning_message == "Warning, invalid parameters:"
-            "\n- MQTT port"
-            "\nWarning, Local IP Address is updated."
-        )
+# ip_address
 
 
-# invalid mqtt port and warning of local ip updated
-def test_local_ip_mqtt_port_part_invalid():
-    with create_model() as model:
-        model.mqtt_port = "1883c"
-        model.local_ip = "192.168.11.11"
-        assert model.local_ip == "192.168.11.11"
-        assert model.mqtt_port == "1883"
-        assert not model.mqtt_host_error
-        assert not model.mqtt_port_error
-        assert not model.ntp_host_error
-        assert not model.ip_address_error
-        assert not model.subnet_mask_error
-        assert not model.gateway_error
-        assert not model.dns_server_error
-        assert model.warning_message == "Warning, Local IP Address is updated."
+@pytest.mark.trio
+@given(ip=st.ip_addresses(v=4))
+async def test_ip_address_valid_update(ip: str):
+    with driver_context() as (driver, _):
+        with patch(
+            "local_console.gui.controller.connection_screen.ConnectionScreenView"
+        ):
+            async with (
+                trio.open_nursery() as nursery,
+                cs_init_context() as camera,
+            ):
+                driver.camera_state = camera
+                device = config_obj.get_active_device_config()
+                driver.camera_state.initialize_connection_variables("EVP1", device)
+                ctrl = ConnectionScreenController(Mock(), driver)
+                # reset ip
+                ctrl.set_ip_address(str(ip))
+                # validate ip
+                assert ctrl.validate_all_settings()
+                # check warning raised if changed
+                ctrl.view.display_info.assert_not_called()
+                nursery.cancel_scope.cancel()
 
 
-@mark.parametrize("invalid_ip", addresses_to_check)
-def test_local_ip_full_warning(invalid_ip: str):
-    with create_model() as model:
-        model.mqtt_host = invalid_ip
-        model.mqtt_port = "99999"
-        model.ntp_host = invalid_ip
-        model.ip_address = invalid_ip
-        model.subnet_mask = invalid_ip
-        model.gateway = invalid_ip
-        model.dns_server = invalid_ip
-        model.local_ip = "192.168.11.11"
-        assert model.local_ip == "192.168.11.11"
-        assert model.mqtt_host == invalid_ip
-        assert model.mqtt_port == "99999"
-        assert model.ntp_host == invalid_ip
-        assert model.mqtt_host_error
-        assert model.mqtt_port_error
-        assert model.ntp_host_error
-        assert model.ip_address_error
-        assert model.subnet_mask_error
-        assert model.gateway_error
-        assert model.dns_server_error
-        assert (
-            model.warning_message == "Warning, invalid parameters:"
-            "\n- MQTT host address"
-            "\n- MQTT port"
-            "\n- NTP server address"
-            "\n- IP Address"
-            "\n- Subnet Mask"
-            "\n- Gateway"
-            "\n- DNS server"
-            "\nWarning, Local IP Address is updated."
-        )
+@pytest.mark.trio
+@given(ip=generate_invalid_ip())
+async def test_ip_address_invalid_update(ip: str):
+    with driver_context() as (driver, _):
+        with patch(
+            "local_console.gui.controller.connection_screen.ConnectionScreenView"
+        ):
+            async with (
+                trio.open_nursery() as nursery,
+                cs_init_context() as camera,
+            ):
+                driver.camera_state = camera
+                device = config_obj.get_active_device_config()
+                driver.camera_state.initialize_connection_variables("EVP1", device)
+                ctrl = ConnectionScreenController(Mock(), driver)
+                # reset ip
+                ctrl.set_ip_address(str(ip))
+                # validate ip
+                assert not ctrl.validate_all_settings()
+                # check warning raised if changed
+                ctrl.view.display_error.assert_called_once_with(
+                    "Warning, invalid parameters:\n- IP Address"
+                )
+                nursery.cancel_scope.cancel()
 
 
-# local ip
-def test_local_ip_empty_with_invalid_parameters():
-    with create_model() as model:
-        model.mqtt_host = "1.2.3.4.5"
-        model.mqtt_port = "aaa"
-        model.ntp_host = "1.2.3.4.5"
-        model.local_ip = ""
-        assert model.local_ip == ""
-        assert model.mqtt_host == "1.2.3.4.5"
-        assert model.mqtt_port == ""
-        assert model.ntp_host == "1.2.3.4.5"
-        assert not model.mqtt_host_error
-        assert not model.mqtt_port_error
-        assert not model.ntp_host_error
-        assert not model.ip_address_error
-        assert not model.subnet_mask_error
-        assert not model.gateway_error
-        assert not model.dns_server_error
-        assert (
-            model.warning_message
-            == "Warning, No Local IP Address.\nPlease check connectivity."
-        )
+# subnet_mask
 
 
-# mqtt host
-@given(generate_valid_ip())
-def test_mqtt_host(valid_ip: str):
-    with create_model() as model:
-        model.mqtt_host = valid_ip
-        assert model.mqtt_host == valid_ip
-        assert not model.mqtt_host_error
-        assert model.warning_message == ""
+@pytest.mark.trio
+@given(ip=st.ip_addresses(v=4))
+async def test_subnet_mask_valid_update(ip: str):
+    with driver_context() as (driver, _):
+        with patch(
+            "local_console.gui.controller.connection_screen.ConnectionScreenView"
+        ):
+            async with (
+                trio.open_nursery() as nursery,
+                cs_init_context() as camera,
+            ):
+                driver.camera_state = camera
+                device = config_obj.get_active_device_config()
+                driver.camera_state.initialize_connection_variables("EVP1", device)
+                ctrl = ConnectionScreenController(Mock(), driver)
+                # reset ip
+                ctrl.set_subnet_mask(str(ip))
+                # validate ip
+                assert ctrl.validate_all_settings()
+                # check warning raised if changed
+                ctrl.view.display_info.assert_not_called()
+                nursery.cancel_scope.cancel()
 
 
-@given(generate_invalid_ip())
-def test_mqtt_host_invalid(invalid_ip: str):
-    with create_model() as model:
-        model.mqtt_host = invalid_ip
-        assert model.mqtt_host == invalid_ip
-        assert not model.mqtt_host_error
-        assert model.warning_message == ""
-
-
-@given(generate_invalid_hostname_long())
-def test_mqtt_host_invalid_long(ip: str):
-    with create_model() as model:
-        model.mqtt_host = ip
-        assert not model.mqtt_host_error
-        assert len(model.mqtt_host) <= model.MAX_LEN_DOMAIN_NAME
-
-
-# ntp host
-@given(generate_valid_ip())
-def test_ntp_host(valid_ip: str):
-    with create_model() as model:
-        model.ntp_host = valid_ip
-        assert model.ntp_host == valid_ip
-        assert not model.ntp_host_error
-        assert model.warning_message == ""
-
-
-@given(generate_invalid_ip())
-def test_ntp_host_invalid(invalid_ip: str):
-    with create_model() as model:
-        model.ntp_host = invalid_ip
-        assert model.ntp_host == invalid_ip
-        assert not model.ntp_host_error
-        assert model.warning_message == ""
-
-
-@given(generate_invalid_hostname_long())
-def test_ntp_host_invalid_long(ip: str):
-    with create_model() as model:
-        model.ntp_host = ip
-        assert not model.ntp_host_error
-        assert len(model.ntp_host) <= model.MAX_LEN_DOMAIN_NAME
-
-
-# mqtt port
-@given(generate_valid_port_number())
-def test_mqtt_port(port: int):
-    with create_model() as model:
-        model.mqtt_port = str(port)
-        assert model.mqtt_port == str(port)
-        assert not model.mqtt_port_error
-        assert model.warning_message == ""
-
-
-@given(generate_invalid_port_number())
-def test_mqtt_port_invalid(port: int):
-    with create_model() as model:
-        model.mqtt_port = str(port)
-        assert model.mqtt_port == str(abs(port))[:5]
-        assert not model.mqtt_port_error
-        assert model.warning_message == ""
-
-
-# ip address
-@given(generate_valid_ip())
-def test_ip_address(ip: str):
-    with create_model() as model:
-        model.ip_address = ip
-        assert len(model.ip_address) <= model.MAX_LEN_IP_ADDRESS
-
-
-@given(generate_invalid_ip())
-def test_ip_address_invalid(ip: str):
-    with create_model() as model:
-        model.ip_address = ip
-        assert len(model.ip_address) <= model.MAX_LEN_IP_ADDRESS
-
-
-@given(generate_invalid_ip_long())
-def test_ip_address_invalid_long(ip: str):
-    with create_model() as model:
-        model.ip_address = ip
-        model.subnet_mask = ip
-        model.gateway = ip
-        model.dns_server = ip
-        assert not model.ip_address_error
-        assert not model.subnet_mask_error
-        assert not model.gateway_error
-        assert not model.dns_server_error
-        assert len(model.ip_address) <= model.MAX_LEN_IP_ADDRESS
-        assert len(model.subnet_mask) <= model.MAX_LEN_IP_ADDRESS
-        assert len(model.gateway) <= model.MAX_LEN_IP_ADDRESS
-        assert len(model.dns_server) <= model.MAX_LEN_IP_ADDRESS
-
-
-# subnet mask
-@given(generate_valid_ip_strict())
-def test_subnet_mask(ip: str):
-    with create_model() as model:
-        model.subnet_mask = ip
-        assert not model.subnet_mask_error
-        assert len(model.subnet_mask) <= model.MAX_LEN_IP_ADDRESS
-
-
-@given(generate_invalid_ip())
-def test_subnet_mask_invalid(ip: str):
-    with create_model() as model:
-        model.subnet_mask = ip
-        assert not model.subnet_mask_error
-        assert len(model.subnet_mask) <= model.MAX_LEN_IP_ADDRESS
-
-
-@given(generate_invalid_ip_long())
-def test_subnet_mask_invalid_long(ip: str):
-    with create_model() as model:
-        model.subnet_mask = ip
-        assert not model.subnet_mask_error
-        assert len(model.subnet_mask) <= model.MAX_LEN_IP_ADDRESS
+@pytest.mark.trio
+@given(ip=generate_invalid_ip())
+async def test_subnet_mask_invalid_update(ip: str):
+    with driver_context() as (driver, _):
+        with patch(
+            "local_console.gui.controller.connection_screen.ConnectionScreenView"
+        ):
+            async with (
+                trio.open_nursery() as nursery,
+                cs_init_context() as camera,
+            ):
+                driver.camera_state = camera
+                device = config_obj.get_active_device_config()
+                driver.camera_state.initialize_connection_variables("EVP1", device)
+                ctrl = ConnectionScreenController(Mock(), driver)
+                # reset ip
+                ctrl.set_subnet_mask(str(ip))
+                # validate ip
+                assert not ctrl.validate_all_settings()
+                # check warning raised if changed
+                ctrl.view.display_error.assert_called_once_with(
+                    "Warning, invalid parameters:\n- Subnet Mask"
+                )
+                nursery.cancel_scope.cancel()
 
 
 # gateway
-@given(generate_valid_ip())
-def test_gateway(ip: str):
-    with create_model() as model:
-        model.gateway = ip
-        assert not model.gateway_error
-        assert len(model.gateway) <= model.MAX_LEN_IP_ADDRESS
 
 
-@given(generate_invalid_ip())
-def test_gateway_invalid(ip: str):
-    with create_model() as model:
-        model.gateway = ip
-        assert not model.gateway_error
-        assert len(model.gateway) <= model.MAX_LEN_IP_ADDRESS
+@pytest.mark.trio
+@given(ip=st.ip_addresses(v=4))
+async def test_gateway_valid_update(ip: str):
+    with driver_context() as (driver, _):
+        with patch(
+            "local_console.gui.controller.connection_screen.ConnectionScreenView"
+        ):
+            async with (
+                trio.open_nursery() as nursery,
+                cs_init_context() as camera,
+            ):
+                driver.camera_state = camera
+                device = config_obj.get_active_device_config()
+                driver.camera_state.initialize_connection_variables("EVP1", device)
+                ctrl = ConnectionScreenController(Mock(), driver)
+                # reset ip
+                ctrl.set_gateway(str(ip))
+                # validate ip
+                assert ctrl.validate_all_settings()
+                # check warning raised if changed
+                ctrl.view.display_info.assert_not_called()
+                nursery.cancel_scope.cancel()
 
 
-@given(generate_invalid_ip_long())
-def test_gateway_invalid_long(ip: str):
-    with create_model() as model:
-        model.gateway = ip
-        assert not model.gateway_error
-        assert len(model.gateway) <= model.MAX_LEN_IP_ADDRESS
+@pytest.mark.trio
+@given(ip=generate_invalid_ip())
+async def test_gateway_invalid_update(ip: str):
+    with driver_context() as (driver, _):
+        with patch(
+            "local_console.gui.controller.connection_screen.ConnectionScreenView"
+        ):
+            async with (
+                trio.open_nursery() as nursery,
+                cs_init_context() as camera,
+            ):
+                driver.camera_state = camera
+                device = config_obj.get_active_device_config()
+                driver.camera_state.initialize_connection_variables("EVP1", device)
+                ctrl = ConnectionScreenController(Mock(), driver)
+                # reset ip
+                ctrl.set_gateway(str(ip))
+                # validate ip
+                assert not ctrl.validate_all_settings()
+                # check warning raised if changed
+                ctrl.view.display_error.assert_called_once_with(
+                    "Warning, invalid parameters:\n- Gateway"
+                )
+                nursery.cancel_scope.cancel()
 
 
 # dns_server
-@given(generate_valid_ip())
-def test_dns_server(ip: str):
-    with create_model() as model:
-        model.dns_server = ip
-        assert not model.dns_server_error
-        assert len(model.dns_server) <= model.MAX_LEN_IP_ADDRESS
 
 
-@given(generate_invalid_ip())
-def test_dns_server_invalid(ip: str):
-    with create_model() as model:
-        model.dns_server = ip
-        assert not model.dns_server_error
-        assert len(model.dns_server) <= model.MAX_LEN_IP_ADDRESS
+@pytest.mark.trio
+@given(ip=st.ip_addresses(v=4))
+async def test_dns_server_valid_update(ip: str):
+    with driver_context() as (driver, _):
+        with patch(
+            "local_console.gui.controller.connection_screen.ConnectionScreenView"
+        ):
+            async with (
+                trio.open_nursery() as nursery,
+                cs_init_context() as camera,
+            ):
+                driver.camera_state = camera
+                device = config_obj.get_active_device_config()
+                driver.camera_state.initialize_connection_variables("EVP1", device)
+                ctrl = ConnectionScreenController(Mock(), driver)
+                # reset ip
+                ctrl.set_dns_server(str(ip))
+                # validate ip
+                assert ctrl.validate_all_settings()
+                # check warning raised if changed
+                ctrl.view.display_info.assert_not_called()
+                nursery.cancel_scope.cancel()
 
 
-@given(generate_invalid_ip_long())
-def test_dns_server_invalid_long(ip: str):
-    with create_model() as model:
-        model.dns_server = ip
-        assert not model.dns_server_error
-        assert len(model.dns_server) <= model.MAX_LEN_IP_ADDRESS
+@settings(deadline=1000)
+@pytest.mark.trio
+@given(ip=generate_invalid_ip())
+async def test_dns_server_invalid_update(ip: str):
+    with driver_context() as (driver, _):
+        with patch(
+            "local_console.gui.controller.connection_screen.ConnectionScreenView"
+        ):
+            async with (
+                trio.open_nursery() as nursery,
+                cs_init_context() as camera,
+            ):
+                driver.camera_state = camera
+                device = config_obj.get_active_device_config()
+                driver.camera_state.initialize_connection_variables("EVP1", device)
+                ctrl = ConnectionScreenController(Mock(), driver)
+                # reset ip
+                ctrl.set_dns_server(str(ip))
+                # validate ip
+                assert not ctrl.validate_all_settings()
+                # check warning raised if changed
+                ctrl.view.display_error.assert_called_once_with(
+                    "Warning, invalid parameters:\n- DNS server"
+                )
+                nursery.cancel_scope.cancel()
 
 
-# wifi ssid / password
-@given(
-    generate_random_characters(min_size=0, max_size=32),
-    generate_random_characters(min_size=0, max_size=32),
-)
-def test_wifi_ssid_password(ssid: str, password: str):
-    with (
-        create_model() as model,
-        patch("local_console.gui.controller.connection_screen.ConnectionScreenView"),
-    ):
-        mock_driver = MagicMock()
-        controller = ConnectionScreenController(model, mock_driver)
-        model.wifi_ssid = ssid
-        assert model.wifi_ssid == ssid
-        assert len(model.wifi_ssid) <= model.MAX_LEN_WIFI_SSID
-        model.wifi_password = password
-        assert model.wifi_password == password
-        assert len(model.wifi_password) <= model.MAX_LEN_WIFI_PASSWORD
-        assert model.wifi_password_hidden is True
-        assert model.wifi_icon_eye == "eye-off"
-        controller.toggle_password_visible()
-        assert model.wifi_password_hidden is False
-        assert model.wifi_icon_eye == "eye"
+# wifi_ssid / wifi_password
 
 
+@pytest.mark.trio
 @given(
     generate_random_characters(min_size=33, max_size=35),
     generate_random_characters(min_size=33, max_size=35),
 )
-def test_wifi_ssid_password_long(ssid: str, password: str):
-    with (
-        create_model() as model,
-        patch("local_console.gui.controller.connection_screen.ConnectionScreenView"),
-    ):
-        mock_driver = MagicMock()
-        controller = ConnectionScreenController(model, mock_driver)
-        model.wifi_ssid = ssid
-        assert model.wifi_ssid == ssid[: model.MAX_LEN_WIFI_SSID]
-        assert len(model.wifi_ssid) <= model.MAX_LEN_WIFI_SSID
-        model.wifi_password = password
-        assert model.wifi_password == password[: model.MAX_LEN_WIFI_PASSWORD]
-        assert len(model.wifi_password) <= model.MAX_LEN_WIFI_PASSWORD
-        assert model.wifi_password_hidden is True
-        assert model.wifi_icon_eye == "eye-off"
-        controller.toggle_password_visible()
-        assert model.wifi_password_hidden is False
-        assert model.wifi_icon_eye == "eye"
-        controller.toggle_password_visible()
-        assert model.wifi_password_hidden is True
-        assert model.wifi_icon_eye == "eye-off"
-
-
-# connection status
-@given(st.booleans())
-def test_connected(connected: bool):
-    with create_model() as model:
-        model.connected = connected
+async def test_wifi_ssid_password_long(ssid: str, password: str):
+    with driver_context() as (driver, _):
+        with patch(
+            "local_console.gui.controller.connection_screen.ConnectionScreenView"
+        ):
+            async with (
+                trio.open_nursery() as nursery,
+                cs_init_context() as camera,
+            ):
+                driver.camera_state = camera
+                device = config_obj.get_active_device_config()
+                driver.camera_state.initialize_connection_variables("EVP1", device)
+                ctrl = ConnectionScreenController(Mock(), driver)
+                ctrl.set_wifi_ssid(str(ssid))
+                assert (
+                    driver.camera_state.wifi_ssid.value
+                    == ssid[: driver.camera_state.MAX_LEN_WIFI_SSID]
+                )
+                ctrl.set_wifi_password(password)
+                assert (
+                    driver.camera_state.wifi_password.value
+                    == password[: driver.camera_state.MAX_LEN_WIFI_PASSWORD]
+                )
+                nursery.cancel_scope.cancel()

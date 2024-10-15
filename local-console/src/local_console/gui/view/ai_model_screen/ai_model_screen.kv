@@ -1,12 +1,12 @@
-#:import res_path local_console.gui.config.resource_path
-#:include res_path(components.kv)
+#:import GoHomeButton local_console.gui.view.common.components.GoHomeButton
 
 <AIModelScreenView>
     md_bg_color: self.theme_cls.backgroundColor
 
     MDBoxLayout:
         orientation: "vertical"
-
+        padding: "10dp"
+        spacing: "10dp"
         MDBoxLayout:
         # Top bar
             orientation: "horizontal"
@@ -15,13 +15,39 @@
             MDBoxLayout:
             # Controls half
                 orientation: "horizontal"
-                spacing: "10dp"
+                padding: "15dp"
+                size_hint_x: 0.3
                 padding: "10dp"
 
                 GoHomeButton:
 
                 MDWidget:
-                    size_hint_x: 3
+
+            MDWidget:
+                size_hint_x: 0.4
+
+            MDBoxLayout:
+                size_hint_x: 0.3
+                spacing: "5dp"
+
+                EntryLabel:
+                    text: "Device:"
+                    size_hint_x: 0.3
+                    bold: True
+
+                MDLabel:
+                    text: app.selected
+                    shorten: True
+                    max_lines: 1
+                    size_hint_x: 0.7
+                    padding: "20dp", "5dp"
+                    halign:"left"
+                    canvas.before:
+                        Color:
+                            rgba: 0, 0, 0, 1
+                        Line:
+                            width: 1.1
+                            rounded_rectangle: self.x, self.y+15, self.width, self.height/2, 5, 5, 5, 5
 
         MDBoxLayout:
         # Model setup controls
@@ -38,13 +64,14 @@
                     name: 'Model location:'
                     icon: "file-cog"
                     selector: "file"
-                    on_selected: root.select_path(args[1])
+                    path: app.mdl.ai_model_file
+                    on_selected: app.mdl.ai_model_file = args[1]
 
                 MDButton:
                     id: btn_ota_file
-                    on_release: root.controller.deploy()
+                    on_release: if not self.disabled: root.controller.deploy()
                     pos_hint: {"center_y": 0.5}
-                    disabled: True
+                    disabled: not (app.mdl.is_ready and app.mdl.ai_model_file_valid and root.update_status_finished)
                     MDButtonText:
                         text: "Deploy"
 
@@ -53,7 +80,7 @@
             halign: "center"
             font_style: 'Title'
             adaptive_height: True
-            padding_y: "10dp"
+            padding: 0, "10dp"
 
         MDBoxLayout:
         # Readout block

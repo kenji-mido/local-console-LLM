@@ -1,3 +1,24 @@
+# Copyright 2024 Sony Semiconductor Solutions Corp.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# This file incorporates material from https://github.com/dcos/dcos/tree/2.1.0-beta1, which is licensed
+# under the Apache License, Version 2.0
+#
+# - This file re-uses some components from,
+#   https://github.com/dcos/dcos/blob/2.1.0-beta1/gen/build_deploy/powershell/dcos_install.ps1
+#
+# SPDX-License-Identifier: Apache-2.0
 Param (
 	[String] $TranscriptPath
 )
@@ -7,6 +28,10 @@ $rootPath = Split-Path -parent $MyInvocation.MyCommand.Path | Split-Path -parent
 $utils = Join-Path $rootPath "utils.ps1"
 . $utils
 
+$vcredistDir = Split-Path -parent $MyInvocation.MyCommand.Path | Join-Path -ChildPath "vcredist"
+. (Join-Path $vcredistDir "Get-InstalledSoftware.ps1")
+. (Join-Path $vcredistDir "Get-InstalledVcRedist.ps1")
+
 # Current limitations:
 # - This script assumes a 64-bit windows installation
 
@@ -14,6 +39,7 @@ $utils = Join-Path $rootPath "utils.ps1"
 $DepURLMosquitto = 'https://mosquitto.org/files/binary/win64/mosquitto-2.0.9-install-windows-x64.exe'
 $DepURLPython = 'https://www.python.org/ftp/python/3.11.9/python-3.11.9-amd64.exe'
 $DepURLGit = 'https://github.com/git-for-windows/git/releases/download/v2.44.0.windows.1/Git-2.44.0-64-bit.exe'
+$DepURLVcredist = 'https://aka.ms/vs/17/release/vc_redist.x64.exe'
 
 function Main
 {
@@ -27,6 +53,7 @@ function Main
     }
     Display-Privilege
 
+    Get-CompatibleVCRedist
     Get-Mosquitto
     Initialize-Mosquitto
     Set-MosquittoPath
@@ -93,14 +120,14 @@ function Add-EnvPath {
 
         $persistedPaths = [Environment]::GetEnvironmentVariable('Path', $containerType) -split ';'
         if ($persistedPaths -notcontains $Path) {
-            $persistedPaths = $persistedPaths + $Path | where { $_ }
+            $persistedPaths = $persistedPaths + $Path | Where-Object { $_ }
             [Environment]::SetEnvironmentVariable('Path', $persistedPaths -join ';', $containerType)
         }
     }
 
     $envPaths = $env:Path -split ';'
     if ($envPaths -notcontains $Path) {
-        $envPaths = $envPaths + $Path | where { $_ }
+        $envPaths = $envPaths + $Path | Where-Object { $_ }
         $env:Path = $envPaths -join ';'
     }
 }
@@ -111,7 +138,7 @@ function Initialize-Mosquitto
     $service = Get-Service -DisplayName "*mosquitto*" -ErrorAction SilentlyContinue
 
     # Check if the service was found
-    if ($service -ne $null) {
+    if ($null -ne $service) {
         Write-LogMessage "Found Windows Service for Mosquitto. Preparing to remove..."
         Write-LogMessage "DisplayName: $($service.DisplayName)"
         Write-LogMessage "Status: $($service.Status)"
@@ -171,7 +198,6 @@ function Get-Python311
 
 function Get-Git
 {
-
     $GitExecPath = "$(Get-ProgramFilesPath)\Git\bin\git.exe"
     if (Test-ExecutablePath -Path $GitExecPath)
     {
@@ -194,6 +220,64 @@ function Get-Git
     Remove-Item -Path $downloadPath -Force
 
     Write-LogMessage "Git installation complete."
+}
+
+function Get-CompatibleVCRedist
+{
+    # Check if the Visual C++ Redistributable for Visual Studio 2012+ is installed
+    if (Find-RequiredVCredist) {
+        Write-LogMessage "Visual C++ Redistributable for Visual Studio 2012+ is already installed"
+        return
+    }
+
+    # Download the installer
+    Write-LogMessage "Downloading Visual C++ Redistributable for Visual Studio 2022..."
+
+    # Temporary target
+    $downloadPath = Join-Path $env:TEMP "vcredist.exe"
+    Invoke-WebRequest -Uri $DepURLVcredist -OutFile $downloadPath
+
+    Write-LogMessage "Installing Visual C++ Redistributable for Visual Studio 2022"
+    try {
+        # Create parameters with -ArgumentList set based on Install/SilentInstall properties in the manifest
+        $params = @{
+            FilePath     = $downloadPath
+            ArgumentList = "/install /passive /norestart"
+            PassThru     = $true
+            Wait         = $true
+            NoNewWindow  = $true
+            Verbose      = $VerbosePreference
+            ErrorAction  = "Continue"
+        }
+        Start-Process @params
+    }
+    catch {
+        throw $_
+    }
+
+    # Check for actual success. Reference:
+    # https://github.com/aaronparker/vcredist/blob/42581ac57/VcRedist/VisualCRedistributables.json#L83C28-L83C68
+    $ProductCode = '{5af95fd8-a22e-458f-acee-c61bd787178e}'
+    $Installed = Get-InstalledVcRedist | Where-Object { $_.ProductCode -eq $ProductCode }
+    if ($Installed) {
+        Write-LogMessage "Finished installing Visual C++ Redistributable for Visual Studio 2022"
+    }
+}
+
+function Find-RequiredVCredist
+{
+    $found = $false
+
+    $installed = Get-InstalledVcRedist
+    foreach ($entry in $installed) {
+        if ( `
+            ([System.Version]($entry.Version) -gt [System.Version]"12.0") `
+            -and ($entry.Architecture -eq "x64") `
+           ) {
+            $found = $true
+        } }
+
+    $found
 }
 
 Main

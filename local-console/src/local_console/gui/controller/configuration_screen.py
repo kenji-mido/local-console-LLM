@@ -14,20 +14,27 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 import json
+import logging
 from pathlib import Path
-from typing import Optional
 
+from local_console.core.camera.flatbuffers import conform_flatbuffer_schema
+from local_console.core.camera.flatbuffers import FlatbufferError
+from local_console.core.camera.flatbuffers import map_class_id_to_name
+from local_console.gui.controller.base_controller import BaseController
 from local_console.gui.driver import Driver
 from local_console.gui.enums import ApplicationSchemaFilePath
 from local_console.gui.enums import ApplicationType
+from local_console.gui.model.camera_proxy import CameraStateProxy
 from local_console.gui.model.configuration_screen import ConfigurationScreenModel
 from local_console.gui.view.configuration_screen.configuration_screen import (
     ConfigurationScreenView,
 )
-from local_console.utils.flatbuffers import FlatBuffers
 
 
-class ConfigurationScreenController:
+logger = logging.getLogger(__file__)
+
+
+class ConfigurationScreenController(BaseController):
     """
     The `ConfigurationScreenController` class represents a controller implementation.
     Coordinates work of the view with the model.
@@ -39,82 +46,116 @@ class ConfigurationScreenController:
         self.model = model
         self.driver = driver
         self.view = ConfigurationScreenView(controller=self, model=self.model)
-        self.flatbuffers = FlatBuffers()
+
+        self.bind()
+
+    def unbind(self) -> None:
+        self.driver.gui.mdl.unbind(vapp_type=self.on_vapp_type)
+        self.view.ids.lbl_file_selector.ids.lbl_number.unbind(text=self.on_size)
+        self.view.ids.lbl_file_selector.ids.lbl_unit.unbind(text=self.on_unit)
+
+    def bind(self) -> None:
+        self.driver.gui.mdl.bind(vapp_type=self.on_vapp_type)
+        self.view.ids.lbl_file_selector.ids.lbl_number.bind(text=self.on_size)
+        self.view.ids.lbl_file_selector.ids.lbl_unit.bind(text=self.on_unit)
+
+    def refresh(self) -> None:
+        assert self.driver.device_manager
+        proxy = self.driver.device_manager.get_active_device_proxy()
+        state = self.driver.device_manager.get_active_device_state()
+        assert state.vapp_type.value
+        self.on_vapp_type(
+            proxy,
+            state.vapp_type.value,
+        )
+
+    def on_size(self, instance: CameraStateProxy, value: str) -> None:
+        self.driver.gui.mdl.size = value
+
+    def on_unit(self, instance: CameraStateProxy, value: str) -> None:
+        self.driver.gui.mdl.unit = value
+
+    def on_vapp_type(
+        self, instance: CameraStateProxy, app_type: ApplicationType
+    ) -> None:
+        is_custom = app_type == ApplicationType.CUSTOM.value
+        self.view.ids.labels_pick.disabled = is_custom
+        self.view.ids.schema_pick.disabled = not is_custom
+        assert self.driver.camera_state
+
+        if app_type == ApplicationType.CUSTOM.value:
+            self.driver.gui.mdl.vapp_schema_file = ""
+            self.view.ids.schema_pick.select_path("")
+
+        elif app_type == ApplicationType.CLASSIFICATION.value:
+            path = ApplicationSchemaFilePath.CLASSIFICATION
+            self.driver.gui.mdl.vapp_schema_file = str(path)
+            self.view.ids.schema_pick.select_path(str(path))
+
+        elif app_type == ApplicationType.DETECTION.value:
+            path = ApplicationSchemaFilePath.DETECTION
+            self.driver.gui.mdl.vapp_schema_file = str(path)
+            self.view.ids.schema_pick.select_path(str(path))
 
     def get_view(self) -> ConfigurationScreenView:
         return self.view
 
-    def update_image_directory(self, path: Path) -> None:
-        self.driver.set_image_directory(path)
-        self.model.image_directory = path
+    def update_image_directory(self, path: str) -> None:
+        assert self.driver.camera_state
+        self.driver.camera_state.image_dir_path.value = Path(path)
 
-    def update_inferences_directory(self, path: Path) -> None:
-        self.driver.set_inference_directory(path)
-        self.model.inferences_directory = path
+    def update_inferences_directory(self, path: str) -> None:
+        assert self.driver.camera_state
+
+        self.driver.camera_state.inference_dir_path.value = Path(path)
 
     def update_total_max_size(self, size: int) -> None:
-        self.driver.total_dir_watcher.set_storage_limit(size)
-
-    def update_flatbuffers_schema(self, path: Optional[Path]) -> None:
-        self.model.flatbuffers_schema = path
-
-    def update_app_labels(self, path: str) -> None:
-        self.model.app_labels = path
-
-    def update_app_configuration(self, path: Optional[str]) -> None:
-        self.model.app_configuration = path
-
-    def update_application_type(self, app: str) -> None:
-        self.model.app_type = app
-        self.view.ids.labels_pick.disabled = app == ApplicationType.CUSTOM.value
-        self.view.ids.schema_pick.disabled = app != ApplicationType.CUSTOM.value
-
-        if app == ApplicationType.CUSTOM.value:
-            self.update_flatbuffers_schema(None)
-        elif app == ApplicationType.CLASSIFICATION.value:
-            self.update_flatbuffers_schema(ApplicationSchemaFilePath.CLASSIFICATION)
-        else:
-            self.update_flatbuffers_schema(ApplicationSchemaFilePath.DETECTION)
+        assert self.driver.camera_state
+        self.driver.camera_state.total_dir_watcher.set_storage_limit(size)
 
     def apply_application_configuration(self) -> None:
-        self.driver.map_class_id_to_name()
+        assert self.driver.camera_state
 
-        if self.model.app_configuration is None:
+        try:
+            if self.driver.camera_state.vapp_labels_file.value:
+                self.driver.camera_state.vapp_labels_map.value = map_class_id_to_name(
+                    Path(self.driver.camera_state.vapp_labels_file.value)
+                )
+        except FlatbufferError as e:
+            self.view.display_error(str(e))
+
+        if not self.driver.camera_state.vapp_config_file.value:
             return
         try:
-            with open(self.model.app_configuration) as f:
-                config = json.load(f)
+            config = json.load(
+                Path(self.driver.camera_state.vapp_config_file.value).open()
+            )
             self.driver.from_sync(self.driver.send_app_config, json.dumps(config))
         except FileNotFoundError:
-            self.model.flatbuffers_process_result = "App configuration does not exist"
+            self.view.display_error("App configuration does not exist")
         except ValueError:
-            self.model.flatbuffers_process_result = (
-                "Error parsing app configuration JSON"
-            )
+            self.view.display_error("Error parsing app configuration JSON")
         except PermissionError:
-            self.model.flatbuffers_process_result = "App configuration permission error"
+            self.view.display_error("App configuration permission error")
         except Exception:
-            self.model.flatbuffers_process_result = "App configuration unknown error"
+            self.view.display_error("App configuration unknown error")
 
     def apply_flatbuffers_schema(self) -> None:
-        if self.model.flatbuffers_schema is not None:
-            if self.model.flatbuffers_schema.is_file():
-                result, _ = self.flatbuffers.conform_flatbuffer_schema(
-                    self.model.flatbuffers_schema
-                )
-                if result is True:
-                    self.driver.flatbuffers_schema = self.model.flatbuffers_schema
-                    self.model.flatbuffers_process_result = "Success!"
-                else:
-                    self.model.flatbuffers_process_result = (
-                        "Not a valid flatbuffers schema"
-                    )
+        schema_file = self.driver.gui.mdl.vapp_schema_file
+        if schema_file is not None and schema_file != "":
+            if Path(schema_file).is_file():
+                try:
+                    assert self.driver.camera_state
+
+                    conform_flatbuffer_schema(schema_file)
+                    self.driver.camera_state.vapp_schema_file.value = schema_file
+                    self.view.display_info("Success!")
+                except FlatbufferError as e:
+                    self.view.display_error(str(e))
             else:
-                self.model.flatbuffers_process_result = (
-                    "Not a file or file does not exist!"
-                )
+                self.view.display_error("Not a file or file does not exist!")
         else:
-            self.model.flatbuffers_process_result = "Please select a schema file."
+            self.view.display_error("Please select a schema file.")
 
     def apply_configuration(self) -> None:
         self.apply_flatbuffers_schema()

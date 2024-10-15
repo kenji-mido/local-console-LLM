@@ -52,6 +52,7 @@ class CustomHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
             data = self.rfile.read(content_length)
             check_and_create_directory(Path(self.directory))
             dest_path = Path(self.directory) / self.path.lstrip("/")
+            self.log_message("", f"Webserver dest_path: {str(dest_path)}")
             dest_path.write_bytes(data)
         except Exception as e:
             logger.error(f"Error while receiving data: {e}")
@@ -103,6 +104,7 @@ class GenericWebserver(ABC):
         if not self.deploy:
             return
 
+        logger.debug("Closing webserver at port %d", self.port)
         # Shutdown the server after exiting the context
         self.server.shutdown()
         self.server.server_close()
@@ -141,6 +143,10 @@ class SyncWebserver(GenericWebserver):
         return CustomHTTPRequestHandler(
             *args, on_incoming=self.on_incoming, directory=str(self.dir), **kwargs
         )
+
+    def set_directory(self, directory: Path) -> None:
+        assert directory.is_dir()
+        self.dir = directory
 
 
 class AsyncWebserver(SyncWebserver):

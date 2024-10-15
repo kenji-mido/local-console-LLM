@@ -13,17 +13,14 @@
 # limitations under the License.
 #
 # SPDX-License-Identifier: Apache-2.0
-from local_console.core.camera import StreamStatus
+from local_console.core.camera.enums import StreamStatus
+from local_console.gui.controller.base_controller import BaseController
 from local_console.gui.driver import Driver
 from local_console.gui.model.inference_screen import InferenceScreenModel
-from local_console.gui.utils.enums import Screen
 from local_console.gui.view.inference_screen.inference_screen import InferenceScreenView
-from pygments.lexers import (
-    JsonLexer,
-)  # nopycln: import # Required by the screen's KV spec file
 
 
-class InferenceScreenController:
+class InferenceScreenController(BaseController):
     """
     The `InferenceScreenController` class represents a controller implementation.
     Coordinates work of the view with the model.
@@ -36,15 +33,32 @@ class InferenceScreenController:
         self.driver = driver
         self.view = InferenceScreenView(controller=self, model=self.model)
 
+    def refresh(self) -> None:
+        assert self.driver.device_manager
+        # Trigger for connection status
+        proxy = self.driver.device_manager.get_active_device_proxy()
+        state = self.driver.device_manager.get_active_device_state()
+
+        if state.stream_status.value is not None:
+            self.view.on_stream_status(proxy, state.stream_status.value)
+
+    def unbind(self) -> None:
+        self.driver.gui.mdl.unbind(stream_status=self.view.on_stream_status)
+
+    def bind(self) -> None:
+        self.driver.gui.mdl.bind(stream_status=self.view.on_stream_status)
+
     def get_view(self) -> InferenceScreenView:
         return self.view
 
     def toggle_stream_status(self) -> None:
-        camera_status = self.model.stream_status
+        assert self.driver.camera_state
+
+        camera_status = self.driver.camera_state.stream_status.value
         if camera_status == StreamStatus.Active:
             self.driver.from_sync(self.driver.streaming_rpc_stop)
         else:
-            roi = self.driver.gui.views[Screen.STREAMING_SCREEN].model.image_roi
+            roi = self.driver.camera_state.roi.value
             self.driver.from_sync(self.driver.streaming_rpc_start, roi)
 
-        self.model.stream_status = StreamStatus.Transitioning
+        self.driver.camera_state.stream_status.value = StreamStatus.Transitioning

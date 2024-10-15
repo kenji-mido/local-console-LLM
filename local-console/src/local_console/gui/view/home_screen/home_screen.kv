@@ -1,5 +1,3 @@
-#:import res_path local_console.gui.config.resource_path
-
 <HomeScreenView>
     md_bg_color: self.theme_cls.backgroundColor
 
@@ -19,7 +17,7 @@
                 size_hint_x: .7
                 fab_state: "expand"
                 valign: "center"
-                on_press: root.manager.current = 'connection screen'
+                on_press: app.switch_proxy(); root.manager.current = 'connection screen';
                 MDExtendedFabButtonIcon:
                     icon: "access-point-network"
                 MDExtendedFabButtonText:
@@ -29,7 +27,7 @@
                 size_hint_x: .7
                 fab_state: "expand"
                 valign: "center"
-                on_press: root.manager.current = 'configuration screen'
+                on_press: app.switch_proxy(); root.manager.current = 'configuration screen';
                 MDExtendedFabButtonIcon:
                     icon: "folder-cog-outline"
                 MDExtendedFabButtonText:
@@ -39,7 +37,7 @@
                 size_hint_x: .7
                 fab_state: "expand"
                 valign: "center"
-                on_press: root.manager.current = 'streaming screen'
+                on_press: app.switch_proxy(); root.manager.current = 'streaming screen';
                 MDExtendedFabButtonIcon:
                     icon: "animation-play"
                 MDExtendedFabButtonText:
@@ -49,7 +47,7 @@
                 size_hint_x: .7
                 fab_state: "expand"
                 valign: "center"
-                on_press: root.manager.current = 'inference screen'
+                on_press: app.switch_proxy(); root.manager.current = 'inference screen';
                 MDExtendedFabButtonIcon:
                     icon: "lightbulb-on-outline"
                 MDExtendedFabButtonText:
@@ -59,7 +57,7 @@
                 size_hint_x: .7
                 fab_state: "expand"
                 valign: "center"
-                on_press: root.manager.current = 'applications screen'
+                on_press: app.switch_proxy(); root.manager.current = 'applications screen';
                 MDExtendedFabButtonIcon:
                     icon: "application-cog"
                 MDExtendedFabButtonText:
@@ -69,11 +67,31 @@
                 size_hint_x: .7
                 fab_state: "expand"
                 valign: "center"
-                on_press: root.manager.current = 'ai model screen'
+                on_press: app.switch_proxy(); root.manager.current = 'ai model screen';
                 MDExtendedFabButtonIcon:
                     icon: "dice-multiple"
                 MDExtendedFabButtonText:
                     text: "AI Model"
+
+            MDExtendedFabButton:
+                size_hint_x: .7
+                fab_state: "expand"
+                valign: "center"
+                on_press: app.switch_proxy(); root.manager.current = 'firmware screen';
+                MDExtendedFabButtonIcon:
+                    icon: "cog-clockwise"
+                MDExtendedFabButtonText:
+                    text: "Firmware"
+
+            MDExtendedFabButton:
+                size_hint_x: .7
+                fab_state: "expand"
+                valign: "center"
+                on_press: app.switch_proxy(); root.manager.current = 'devices screen';
+                MDExtendedFabButtonIcon:
+                    icon: "camera"
+                MDExtendedFabButtonText:
+                    text: "Devices"
 
             MDWidget:
 
@@ -87,6 +105,31 @@
             orientation: "vertical"
             adaptive_height: False
             size_hint_x: 2
+
+            MDGridLayout:
+                cols: 2
+                adaptive_height: True
+                spacing: "10dp"
+                pos_hint: {"right":0.7}
+
+                EntryLabel:
+                    text: "Device:"
+                    bold: True
+
+                DeviceDropDownList:
+                    id: device_selector
+                    size_hint_x: .5
+                    size_hint_y: .05
+                    on_selected: app.driver.device_manager.set_active_device(args[1]); app.switch_proxy();
+                    selected_name: app.selected
+                    padding: "20dp", "35dp"
+                    canvas.before:
+                        Color:
+                            rgba: 0, 0, 0, 1
+                        Line:
+                            width: 1.0
+                            rounded_rectangle: self.x, self.y+35, self.width, self.height/3, 4
+
 
             MDBoxLayout:
                 size_hint_y: 0.9

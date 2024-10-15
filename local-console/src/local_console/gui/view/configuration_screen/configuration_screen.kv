@@ -1,12 +1,16 @@
-#:import res_path local_console.gui.config.resource_path
-#:include res_path(components.kv)
+#:import AppTypeCombo local_console.gui.view.common.components.AppTypeCombo
+#:import FileSizeCombo local_console.gui.view.common.components.FileSizeCombo
+#:import GoHomeButton local_console.gui.view.common.components.GoHomeButton
+#:import PathSelectorCombo local_console.gui.view.common.components.PathSelectorCombo
+#:import Path pathlib.Path
 
 <ConfigurationScreenView>
     md_bg_color: self.theme_cls.backgroundColor
 
     MDBoxLayout:
         orientation: "vertical"
-
+        padding: "10dp"
+        spacing: "10dp"
         MDBoxLayout:
         # Top bar
             orientation: "horizontal"
@@ -16,12 +20,43 @@
             # Controls half
                 orientation: "horizontal"
                 padding: "15dp"
+                size_hint_x: 0.3
+                padding: "10dp"
 
                 GoHomeButton:
+
+                MDWidget:
+
+            MDWidget:
+                size_hint_x: 0.4
+
+            MDBoxLayout:
+                size_hint_x: 0.3
+                spacing: "5dp"
+
+                EntryLabel:
+                    text: "Device:"
+                    size_hint_x: 0.3
+                    bold: True
+
+                MDLabel:
+                    text: app.selected
+                    shorten: True
+                    max_lines: 1
+                    size_hint_x: 0.7
+                    padding: "20dp", "5dp"
+                    halign:"left"
+                    canvas.before:
+                        Color:
+                            rgba: 0, 0, 0, 1
+                        Line:
+                            width: 1.1
+                            rounded_rectangle: self.x, self.y+15, self.width, self.height/2, 5, 5, 5, 5
 
         MDBoxLayout:
         # Configuration controls
             orientation: "vertical"
+            size_hint_y: 0.9
             padding: "15dp"
             spacing: "15dp"
             spacing_y: "5dp"
@@ -31,20 +66,23 @@
                 id: image_dir_pick
                 name: 'Image dir:'
                 icon: "folder-cog"
-                path: app.image_dir_path
+                path: app.mdl.image_dir_path
                 search: "dirs"
-                on_selected: root.select_path_image(args[1])
+                on_selected: root.controller.update_image_directory(args[1])
 
             PathSelectorCombo:
             # Inference dir
                 id: inference_dir_pick
                 name: 'Inference dir:'
                 icon: "folder-cog"
-                path: app.inference_dir_path
+                path: app.mdl.inference_dir_path
                 search: "dirs"
-                on_selected: root.select_path_inferences(args[1])
+                on_selected: root.controller.update_inferences_directory(args[1])
 
             FileSizeCombo:
+                id: lbl_file_selector
+                _spec: app.mdl.size
+                _selected_unit: app.mdl.unit
                 label: "Max total size from image and inference folders:"
                 on_value: root.controller.update_total_max_size(args[1])
 
@@ -54,7 +92,8 @@
 
             AppTypeCombo:
                 label: "Type:"
-                on_selected: root.controller.update_application_type(args[1])
+                _selected_unit: app.mdl.vapp_type
+                on_selected: app.mdl.vapp_type = args[1]
 
             PathSelectorCombo:
                 id: schema_pick
@@ -62,7 +101,8 @@
                 icon: "folder-cog"
                 selector: "file"
                 ext: [".fbs"]
-                on_selected: root.select_path_flatbuffers(args[1])
+                path: str(app.mdl.vapp_schema_file)
+                on_selected: app.mdl.vapp_schema_file = self.accept_path(args[1])
 
             PathSelectorCombo:
                 id: app_configuration_pick
@@ -70,7 +110,8 @@
                 icon: "folder-cog"
                 selector: "file"
                 ext: [".json"]
-                on_selected: root.select_path_app_configuration(args[1])
+                path: str(app.mdl.vapp_config_file)
+                on_selected: app.mdl.vapp_config_file = self.accept_path(args[1])
 
             PathSelectorCombo:
                 id: labels_pick
@@ -78,7 +119,8 @@
                 icon: "folder-cog"
                 selector: "file"
                 ext: [".txt"]
-                on_selected: root.select_path_labels(args[1])
+                path: str(app.mdl.vapp_labels_file)
+                on_selected: app.mdl.vapp_labels_file = self.accept_path(args[1])
                 disabled: True
 
             MDBoxLayout:

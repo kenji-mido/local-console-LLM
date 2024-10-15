@@ -24,3 +24,5 @@ class Screen(StrEnum):
     CONNECTION_SCREEN = "connection screen"
     AI_MODEL_SCREEN = "ai model screen"
     CONFIGURATION_SCREEN = "configuration screen"
+    FIRMWARE_SCREEN = "firmware screen"
+    DEVICES_SCREEN = "devices screen"

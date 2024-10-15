@@ -13,17 +13,16 @@
 # limitations under the License.
 #
 # SPDX-License-Identifier: Apache-2.0
-from local_console.core.camera import StreamStatus
+from local_console.core.camera.axis_mapping import UnitROI
+from local_console.core.camera.enums import StreamStatus
+from local_console.gui.controller.base_controller import BaseController
 from local_console.gui.driver import Driver
+from local_console.gui.model.camera_proxy import CameraStateProxy
 from local_console.gui.model.streaming_screen import StreamingScreenModel
-from local_console.gui.utils.axis_mapping import UnitROI
 from local_console.gui.view.streaming_screen.streaming_screen import StreamingScreenView
-from pygments.lexers import (
-    JsonLexer,
-)  # nopycln: import # Required by the screen's KV spec file
 
 
-class StreamingScreenController:
+class StreamingScreenController(BaseController):
     """
     The `StreamingScreenController` class represents a controller implementation.
     Coordinates work of the view with the model.
@@ -39,23 +38,54 @@ class StreamingScreenController:
     def get_view(self) -> StreamingScreenView:
         return self.view
 
+    def refresh(self) -> None:
+        assert self.driver.device_manager
+        # Trigger for connection status
+        proxy = self.driver.device_manager.get_active_device_proxy()
+        state = self.driver.device_manager.get_active_device_state()
+
+        if state.is_streaming.value is not None:
+            self.view.on_is_streaming(proxy, state.is_streaming.value)
+        if state.stream_status.value is not None:
+            self.view.on_stream_status(proxy, state.stream_status.value)
+        if state.roi.value is not None:
+            self.post_roi_actions(proxy, state.roi.value)
+        if state.is_connected.value is not None:
+            self.view.on_connected(proxy, state.is_connected.value)
+
+    def unbind(self) -> None:
+        self.driver.gui.mdl.unbind(is_connected=self.view.on_connected)
+        self.driver.gui.mdl.unbind(roi=self.post_roi_actions)
+        self.driver.gui.mdl.unbind(stream_status=self.view.on_stream_status)
+        self.driver.gui.mdl.unbind(is_streaming=self.view.on_is_streaming)
+
+    def bind(self) -> None:
+        self.driver.gui.mdl.bind(is_connected=self.view.on_connected)
+        self.driver.gui.mdl.bind(roi=self.post_roi_actions)
+        self.driver.gui.mdl.bind(stream_status=self.view.on_stream_status)
+        self.driver.gui.mdl.bind(is_streaming=self.view.on_is_streaming)
+
     def toggle_stream_status(self) -> None:
-        camera_status = self.model.stream_status
+        assert self.driver.camera_state
+
+        camera_status = self.driver.camera_state.stream_status.value
         if camera_status == StreamStatus.Active:
             self.driver.from_sync(self.driver.streaming_rpc_stop)
         else:
-            self.driver.from_sync(self.driver.streaming_rpc_start, self.model.image_roi)
+            self.driver.from_sync(
+                self.driver.streaming_rpc_start, self.driver.camera_state.roi.value
+            )
             self.view.ids.stream_image.cancel_roi_draw()
 
-        self.model.stream_status = StreamStatus.Transitioning
+        self.driver.camera_state.stream_status.value = StreamStatus.Transitioning
 
-    def set_roi(self, roi: UnitROI) -> None:
-        self.model.image_roi = roi
+    def post_roi_actions(self, instance: CameraStateProxy, roi: UnitROI) -> None:
+        assert self.driver.camera_state
 
-        camera_status = self.model.stream_status
+        camera_status = self.driver.camera_state.stream_status.value
         if camera_status == StreamStatus.Transitioning:
             return
-
-        self.model.stream_status = StreamStatus.Transitioning
         if camera_status == StreamStatus.Active:
             self.driver.from_sync(self.driver.streaming_rpc_stop)
+
+        self.driver.camera_state.stream_status.value = StreamStatus.Transitioning

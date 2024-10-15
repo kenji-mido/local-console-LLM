@@ -16,7 +16,6 @@
 import logging
 import re
 import subprocess
-import sys
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from functools import partial
@@ -26,24 +25,23 @@ from string import Template
 from tempfile import TemporaryDirectory
 
 import trio
-from local_console.core.enums import config_paths
-from local_console.core.schemas.schemas import AgentConfiguration
-from local_console.utils.tls import ensure_certificate_pair_exists
+from trio import run_process
 
 logger = logging.getLogger(__name__)
 
 broker_assets = Path(__file__).parents[1] / "assets" / "broker"
 
 
+class BrokerException(Exception):
+    """
+    Class for broker management exceptions
+    """
+
+
 @asynccontextmanager
 async def spawn_broker(
-    config: AgentConfiguration, nursery: trio.Nursery, verbose: bool, server_name: str
+    port: int, nursery: trio.Nursery, verbose: bool
 ) -> AsyncIterator[trio.Process]:
-    if config.is_tls_enabled:
-        broker_cert_path, broker_key_path = config_paths.broker_cert_pair
-        ensure_certificate_pair_exists(
-            server_name, broker_cert_path, broker_key_path, config.tls, is_server=True
-        )
 
     broker_bin = which("mosquitto")
     if not broker_bin:
@@ -53,11 +51,11 @@ async def spawn_broker(
 
     with TemporaryDirectory() as tmp_dir:
         config_file = Path(tmp_dir) / "broker.toml"
-        populate_broker_conf(config, config_file)
+        populate_broker_conf(port, config_file)
 
         cmd = [broker_bin, "-v", "-c", str(config_file)]
         invocation = partial(
-            trio.run_process,
+            run_process,
             command=cmd,
             check=False,
             stdout=subprocess.PIPE,
@@ -73,9 +71,14 @@ async def spawn_broker(
                 data = data.decode("utf-8")
                 for line in data.splitlines():
                     logger.debug(line)
-                if "Error" in data:
-                    logger.error("Mosquitto already initialized")
-                    sys.exit(1)
+
+                if "error" in data.lower():
+                    line = next(
+                        line for line in data.splitlines() if "error" in line.lower()
+                    )
+                    raise BrokerException(
+                        f"{line} (On port {port}).\nPlease check and restart Local Console."
+                    )
                 elif pattern.search(data):
                     break
 
@@ -84,22 +87,9 @@ async def spawn_broker(
         broker_proc.kill()
 
 
-def populate_broker_conf(config: AgentConfiguration, config_file: Path) -> None:
-    data = {"mqtt_port": str(config.mqtt.port)}
-
-    if config.is_tls_enabled:
-        broker_cert_path, broker_key_path = config_paths.broker_cert_pair
-        variant = "tls"
-        data.update(
-            {
-                "ca_crt": str(config.tls.ca_certificate),
-                "server_crt": str(broker_cert_path),
-                "server_key": str(broker_key_path),
-            }
-        )
-    else:
-        variant = "no-tls"
-
+def populate_broker_conf(port: int, config_file: Path) -> None:
+    data = {"mqtt_port": str(port)}
+    variant = "no-tls"
     logger.info(f"MQTT broker in {variant} mode")
     template_file = broker_assets / f"config.{variant}.toml.tpl"
     template = Template(template_file.read_text())

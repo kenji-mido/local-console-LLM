@@ -15,21 +15,27 @@
 # SPDX-License-Identifier: Apache-2.0
 from pathlib import Path
 from unittest.mock import MagicMock
+from unittest.mock import Mock
 from unittest.mock import patch
 
 import hypothesis.strategies as st
+import pytest
+import trio
 from hypothesis import given
+from local_console.core.camera.flatbuffers import FlatbufferError
 from local_console.gui.controller.configuration_screen import (
     ConfigurationScreenController,
 )
 from local_console.gui.enums import ApplicationSchemaFilePath
 from local_console.gui.enums import ApplicationType
-from local_console.gui.model.configuration_screen import ConfigurationScreenModel
 
+from tests.fixtures.camera import cs_init
+from tests.fixtures.gui import driver_set
 from tests.strategies.configs import generate_text
 
 
-def test_apply_configuration():
+@pytest.mark.trio
+async def test_apply_configuration(driver_set, cs_init) -> None:
     with (
         patch(
             "local_console.gui.controller.configuration_screen.ConfigurationScreenView"
@@ -41,162 +47,190 @@ def test_apply_configuration():
             ConfigurationScreenController, "apply_application_configuration"
         ) as mock_apply_app_cfg,
     ):
-        ctrl = ConfigurationScreenController(ConfigurationScreenModel(), MagicMock())
+        driver, mock_gui = driver_set
+        driver.camera_state = cs_init
+        ctrl = ConfigurationScreenController(Mock(), driver)
         ctrl.apply_configuration()
         mock_apply_fb.assert_any_call()
         mock_apply_app_cfg.assert_any_call()
 
 
-def test_apply_flatbuffers_schema(tmpdir):
-    model, mock_driver = ConfigurationScreenModel(), MagicMock()
-    with (
-        patch(
-            "local_console.gui.controller.configuration_screen.ConfigurationScreenView"
-        ),
-        patch(
-            "local_console.gui.controller.configuration_screen.FlatBuffers"
-        ) as mock_flatbuffers,
-    ):
-        ctrl = ConfigurationScreenController(model, mock_driver)
-        model.flatbuffers_schema = None
-        ctrl.apply_flatbuffers_schema()
-        assert model.flatbuffers_process_result == "Please select a schema file."
+@pytest.mark.trio
+async def test_apply_flatbuffers_schema(driver_set, cs_init, tmp_path) -> None:
+    driver, mock_gui = driver_set
+    async with trio.open_nursery() as nursery:
+        driver.camera_state = cs_init
+        model = driver.camera_state
+        mock_gui.mdl.bind_vapp_file_functions(model)
+        with (
+            patch(
+                "local_console.gui.controller.configuration_screen.ConfigurationScreenView"
+            ),
+            patch(
+                "local_console.gui.controller.configuration_screen.conform_flatbuffer_schema"
+            ) as mock_conform_flatbuffers,
+        ):
+            ctrl = ConfigurationScreenController(Mock, driver)
 
-        model.flatbuffers_schema = Path(tmpdir)
-        ctrl.apply_flatbuffers_schema()
-        assert model.flatbuffers_process_result == "Not a file or file does not exist!"
+            mock_gui.mdl.vapp_schema_file = ""
+            ctrl.apply_flatbuffers_schema()
+            ctrl.view.display_error.assert_called_with("Please select a schema file.")
 
-        mock_flatbuffers.return_value.conform_flatbuffer_schema.return_value = (
-            False,
-            None,
-        )
-        file = Path(tmpdir) / "file.bin"
-        file.write_bytes(b"0")
-        model.flatbuffers_schema = file
-        ctrl.apply_flatbuffers_schema()
-        assert model.flatbuffers_process_result == "Not a valid flatbuffers schema"
+            mock_gui.mdl.vapp_schema_file = tmp_path
+            ctrl.apply_flatbuffers_schema()
+            ctrl.view.display_error.assert_called_with(
+                "Not a file or file does not exist!"
+            )
 
-        assert mock_driver.flatbuffers_schema != model.flatbuffers_schema
-        mock_flatbuffers.return_value.conform_flatbuffer_schema.return_value = (
-            True,
-            None,
-        )
-        ctrl.apply_flatbuffers_schema()
-        assert model.flatbuffers_process_result == "Success!"
-        assert mock_driver.flatbuffers_schema == model.flatbuffers_schema
+            mock_conform_flatbuffers.side_effect = FlatbufferError(
+                "Not a valid flatbuffers schema"
+            )
+            file = tmp_path / "file.bin"
+            file.write_bytes(b"0")
+            mock_gui.mdl.vapp_schema_file = str(file)
+            ctrl.apply_flatbuffers_schema()
+            ctrl.view.display_error.assert_called_with("Not a valid flatbuffers schema")
 
-
-def test_apply_application_configuration(tmpdir):
-    model, mock_driver = ConfigurationScreenModel(), MagicMock()
-    with (
-        patch(
-            "local_console.gui.controller.configuration_screen.ConfigurationScreenView"
-        ),
-    ):
-        ctrl = ConfigurationScreenController(model, mock_driver)
-
-        ctrl.apply_application_configuration()
-        assert model.flatbuffers_process_result is None
-
-        file = Path(tmpdir) / "config.json"
-        ctrl.update_app_configuration(str(file))
-        ctrl.apply_application_configuration()
-        assert model.flatbuffers_process_result == "App configuration does not exist"
-
-        file.write_text("{")
-        ctrl.apply_application_configuration()
-        assert (
-            model.flatbuffers_process_result == "Error parsing app configuration JSON"
-        )
-
-        file.write_text('{"a": 3}')
-        model.flatbuffers_process_result = ""
-        ctrl.apply_application_configuration()
-        assert model.flatbuffers_process_result == ""
+            mock_conform_flatbuffers.return_value = True
+            mock_conform_flatbuffers.side_effect = None
+            ctrl.apply_flatbuffers_schema()
+            ctrl.view.display_info.assert_called_with("Success!")
+            assert (
+                mock_gui.mdl.vapp_schema_file
+                == driver.camera_state.vapp_schema_file.value
+            )
+            nursery.cancel_scope.cancel()
 
 
-def test_apply_application_configuration_error(tmpdir):
-    model, mock_driver = ConfigurationScreenModel(), MagicMock()
-    with (
-        patch(
-            "local_console.gui.controller.configuration_screen.ConfigurationScreenView"
-        ),
-        patch("local_console.gui.controller.configuration_screen.json") as mock_json,
-    ):
-        ctrl = ConfigurationScreenController(model, mock_driver)
+@pytest.mark.trio
+async def test_apply_application_configuration(driver_set, cs_init, tmp_path) -> None:
+    driver, mock_gui = driver_set
+    async with trio.open_nursery() as nursery:
+        driver.camera_state = cs_init
+        model = driver.camera_state
+        model.vapp_type.value = ApplicationType.CUSTOM.value
+        mock_gui.mdl.bind_vapp_file_functions(model)
+        with (
+            patch(
+                "local_console.gui.controller.configuration_screen.ConfigurationScreenView"
+            ),
+            patch(
+                "local_console.gui.controller.configuration_screen.map_class_id_to_name"
+            ),
+        ):
+            ctrl = ConfigurationScreenController(Mock, driver)
 
-        file = Path(tmpdir) / "config.json"
-        file.write_text('{"a": 3}')
+            ctrl.apply_application_configuration()
 
-        mock_json.load.side_effect = Exception
-        ctrl.update_app_configuration(str(file))
-        ctrl.apply_application_configuration()
-        assert model.flatbuffers_process_result == "App configuration unknown error"
+            file = tmp_path / "config.json"
+            mock_gui.mdl.vapp_config_file = file
+            ctrl.apply_application_configuration()
+            ctrl.view.display_error.assert_called_with(
+                "App configuration does not exist"
+            )
 
-        mock_json.load.side_effect = PermissionError
-        ctrl.apply_application_configuration()
-        assert model.flatbuffers_process_result == "App configuration permission error"
+            file.write_text("{")
+            ctrl.apply_application_configuration()
+            ctrl.view.display_error.assert_called_with(
+                "Error parsing app configuration JSON"
+            )
 
-
-def test_update_application_type():
-    model, mock_driver = ConfigurationScreenModel(), MagicMock()
-    with (
-        patch(
-            "local_console.gui.controller.configuration_screen.ConfigurationScreenView"
-        ),
-    ):
-        ctrl = ConfigurationScreenController(model, mock_driver)
-
-        ctrl.update_application_type(ApplicationType.CUSTOM)
-        assert model.app_type == ApplicationType.CUSTOM
-        assert ctrl.view.ids.labels_pick.disabled
-        assert not ctrl.view.ids.schema_pick.disabled
-
-        ctrl.update_application_type(ApplicationType.CLASSIFICATION)
-        assert model.app_type == ApplicationType.CLASSIFICATION
-        assert model.flatbuffers_schema == ApplicationSchemaFilePath.CLASSIFICATION
-        assert not ctrl.view.ids.labels_pick.disabled
-        assert ctrl.view.ids.schema_pick.disabled
-
-        ctrl.update_application_type(ApplicationType.DETECTION)
-        assert model.app_type == ApplicationType.DETECTION
-        assert model.flatbuffers_schema == ApplicationSchemaFilePath.DETECTION
-        assert not ctrl.view.ids.labels_pick.disabled
-        assert ctrl.view.ids.schema_pick.disabled
-
-        ctrl.update_application_type(ApplicationType.CUSTOM)
-        assert ctrl.view.ids.labels_pick.disabled
-        assert not ctrl.view.ids.schema_pick.disabled
+            current_count_info = ctrl.view.display_info.call_count
+            current_count_error = ctrl.view.display_error.call_count
+            file.write_text('{"a": 3}')
+            ctrl.apply_application_configuration()
+            assert ctrl.view.display_info.call_count == current_count_info
+            assert ctrl.view.display_error.call_count == current_count_error
+            nursery.cancel_scope.cancel()
 
 
-@given(generate_text())
-def test_update_labels(path: str):
-    model = ConfigurationScreenModel()
+@pytest.mark.trio
+async def test_apply_application_configuration_error(
+    driver_set, cs_init, tmp_path
+) -> None:
+    driver, mock_gui = driver_set
+    async with trio.open_nursery() as nursery:
+        driver.camera_state = cs_init
+        model = driver.camera_state
+        mock_gui.mdl.bind_vapp_file_functions(model)
 
-    with (
-        patch(
-            "local_console.gui.controller.configuration_screen.ConfigurationScreenView"
-        ),
-    ):
-        ctrl = ConfigurationScreenController(model, MagicMock())
-        ctrl.update_app_labels(path)
+        mock_view = MagicMock()
+        with (
+            patch(
+                "local_console.gui.controller.configuration_screen.ConfigurationScreenView",
+                return_value=mock_view,
+            ),
+            patch(
+                "local_console.gui.controller.configuration_screen.json"
+            ) as mock_json,
+        ):
+            ctrl = ConfigurationScreenController(Mock, driver)
 
-        assert model.app_labels == path
+            file = tmp_path / "labels.txt"
+            file.write_text("class1\nclass2")
+            driver.camera_state.vapp_labels_file.value = str(file)
+            ctrl.apply_application_configuration()
+            # Cast to Path if vapp_labels_file is str
+            mock_view.display_error.assert_not_called()
+
+            file = tmp_path / "config.json"
+            file.write_text('{"a": 3}')
+
+            mock_json.load.side_effect = Exception
+            mock_gui.mdl.vapp_config_file = file
+            ctrl.apply_application_configuration()
+            ctrl.view.display_error.assert_called_with(
+                "App configuration unknown error"
+            )
+
+            mock_json.load.side_effect = PermissionError
+            ctrl.apply_application_configuration()
+            ctrl.view.display_error.assert_called_with(
+                "App configuration permission error"
+            )
+            nursery.cancel_scope.cancel()
 
 
-@given(generate_text())
-def test_update_flatbuffers_schema(path: str):
-    model = ConfigurationScreenModel()
+@pytest.mark.trio
+async def test_update_application_type(driver_set, cs_init) -> None:
+    driver, mock_gui = driver_set
+    async with trio.open_nursery() as nursery:
+        driver.camera_state = cs_init
+        model = driver.camera_state
+        model.vapp_type.value = ApplicationType.CUSTOM.value
+        mock_gui.mdl.bind_vapp_file_functions(model)
+        with (
+            patch(
+                "local_console.gui.controller.configuration_screen.ConfigurationScreenView"
+            ),
+        ):
+            ctrl = ConfigurationScreenController(Mock(), driver)
 
-    with (
-        patch(
-            "local_console.gui.controller.configuration_screen.ConfigurationScreenView"
-        ),
-    ):
-        ctrl = ConfigurationScreenController(model, MagicMock())
-        ctrl.update_flatbuffers_schema(path)
+            mock_gui.mdl.vapp_type = ApplicationType.CUSTOM.value
+            assert model.vapp_type.value == ApplicationType.CUSTOM
+            assert ctrl.view.ids.labels_pick.disabled
+            assert ctrl.view.ids.schema_pick.disabled
 
-        assert model.flatbuffers_schema == path
+            mock_gui.mdl.vapp_type = ApplicationType.CLASSIFICATION
+            assert model.vapp_type.value == ApplicationType.CLASSIFICATION
+            assert model.vapp_schema_file.value == str(
+                ApplicationSchemaFilePath.CLASSIFICATION
+            )
+            assert not ctrl.view.ids.labels_pick.disabled
+            assert ctrl.view.ids.schema_pick.disabled
+
+            mock_gui.mdl.vapp_type = ApplicationType.DETECTION
+            assert model.vapp_type.value == ApplicationType.DETECTION
+            assert model.vapp_schema_file.value == str(
+                ApplicationSchemaFilePath.DETECTION
+            )
+            assert not ctrl.view.ids.labels_pick.disabled
+            assert ctrl.view.ids.schema_pick.disabled
+
+            mock_gui.mdl.vapp_type = ApplicationType.CUSTOM
+            assert ctrl.view.ids.labels_pick.disabled
+            assert not ctrl.view.ids.schema_pick.disabled
+            nursery.cancel_scope.cancel()
 
 
 @given(st.integers(min_value=1))
@@ -210,39 +244,35 @@ def test_update_total_max_size(value: int):
         ctrl = ConfigurationScreenController(MagicMock(), driver)
         ctrl.update_total_max_size(value)
 
-        driver.total_dir_watcher.set_storage_limit.assert_called_once_with(value)
+        driver.camera_state.total_dir_watcher.set_storage_limit.assert_called_once_with(
+            value
+        )
 
 
 @given(generate_text())
 def test_update_image_directory(path: str):
     driver = MagicMock()
-    model = ConfigurationScreenModel()
     with (
         patch(
             "local_console.gui.controller.configuration_screen.ConfigurationScreenView"
         ),
     ):
-        ctrl = ConfigurationScreenController(model, driver)
+        ctrl = ConfigurationScreenController(Mock(), driver)
         ctrl.update_image_directory(path)
-
-        driver.set_image_directory.assert_called_once_with(path)
-        assert model.image_directory == path
+        assert driver.camera_state.image_dir_path.value == Path(path)
 
 
 @given(generate_text())
 def test_update_inferences_directory(path: str):
     driver = MagicMock()
-    model = ConfigurationScreenModel()
     with (
         patch(
             "local_console.gui.controller.configuration_screen.ConfigurationScreenView"
         ),
     ):
-        ctrl = ConfigurationScreenController(model, driver)
+        ctrl = ConfigurationScreenController(Mock(), driver)
         ctrl.update_inferences_directory(path)
-
-        driver.set_inference_directory.assert_called_once_with(path)
-        assert model.inferences_directory == path
+        assert driver.camera_state.inference_dir_path.value == Path(path)
 
 
 def test_get_view():
@@ -253,3 +283,21 @@ def test_get_view():
     ):
         ctrl = ConfigurationScreenController(MagicMock(), MagicMock())
         assert ctrl.view == ctrl.get_view()
+
+
+def test_refresh():
+    with (
+        patch(
+            "local_console.gui.controller.configuration_screen.ConfigurationScreenController.on_vapp_type"
+        ) as mock_vapp_type,
+        patch(
+            "local_console.gui.controller.configuration_screen.ConfigurationScreenView"
+        ),
+    ):
+        driver = MagicMock()
+        ctrl = ConfigurationScreenController(MagicMock(), driver)
+        ctrl.refresh()
+        mock_vapp_type.assert_called_once_with(
+            driver.device_manager.get_active_device_proxy(),
+            driver.device_manager.get_active_device_state().vapp_type.value,
+        )

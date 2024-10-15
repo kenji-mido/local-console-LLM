@@ -42,3 +42,8 @@ class ApplicationSchemaFilePath:
     DETECTION = (
         ApplicationConfiguration.FB_SCHEMA_PATH / ApplicationSchemaFile.DETECTION
     )
+
+
+class FirmwareType(StrEnum):
+    APPLICATION_FW = "Application Firmware"
+    SENSOR_FW = "Sensor Firmware"

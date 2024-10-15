@@ -1,11 +1,11 @@
 #:import JsonLexer pygments.lexers.JsonLexer
-#:include res_path(components.kv)
+#:import CodeInputCustom local_console.gui.view.common.components.CodeInputCustom
+#:import GoHomeButton local_console.gui.view.common.components.GoHomeButton
+#:import ImageWithROI local_console.gui.view.common.components.ImageWithROI
 
 <InferenceScreenView>
     md_bg_color: self.theme_cls.backgroundColor
     inference_data: self.inference_data
-
-    on_enter: self.entry_actions()
 
     MDBoxLayout:
         orientation: "vertical"
@@ -20,7 +20,7 @@
             MDBoxLayout:
             # Controls half
                 orientation: "horizontal"
-                size_hint_x: 3
+                size_hint_x: 0.4
                 padding: "10dp"
                 spacing: "10dp"
 
@@ -28,18 +28,19 @@
 
                 MDButton:
                     id: btn_stream_control
-                    on_release: root.toggle_stream_status()
+                    on_release: root.controller.toggle_stream_status()
                     style: "elevated"
                     pos_hint: {"center_y": 0.5}
                     MDButtonText:
-                        text: ("Stop" if app.is_streaming else "Start") + " Streaming"
+                        text: ("Stop" if app.mdl.is_streaming else "Start") + " Streaming"
 
                 MDWidget:
+
 
             MDBoxLayout:
             # Status readout half
                 orientation: "horizontal"
-                size_hint_x: 1.5
+                size_hint_x: 0.3
                 padding: "5dp"
                 spacing: "5dp"
 
@@ -53,6 +54,28 @@
                 MDLabel:
                     id: stream_flag
                     text: "Disabled"
+            MDBoxLayout:
+                size_hint_x: 0.3
+                spacing: "5dp"
+
+                EntryLabel:
+                    text: "Device:"
+                    size_hint_x: 0.3
+                    bold: True
+
+                MDLabel:
+                    text: app.selected
+                    size_hint_x: 0.7
+                    shorten: True
+                    max_lines: 1
+                    padding: "20dp", "5dp"
+                    halign:"left"
+                    canvas.before:
+                        Color:
+                            rgba: 0, 0, 0, 1
+                        Line:
+                            width: 1.1
+                            rounded_rectangle: self.x, self.y +15, self.width, self.height/2, 5, 5, 5, 5
 
         GridLayout:
         # File path
@@ -68,7 +91,7 @@
                 adaptive_width: True
 
             MDLabel:
-                text: app.image_dir_path
+                text: app.mdl.image_dir_path
                 allow_selection: True
                 allow_copy: True
                 padding: "5sp"
@@ -85,7 +108,7 @@
                 adaptive_width: True
 
             MDLabel:
-                text: app.inference_dir_path
+                text: app.mdl.inference_dir_path
                 allow_selection: True
                 allow_copy: True
                 padding: "5sp"
@@ -107,6 +130,7 @@
 
             ImageWithROI:
                 id: stream_image
+                source: app.mdl.stream_image
                 radius: "10dp"
                 fit_mode: "contain"
                 size_hint_x: 0.7
@@ -116,4 +140,4 @@
                 orientation: "vertical"
 
                 CodeInputCustom:
-                    id: inference_field
+                    text: app.mdl.inference_field

@@ -16,24 +16,19 @@
 import logging
 from pathlib import Path
 
-from local_console.clients.agent import Agent
-from local_console.core.commands.deploy import DeployStage
-from local_console.core.commands.deploy import exec_deployment
-from local_console.core.commands.deploy import module_deployment_setup
-from local_console.core.config import get_config
+from local_console.gui.controller.base_controller import BaseController
 from local_console.gui.driver import Driver
-from local_console.gui.enums import ApplicationConfiguration
 from local_console.gui.model.applications_screen import ApplicationsScreenModel
-from local_console.gui.utils.sync_async import run_on_ui_thread
 from local_console.gui.view.applications_screen.applications_screen import (
     ApplicationsScreenView,
 )
+from local_console.utils.validation import validate_app_file
 
 
 logger = logging.getLogger(__name__)
 
 
-class ApplicationsScreenController:
+class ApplicationsScreenController(BaseController):
     """
     The `ApplicationsScreenController` class represents a controller implementation.
     Coordinates work of the view with the model.
@@ -47,39 +42,24 @@ class ApplicationsScreenController:
         self.driver = driver
         self.view = ApplicationsScreenView(controller=self, model=self.model)
 
+    def bind(self) -> None:
+        self.driver.gui.mdl.bind(deploy_stage=self.view.on_deploy_stage)
+
+    def unbind(self) -> None:
+        self.driver.gui.mdl.unbind(deploy_stage=self.view.on_deploy_stage)
+
+    def refresh(self) -> None:
+        assert self.driver.camera_state
+        if self.driver.camera_state.module_file.value is not None:
+            self.view.app_file_valid = validate_app_file(
+                Path(self.driver.camera_state.module_file.value)
+            )
+        self.view.on_deploy_stage(
+            self.driver.gui.mdl, self.driver.camera_state.deploy_stage.value
+        )
+
     def get_view(self) -> ApplicationsScreenView:
         return self.view
 
-    def deploy(self, module_file_str: str) -> None:
-        self.driver.from_sync(self.deploy_task, Path(module_file_str))
-
-    async def deploy_task(self, module_file: Path) -> bool:
-        config: AgentConfiguration = get_config()  # type:ignore
-        port = config.webserver.port
-
-        with module_deployment_setup(
-            ApplicationConfiguration.NAME, module_file, port
-        ) as (
-            tmpdir,
-            deployment_manifest,
-        ):
-            self.model.manifest = deployment_manifest
-            try:
-                await exec_deployment(
-                    Agent(),
-                    deployment_manifest,
-                    True,
-                    tmpdir,
-                    port,
-                    60,
-                    self.update_deploy_stage,
-                )
-            except Exception as e:
-                logger.exception("Deployment error", exc_info=e)
-                return False
-            return True
-
-    @run_on_ui_thread
-    def update_deploy_stage(self, deploy_stage: DeployStage) -> None:
-        logger.info(f"WASM deployment stage is now: {deploy_stage.name}")
-        self.model.deploy_stage = deploy_stage
+    def deploy(self) -> None:
+        self.driver.do_app_deployment()

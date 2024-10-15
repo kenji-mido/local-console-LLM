@@ -19,6 +19,7 @@ import platform
 import socket
 
 import psutil
+from local_console.core.config import config_obj
 
 logger = logging.getLogger(__file__)
 
@@ -32,6 +33,7 @@ def get_network_ifaces() -> list[str]:
         list[str]: List of network interface names
     """
     stats = psutil.net_if_stats()
+    logger.debug(stats)
     os_name = platform.system()
     if os_name == "Windows":
         chosen = list(
@@ -44,6 +46,7 @@ def get_network_ifaces() -> list[str]:
             k
             for k, v in stats.items()
             if v.isup
+            and "docker" not in k.lower()
             and "running" in v.flags
             and "loopback" not in v.flags
             and "pointopoint" not in v.flags
@@ -69,7 +72,18 @@ def get_my_ip_by_routing() -> str:
     return chosen.address
 
 
-LOCAL_IP: str = get_my_ip_by_routing()
+def get_webserver_ip() -> str:
+    config = config_obj.get_active_device_config()
+    if config.webserver.host == "localhost":
+        return get_my_ip_by_routing()
+    return config.webserver.host
+
+
+def get_mqtt_ip() -> str:
+    config = config_obj.get_active_device_config()
+    if config.mqtt.host == "localhost":
+        return get_my_ip_by_routing()
+    return config.mqtt.host
 
 
 def is_localhost(hostname: str) -> bool:
@@ -84,10 +98,6 @@ def is_localhost(hostname: str) -> bool:
     except Exception as e:
         logger.warning(f"Unknown error while getting host by name: {e}")
     return False
-
-
-def replace_local_address(hostname: str) -> str:
-    return LOCAL_IP if is_localhost(hostname) else hostname
 
 
 def is_valid_host(hostname: str) -> bool:
@@ -105,3 +115,7 @@ def is_valid_host(hostname: str) -> bool:
         logger.warning(f"An unexpected error occurred - {hostname}: {e}")
         return False
     return True
+
+
+def replace_local_address(hostname: str) -> str:
+    return get_my_ip_by_routing() if is_localhost(hostname) else hostname

@@ -1,41 +1,14 @@
-#:import res_path local_console.gui.config.resource_path
-#:include res_path(components.kv)
-
-<StatusLabel>:
-    text: "Current stage:"
-    font_style: 'Body'
-
-    MDTooltipPlain:
-        text:
-            "This indicator might not reflect the correct status upon camera reset. \n" \
-            "This indicator is only updated during a deployment operation."
-
-
-<StatusTitle@MDBoxLayout>:
-    orientation: "horizontal"
-    size_hint_y: 0.1
-
-    StatusLabel:
-        adaptive_width: True
-
-    MDAnchorLayout:
-        size_hint_x: None
-        width: "16sp"
-        anchor_y: "top"
-        anchor_x: "left"
-
-        MDIcon:
-            icon: "help-box"
-            theme_font_size: "Custom"
-            font_size: "16sp"
-
+#:import CodeInputCustom local_console.gui.view.common.components.CodeInputCustom
+#:import GoHomeButton local_console.gui.view.common.components.GoHomeButton
+#:import PathSelectorCombo local_console.gui.view.common.components.PathSelectorCombo
 
 <ApplicationsScreenView>
     md_bg_color: self.theme_cls.backgroundColor
 
     MDBoxLayout:
         orientation: "vertical"
-
+        padding: "10dp"
+        spacing: "10dp"
         MDBoxLayout:
         # Top bar
             orientation: "horizontal"
@@ -44,13 +17,39 @@
             MDBoxLayout:
             # Controls half
                 orientation: "horizontal"
-                spacing: "10dp"
+                padding: "15dp"
+                size_hint_x: 0.3
                 padding: "10dp"
 
                 GoHomeButton:
 
                 MDWidget:
-                    size_hint_x: 3
+
+            MDWidget:
+                size_hint_x: 0.4
+
+            MDBoxLayout:
+                size_hint_x: 0.3
+                spacing: "5dp"
+
+                EntryLabel:
+                    text: "Device:"
+                    size_hint_x: 0.3
+                    bold: True
+
+                MDLabel:
+                    text: app.selected
+                    shorten: True
+                    max_lines: 1
+                    size_hint_x: 0.7
+                    padding: "20dp", "5dp"
+                    halign:"left"
+                    canvas.before:
+                        Color:
+                            rgba: 0, 0, 0, 1
+                        Line:
+                            width: 1.1
+                            rounded_rectangle: self.x, self.y+15, self.width, self.height/2, 5, 5, 5, 5
 
         MDBoxLayout:
         # Top bar
@@ -67,13 +66,14 @@
                     name: 'App location:'
                     icon: "file-cog"
                     selector: "file"
+                    path: app.mdl.module_file
                     on_selected: root.select_path(args[1])
 
                 MDButton:
                     id: btn_deploy_file
-                    on_release: root.controller.deploy(app_file.path)
+                    on_release: if not self.disabled: root.controller.deploy()
                     pos_hint: {"center_y": 0.5}
-                    disabled: True
+                    disabled: not (app.mdl.is_ready and root.app_file_valid)
                     MDButtonText:
                         text: "Deploy"
 
@@ -100,18 +100,27 @@
 
             CodeInputCustom:
                 id: txt_deployment_data
+                text: app.mdl.deploy_status
                 size_hint_x: 0.7
 
             MDBoxLayout:
                 orientation: "vertical"
                 size_hint_x: 0.25
 
-                StatusTitle:
+                MDLabel:
+                    text: "Current stage:"
+                    font_style: 'Body'
+                    adaptive_width: True
+                    size_hint_y: 0.1
 
                 MDGridLayout:
                     id: layout_status
                     rows: 1
                     size_hint_y: 0.2
+
+                    # Start this way by default
+                    MDLabel:
+                        text: "N/A"
 
                 MDWidget:
                     size_hint_y: 0.7

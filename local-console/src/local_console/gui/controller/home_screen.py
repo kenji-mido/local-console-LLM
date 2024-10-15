@@ -13,12 +13,13 @@
 # limitations under the License.
 #
 # SPDX-License-Identifier: Apache-2.0
+from local_console.gui.controller.base_controller import BaseController
 from local_console.gui.driver import Driver
 from local_console.gui.model.base_model import BaseScreenModel
 from local_console.gui.view.home_screen.home_screen import HomeScreenView
 
 
-class HomeScreenController:
+class HomeScreenController(BaseController):
     """
     The `HomeScreenController` class represents a controller implementation.
     Coordinates work of the view with the model.
@@ -33,3 +34,16 @@ class HomeScreenController:
 
     def get_view(self) -> HomeScreenView:
         return self.view
+
+    def refresh(self) -> None:
+        assert self.driver.device_manager
+        # Trigger for device configuration report
+        proxy = self.driver.device_manager.get_active_device_proxy()
+        state = self.driver.device_manager.get_active_device_state()
+        self.view.versions_refresh(proxy, state.device_config.value)
+
+    def unbind(self) -> None:
+        self.driver.gui.mdl.unbind(device_config=self.view.versions_refresh)
+
+    def bind(self) -> None:
+        self.driver.gui.mdl.bind(device_config=self.view.versions_refresh)

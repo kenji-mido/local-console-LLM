@@ -49,28 +49,25 @@ from typing import Optional
 
 from kivy.base import ExceptionHandler
 from kivy.base import ExceptionManager
-from kivy.properties import BooleanProperty
+from kivy.properties import ObjectProperty
 from kivy.properties import StringProperty
 from kivymd.app import MDApp
 from kivymd.uix.screen import MDScreen
 from kivymd.uix.screenmanager import MDScreenManager
 from local_console.gui.config import configure
 from local_console.gui.driver import Driver
+from local_console.gui.model.camera_proxy import CameraStateProxy
 from local_console.gui.view.screens import screen_dict
 from local_console.gui.view.screens import start_screen
+
 
 logger = logging.getLogger(__name__)
 
 
 class LocalConsoleGUIAPP(MDApp):
-    nursery = None
     driver = None
-
-    # Proxy objects leveraged for using Kivy's event dispatching
-    is_ready = BooleanProperty(False)
-    is_streaming = BooleanProperty(False)
-    image_dir_path = StringProperty("")
-    inference_dir_path = StringProperty("")
+    mdl = ObjectProperty(CameraStateProxy, rebind=True)
+    selected = StringProperty("")
 
     async def app_main(self) -> None:
         self.driver = Driver(self)
@@ -78,10 +75,10 @@ class LocalConsoleGUIAPP(MDApp):
 
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
+        self.mdl = CameraStateProxy()
         self.load_all_kv_files(self.directory)
         self.manager_screens = MDScreenManager()
         self.views: dict[str, type[MDScreen]] = {}
-        configure()
 
     def build(self) -> MDScreenManager:
         self.title = "Local Console"
@@ -89,6 +86,7 @@ class LocalConsoleGUIAPP(MDApp):
         return self.manager_screens
 
     def generate_application_screens(self) -> None:
+        configure()
         for name, entry in screen_dict.items():
             # TODO:FIXME: as a consequence of decouple viewer and controller
             model = entry["model_class"]()  # type: ignore
@@ -111,6 +109,34 @@ class LocalConsoleGUIAPP(MDApp):
         self, text: str, support_text: Optional[str] = None, duration: int = 5
     ) -> None:
         self.manager_screens.current_screen.display_error(text, support_text, duration)
+
+    def refresh_active_device(self) -> None:
+        assert self.driver
+        assert self.driver.device_manager
+
+        dman = self.driver.device_manager
+        assert dman.active_device
+
+        key = dman.active_device.port
+        dman.set_active_device(key)
+        self.selected = dman.active_device.name
+
+    def switch_proxy(self) -> None:
+        assert self.driver
+        assert self.driver.device_manager
+        assert self.driver.device_manager.active_device
+
+        self.refresh_active_device()
+        self.driver.camera_state = self.driver.device_manager.get_active_device_state()
+
+        for view in self.views.values():
+            view.controller.unbind()
+
+        self.mdl = self.driver.device_manager.get_active_device_proxy()
+
+        for view in self.views.values():
+            view.controller.bind()
+            view.controller.refresh()
 
 
 class GUIExceptionHandler(ExceptionHandler):
