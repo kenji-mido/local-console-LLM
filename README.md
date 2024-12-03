@@ -30,6 +30,7 @@ The installation procedure depends on your machine. It is outlined for each supp
 You should execute the `local-console-setup.exe` installer, as your regular (i.e. non-admin) user. In order for the installer to download the system dependencies, the installer will attempt to run a shell script as an Administrator, causing Windows' UAC to prompt for your permission to do so. Once the system dependencies are installed, another shell script will be executed as your user, which will actually install the Local Console in your user account.
 
 ### Linux
+Please note that Local Console for Linux is not verified !!! 
 
 Currently there is no stand-alone installer as there is for Windows. Hence, after fulfilling [the prerequisites](#prerequisites), perform the following steps:
 
