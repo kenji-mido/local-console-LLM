@@ -30,7 +30,7 @@ The installation procedure depends on your machine. It is outlined for each supp
 You should execute the `local-console-setup.exe` installer, as your regular (i.e. non-admin) user. In order for the installer to download the system dependencies, the installer will attempt to run a shell script as an Administrator, causing Windows' UAC to prompt for your permission to do so. Once the system dependencies are installed, another shell script will be executed as your user, which will actually install the Local Console in your user account.
 
 ### Linux
-Please note that Local Console for Linux is not actively tested/verified !!! 
+Please note that Local Console for Linux is not actively tested/verified.
 
 Currently there is no stand-alone installer as there is for Windows. Hence, after fulfilling [the prerequisites](#prerequisites), perform the following steps:
 
@@ -52,6 +52,7 @@ $ . lcenv/bin/activate
 The Local Console has been installed. To use it, either run the `local-console` command with the `lcenv` virtualenv activated, or use the absolute path to the `local-console` binary located in the `bin` subdirectory at the location of the `lcenv` virtualenv.
 
 ### OSX
+Please note that Local Console for OSX is not actively tested/verified.
 
 The procedure is pretty similar to [Linux](#linux), except for the `xclip` requirement, which is unnecessary for this platform.
 
