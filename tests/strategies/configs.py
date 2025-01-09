@@ -20,6 +20,7 @@ from struct import pack
 from hypothesis import strategies as st
 from local_console.core.schemas.edge_cloud_if_v1 import DeviceConfiguration
 from local_console.core.schemas.edge_cloud_if_v1 import Hardware
+from local_console.core.schemas.edge_cloud_if_v1 import Network
 from local_console.core.schemas.edge_cloud_if_v1 import OTA
 from local_console.core.schemas.edge_cloud_if_v1 import Permission
 from local_console.core.schemas.edge_cloud_if_v1 import Status
@@ -206,6 +207,16 @@ def generate_valid_device_configuration(draw: st.DrawFn) -> DeviceConfiguration:
                     UpdateStatus="Updating",
                 ),
                 Permission=Permission(FactoryReset=False),
+                Network=Network(
+                    ProxyURL="",
+                    ProxyPort=0,
+                    ProxyUserName="",
+                    IPAddress="",
+                    SubnetMask="",
+                    Gateway="",
+                    DNS="",
+                    NTP="",
+                ),
             )
         )
     )

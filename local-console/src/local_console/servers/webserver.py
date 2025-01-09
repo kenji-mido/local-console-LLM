@@ -26,7 +26,6 @@ from typing import Any
 from typing import Callable
 from typing import Optional
 
-from local_console.utils.fstools import check_and_create_directory
 
 logger = logging.getLogger(__name__)
 
@@ -35,37 +34,58 @@ class ThreadedHTTPServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
     pass
 
 
+FileIncomingFn = Callable[[bytes, str], None]
+
+
 class CustomHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
     def __init__(
-        self, *args: Any, on_incoming: Optional[Callable] = None, **kwargs: Any
+        self,
+        *args: Any,
+        on_incoming: Optional[FileIncomingFn] = None,
+        max_upload_size: Optional[int] = None,
+        **kwargs: Any,
     ):
         self.on_incoming = on_incoming
+        self.max_upload_size = max_upload_size
         super().__init__(*args, **kwargs)
 
     def log_message(self, _format: str, *args: Sequence[str]) -> None:
         logger.debug(" ".join(str(arg) for arg in args))
 
     def do_PUT(self) -> None:
+        response_code: int = 200
+        response_msg: Optional[str] = None
+
         data: Optional[bytes] = None
         try:
             content_length = int(self.headers["Content-Length"])
+            if (
+                self.max_upload_size is not None
+                and content_length > self.max_upload_size
+            ):
+                raise BufferError(content_length)
             data = self.rfile.read(content_length)
-            check_and_create_directory(Path(self.directory))
-            dest_path = Path(self.directory) / self.path.lstrip("/")
-            self.log_message("", f"Webserver dest_path: {str(dest_path)}")
-            dest_path.write_bytes(data)
-        except Exception as e:
-            logger.error(f"Error while receiving data: {e}")
-        finally:
-            self.send_response(200)
-            self.end_headers()
 
-        # Notify of new file when the callback is set
-        if data and self.on_incoming:
-            try:
-                self.on_incoming(dest_path)
-            except Exception as e:
-                logger.error(f"Error while invoking callback: {e}")
+            # Notify of new file when the callback is set
+            if data and self.on_incoming:
+                try:
+                    self.on_incoming(data, self.path)
+                except Exception as e:
+                    logger.error("Error while invoking callback", exc_info=e)
+
+            response_code = 200
+
+        except BufferError as e:
+            response_msg = f"Upload size {content_length} bytes is greater than {self.max_upload_size} bytes, which is not allowed."
+            logger.error(response_msg, exc_info=e)
+            # See https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/413
+            response_code = 413
+
+        except Exception as e:
+            logger.error("Error while receiving data", exc_info=e)
+        finally:
+            self.send_response(response_code, response_msg)
+            self.end_headers()
 
     do_POST = do_PUT
 
@@ -132,16 +152,22 @@ class SyncWebserver(GenericWebserver):
         self,
         directory: Path,
         port: int = 0,
-        on_incoming: Optional[Callable] = None,
+        on_incoming: Optional[FileIncomingFn] = None,
         deploy: bool = True,
+        max_upload_size: Optional[int] = None,
     ) -> None:
         super().__init__(port, deploy)
         self.dir = directory
         self.on_incoming = on_incoming
+        self.max_upload_size = max_upload_size
 
     def handler(self, *args: Any, **kwargs: Any) -> CustomHTTPRequestHandler:
         return CustomHTTPRequestHandler(
-            *args, on_incoming=self.on_incoming, directory=str(self.dir), **kwargs
+            *args,
+            directory=str(self.dir),
+            on_incoming=self.on_incoming,
+            max_upload_size=self.max_upload_size,
+            **kwargs,
         )
 
     def set_directory(self, directory: Path) -> None:

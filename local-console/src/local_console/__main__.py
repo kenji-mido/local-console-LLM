@@ -38,9 +38,11 @@ cmds = populate_commands(app)
 
 
 def handle_exit(signal: int, frame: Optional[FrameType]) -> None:
+    logger.warning(f"Handling signal {signal} with frame {frame}")
     raise SystemExit
 
 
+signal.signal(signal.SIGINT, handle_exit)
 signal.signal(signal.SIGTERM, handle_exit)
 
 

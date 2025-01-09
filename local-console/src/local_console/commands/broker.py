@@ -14,18 +14,18 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 import logging
+import signal
 from typing import Annotated
 
 import trio
 import typer
-from exceptiongroup import ExceptionGroup
 from local_console.core.config import config_obj
 from local_console.core.schemas.schemas import DeviceConnection
 from local_console.plugin import PluginBase
 from local_console.servers.broker import BrokerException
 from local_console.servers.broker import spawn_broker
+from trio import Event
 from trio import open_nursery
-from trio import sleep_forever
 
 app = typer.Typer()
 
@@ -43,27 +43,40 @@ def broker(
 ) -> None:
     logger.setLevel(logging.DEBUG if verbose else logging.INFO)
     device_config = config_obj.get_active_device_config()
-    trio.run(broker_task, device_config, verbose)
+    retcode = trio.run(broker_task, device_config, verbose)
+    raise typer.Exit(code=retcode)
 
 
-async def broker_task(config: DeviceConnection, verbose: bool) -> None:
+async def broker_task(config: DeviceConnection, verbose: bool) -> int:
+    retcode: int = 1
     logger.setLevel(logging.INFO)
+    finish = Event()
     try:
         async with (
             open_nursery() as nursery,
             spawn_broker(config.mqtt.port, nursery, verbose),
         ):
-            try:
-                logger.info(f"MQTT broker listening on port {config.mqtt.port}")
-                await sleep_forever()
-            except KeyboardInterrupt:
-                logger.warning("Cancelled by the user")
+            logger.info(f"MQTT broker listening on port {config.mqtt.port}")
 
-    except ExceptionGroup as exc_grp:
+            nursery.start_soon(wait_for_signals, finish)
+            await finish.wait()
+            nursery.cancel_scope.cancel()
+            retcode = 0
+
+    except* Exception as exc_grp:
         for e in exc_grp.exceptions:
             if isinstance(e, BrokerException):
                 logger.error(" ".join(str(e).splitlines()))
-                raise typer.Exit(1)
+
+    return retcode
+
+
+async def wait_for_signals(finish_event: trio.Event) -> None:
+    with trio.open_signal_receiver(signal.SIGTERM, signal.SIGINT) as signal_aiter:
+        async for signum in signal_aiter:
+            logger.warning("Cancelled by the user")
+            finish_event.set()
+            break
 
 
 class BrokerCommand(PluginBase):

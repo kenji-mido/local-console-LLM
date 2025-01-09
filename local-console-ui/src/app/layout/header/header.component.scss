@@ -1,0 +1,149 @@
+/**
+ * Copyright 2024 Sony Semiconductor Solutions Corp.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+@import "../../stylesheets/variables.scss";
+
+@media screen and (max-width: 600px) {
+  div.header {
+    height: $mobileHeaderHeight;
+    align-items: center;
+
+    .logo {
+      display: flex;
+      flex: 1;
+      margin: 8px;
+
+      img {
+        height: 24px;
+        width: auto;
+      }
+    }
+
+    .right {
+      .right-v2 {
+        display: none;
+      }
+
+      app-user-menu {
+        ::ng-deep .mat-icon-button {
+          padding-top: 0;
+          padding-right: 0;
+
+          img {
+            padding-left: 0;
+            width: 24px;
+            height: 24px;
+          }
+        }
+      }
+    }
+  }
+}
+
+// Light theme header
+.header {
+  background-color: $darkBlue;
+  height: $headerHeight;
+  display: flex;
+
+  .logo {
+    margin: 16px auto 16px 32px;
+
+    img {
+      width: 364.61px;
+      height: 40px;
+
+      &.local {
+        width: 480px;
+        height: 40px;
+      }
+    }
+  }
+
+  .right {
+    display: inline-flex;
+
+    &-v2 {
+      justify-self: center;
+      display: inline-flex;
+      margin-right: auto;
+      width: auto;
+
+      &-hub {
+        padding-top: 25px;
+        padding-bottom: 25px;
+        padding-right: 6.6px;
+        font-size: 18px;
+        font-weight: 400;
+        line-height: 22px;
+        text-align: right;
+        color: rgba(255, 255, 255, 1);
+      }
+
+      &-icon {
+        margin: 0 !important;
+        padding-top: 24px;
+        padding-bottom: 24px;
+        padding-right: 23.6px;
+
+        img {
+          width: 40.8px;
+          height: 24px;
+        }
+      }
+
+      &-switch {
+        margin: 0 !important;
+        padding-top: 24px;
+        padding-bottom: 24px;
+        padding-right: 48px;
+
+        ::ng-deep .app-switch {
+          margin: 0 !important;
+
+          img {
+            width: 48px;
+            height: 24px;
+          }
+        }
+      }
+
+      img {
+        margin-right: 11px;
+        width: 38px;
+        height: 22px;
+        margin: 6px;
+      }
+    }
+
+    app-user-menu {
+      ::ng-deep .mat-icon-button {
+        padding-top: 19.33px;
+        padding-right: 32px;
+
+        img {
+          padding-left: 24.33px;
+          width: 33.33px;
+          height: 33.33px;
+        }
+      }
+
+      justify-self: center;
+    }
+  }
+}

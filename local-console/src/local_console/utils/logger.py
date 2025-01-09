@@ -25,3 +25,4 @@ def configure_logger(silent: bool, verbose: bool) -> None:
     if silent:
         level = logging.WARNING
     logging.basicConfig(format=LOG_FORMAT, level=level)
+    logging.getLogger("watchdog.observers").setLevel(logging.WARNING)

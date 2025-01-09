@@ -1,0 +1,187 @@
+/**
+ * Copyright 2024 Sony Semiconductor Solutions Corp.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+@import "../../../stylesheets/hub.scss";
+
+* {
+  box-sizing: border-box;
+}
+
+.device-management-container {
+  gap: 10px;
+  height: 100%;
+}
+
+.device-list-viewport {
+  display: flex;
+  flex-direction: column;
+  background-color: #fff;
+  border: 1px solid rgba(236, 236, 236, 1);
+  border-radius: 10px;
+  height: 100%;
+
+  app-icon-text {
+    background-color: transparent;
+  }
+}
+
+.device-details {
+  display: flex;
+  flex-direction: column;
+  background-color: #fff;
+  align-items: center;
+  vertical-align: top;
+  flex: 1;
+  padding-left: 16px;
+  border-radius: 10px;
+
+  .device-details-header {
+    width: 100%;
+    display: flex;
+    position: relative;
+    align-items: center;
+    justify-content: center;
+    min-height: 56px;
+  }
+
+  .device-details-title {
+    position: absolute;
+    left: 0;
+  }
+
+  .device-details-resize {
+    width: 16px;
+    cursor: row-resize;
+  }
+
+  .device-tab-selection {
+    display: flex;
+    flex-direction: row;
+    width: 100%;
+    justify-content: flex-start; /* Align items to the left */
+
+    .button {
+      width: 160px;
+      height: 40px;
+      background: #fff;
+      border: none;
+      border-bottom: 1px solid #3e455c;
+    }
+
+    .selected-tab {
+      border-bottom: 4px solid #3e455c;
+    }
+  }
+}
+
+// reused from deployment hub
+// TODO: move to common place
+.mat-mdc-table {
+  border-collapse: collapse;
+
+  .mat-mdc-header-row {
+    height: 40px;
+    .mat-mdc-header-cell {
+      background-color: #d1d3d9;
+      border-bottom: #d1d3d9;
+    }
+  }
+
+  .mat-mdc-row {
+    background-color: #fff;
+    border: 1px solid transparent;
+    box-sizing: border-box;
+    height: 47px;
+  }
+
+  .mat-mdc-cell {
+    border: none;
+  }
+
+  .mat-mdc-row:hover {
+    background: rgba(80, 158, 249, 0.15);
+    border-color: rgba(59, 176, 255, 0.5);
+  }
+
+  .mat-mdc-row.focus {
+    background: rgba(80, 158, 249, 0.3);
+    border-color: #3bb0ff;
+  }
+
+  .selector {
+    background: transparent;
+    border-color: transparent;
+    float: right;
+    position: relative; /* Ensures button is the reference for menu positioning */
+  }
+  .selector-button:hover {
+    background: rgba(62, 69, 92, 0.4);
+  }
+}
+
+.cdk-drop-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.cdk-drag-preview {
+  opacity: 0; // hide floating icon at when limits are reached
+}
+
+.menu {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+
+  position: absolute; /* menu relative to the button */
+  right: 100%; /* menu to the left of the button */
+
+  transform: translateY(-40px); /* move menu up */
+}
+
+.menu-item {
+  width: 232px;
+  height: 56px;
+
+  border: none;
+  /* FIXME: setting 'border: 1px solid black;' duplicates the border between items */
+  border-top: 1px solid black;
+  border-left: 1px solid black;
+  border-right: 1px solid black;
+  background-color: #ffffff;
+
+  font-size: 16px;
+  text-align: left;
+  padding-left: 16px;
+}
+
+.menu-item:first-child {
+  border-top-left-radius: 8px;
+  border-top-right-radius: 8px;
+}
+
+.menu-item:last-child {
+  border-bottom-left-radius: 8px;
+  border-bottom-right-radius: 8px;
+  border-bottom: 1px solid black;
+}
+
+.menu-item:hover {
+  background-color: #3e455c;
+  color: #ffffff;
+}

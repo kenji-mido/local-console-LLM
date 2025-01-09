@@ -1,0 +1,172 @@
+<!--
+ Copyright 2024 Sony Semiconductor Solutions Corp.
+
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
+
+     http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+
+ SPDX-License-Identifier: Apache-2.0
+-->
+
+<div class="hub-page full-page">
+  <div class="page-header">
+    <div class="page-header-title">
+      <span>Manage Devices</span>
+    </div>
+  </div>
+  <div class="page-body">
+    <div cdkDropList class="device-management-container">
+      <cdk-virtual-scroll-viewport
+        [tvsItemSize]="itemSize"
+        class="device-list-viewport"
+      >
+        <table mat-table [dataSource]="dataSource">
+          <ng-container matColumnDef="device_name">
+            <th mat-header-cell *matHeaderCellDef>Device Name</th>
+            <td mat-cell *matCellDef="let element">
+              <app-icon-text [text]="element.device_name"></app-icon-text>
+            </td>
+          </ng-container>
+          <ng-container matColumnDef="status">
+            <th mat-header-cell *matHeaderCellDef>Status</th>
+            <td mat-cell *matCellDef="let element">
+              <app-icon-text
+                [iconUrl]="element.connection_state | deviceStatusSvg"
+                [text]="element.connection_state || DeviceStatus.Unknown"
+              ></app-icon-text>
+            </td>
+          </ng-container>
+          <ng-container matColumnDef="port">
+            <th mat-header-cell *matHeaderCellDef>Port</th>
+            <td mat-cell *matCellDef="let element">
+              <span>{{element.port}}</span>
+            </td>
+          </ng-container>
+          <ng-container matColumnDef="appFw">
+            <th mat-header-cell *matHeaderCellDef>Main Chip FW Ver.</th>
+            <td mat-cell *matCellDef="let element">
+              <span
+                >{{element.modules?.[0].property.state.device_info.processors?.[0].firmware_version}}</span
+              >
+            </td>
+          </ng-container>
+          <ng-container matColumnDef="sensorFw">
+            <th mat-header-cell *matHeaderCellDef>Sensor Chip FW Ver.</th>
+            <td mat-cell *matCellDef="let element">
+              <span
+                >{{element.modules?.[0].property.state.device_info.sensors?.[0].firmware_version}}</span
+              >
+            </td>
+          </ng-container>
+          <ng-container matColumnDef="selector">
+            <th mat-header-cell *matHeaderCellDef></th>
+            <td mat-cell *matCellDef="let element">
+              <button [cdkMenuTriggerFor]="menu" class="selector">
+                <img
+                  class="selector-button"
+                  src="images/light/3_dots_hover.svg"
+                />
+              </button>
+              <ng-template #menu>
+                <div class="menu" cdkMenu>
+                  <button
+                    class="menu-item"
+                    (click)="onDelete(element)"
+                    cdkMenuItem
+                  >
+                    Delete
+                  </button>
+                  <button
+                    class="menu-item"
+                    (click)="onRename(element)"
+                    cdkMenuItem
+                  >
+                    Rename
+                  </button>
+                </div>
+              </ng-template>
+            </td>
+          </ng-container>
+          <tr
+            mat-header-row
+            *matHeaderRowDef="displayedColumns; sticky: true"
+          ></tr>
+          <tr
+            mat-row
+            *matRowDef="let row; columns: displayedColumns"
+            (click)="onDeviceSelected(row)"
+            [ngClass]="{'focus': selectedDeviceId === row.device_id}"
+          ></tr>
+        </table>
+      </cdk-virtual-scroll-viewport>
+      <div class="device-details" [style.min-height.px]="infoSize">
+        <div class="device-details-header">
+          <div class="device-details-title">
+            {{ selectedDevice === null ? "Select a Device" :
+            selectedDevice.device_name }}
+          </div>
+          <img
+            src="images/{{ theme }}/drag.svg"
+            cdkDrag
+            cdkDragLockAxis="y"
+            cdkDragBoundary=".page-body"
+            class="device-details-resize"
+            (cdkDragMoved)="onDragMoved($event)"
+            (cdkDragEnded)="onDragEnded($event)"
+          />
+        </div>
+        <div class="device-tab-selection">
+          <button
+            class="button"
+            data-testid="device_tab"
+            (click)="selectDevice()"
+            [ngClass]="{'selected-tab': selectedSection === Tab.Device}"
+          >
+            Device
+          </button>
+          <button
+            class="button"
+            data-testid="network_tab"
+            (click)="selectNetwork()"
+            [ngClass]="{'selected-tab': selectedSection === Tab.Network}"
+          >
+            Network
+          </button>
+          <button
+            class="button"
+            data-testid="aimodel_tab"
+            (click)="selectModel()"
+            [ngClass]="{'selected-tab': selectedSection === Tab.Model}"
+          >
+            AI Model
+          </button>
+        </div>
+        <div style="width: 100%" [ngSwitch]="selectedSection">
+          <app-device-info
+            *ngSwitchCase="Tab.Device"
+            [device]="selectedDevice"
+          ></app-device-info>
+          <app-aimodel-info
+            *ngSwitchCase="Tab.Model"
+            [device]="selectedDevice"
+          ></app-aimodel-info>
+          <app-network-info
+            *ngSwitchCase="Tab.Network"
+            [device]="selectedDevice"
+          ></app-network-info>
+          <div class="device-details-body" *ngSwitchDefault>
+            My {{selectedSection}} Body
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

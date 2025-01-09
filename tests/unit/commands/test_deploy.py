@@ -39,11 +39,11 @@ from local_console.core.commands.deploy import get_empty_deployment
 from local_console.core.config import config_obj
 from local_console.core.enums import Target
 from local_console.core.schemas.schemas import DeploymentManifest
-from local_console.core.schemas.schemas import DeviceConnection
 from local_console.core.schemas.schemas import OnWireProtocol
 from typer.testing import CliRunner
 
 from tests.strategies.deployment import deployment_manifest_strategy
+from tests.strategies.samplers.configs import GlobalConfigurationSampler
 
 runner = CliRunner()
 
@@ -93,7 +93,16 @@ def test_deploy_command_target(
     deployment_manifest: DeploymentManifest,
     target: Target,
 ) -> None:
+
+    simple_gconf = GlobalConfigurationSampler(num_of_devices=1).sample()
+    device_conf = simple_gconf.devices[0]
+    device_conf.webserver.host = "localhost"
     with (
+        patch("local_console.commands.deploy.config_obj.get_config") as mock_gconfig,
+        patch(
+            "local_console.commands.deploy.config_obj.get_active_device_config",
+            return_value=device_conf,
+        ) as mock_device_config,
         patch("local_console.commands.deploy.Agent") as mock_agent_client,
         patch("local_console.commands.deploy.is_localhost", return_value=True),
         patch(
@@ -108,6 +117,8 @@ def test_deploy_command_target(
         ) as mock_setup_manifest,
         patch("pathlib.Path.is_dir") as mock_check_dir,
     ):
+        mock_gconfig.return_value.evp.iot_platform = "evp1"
+
         result = runner.invoke(app, [target.value])
         mock_agent_client.assert_called_once()
         mock_check_dir.assert_called_once()
@@ -120,9 +131,11 @@ def test_deploy_command_target(
             mock_deploy_fsm.webserver,
             ANY,
             ANY,
+            device_conf,
             ANY,
             ANY,
         )
+        mock_device_config.assert_called()
 
         mock_deploy_fsm.set_manifest.assert_called_once_with(deployment_manifest)
         mock_exec_deploy.assert_called_once_with(
@@ -135,7 +148,16 @@ def test_deploy_command_target(
 @settings(deadline=timedelta(seconds=10))
 @given(deployment_manifest_strategy())
 def test_deploy_command_signed(deployment_manifest: DeploymentManifest) -> None:
+
+    simple_gconf = GlobalConfigurationSampler(num_of_devices=1).sample()
+    device_conf = simple_gconf.devices[0]
+    device_conf.webserver.host = "localhost"
     with (
+        patch("local_console.commands.deploy.config_obj.get_config") as mock_gconfig,
+        patch(
+            "local_console.commands.deploy.config_obj.get_active_device_config",
+            return_value=device_conf,
+        ) as mock_device_config,
         patch("local_console.commands.deploy.Agent") as mock_agent_client,
         patch("local_console.commands.deploy.is_localhost", return_value=True),
         patch(
@@ -150,6 +172,8 @@ def test_deploy_command_signed(deployment_manifest: DeploymentManifest) -> None:
         ) as mock_setup_manifest,
         patch("pathlib.Path.is_dir") as mock_check_dir,
     ):
+        mock_gconfig.return_value.evp.iot_platform = "evp1"
+
         result = runner.invoke(app, ["-s"])
         mock_agent_client.assert_called_once()
         mock_check_dir.assert_called_once()
@@ -162,9 +186,11 @@ def test_deploy_command_signed(deployment_manifest: DeploymentManifest) -> None:
             mock_deploy_fsm.webserver,
             ANY,
             True,
+            device_conf,
             ANY,
             ANY,
         )
+        mock_device_config.assert_called()
 
         mock_deploy_fsm.set_manifest.assert_called_once_with(deployment_manifest)
         mock_exec_deploy.assert_called_once_with(
@@ -180,7 +206,16 @@ def test_deploy_command_timeout(
 ) -> None:
     # TODO: improve timeout management
     timeout = 6
+
+    simple_gconf = GlobalConfigurationSampler(num_of_devices=1).sample()
+    device_conf = simple_gconf.devices[0]
+    device_conf.webserver.host = "localhost"
     with (
+        patch("local_console.commands.deploy.config_obj.get_config") as mock_gconfig,
+        patch(
+            "local_console.commands.deploy.config_obj.get_active_device_config",
+            return_value=device_conf,
+        ) as mock_device_config,
         patch("local_console.commands.deploy.Agent") as mock_agent_client,
         patch("local_console.commands.deploy.is_localhost", return_value=True),
         patch(
@@ -195,6 +230,8 @@ def test_deploy_command_timeout(
         ) as mock_setup_manifest,
         patch("pathlib.Path.is_dir") as mock_check_dir,
     ):
+        mock_gconfig.return_value.evp.iot_platform = "evp1"
+
         result = runner.invoke(app, ["-t", timeout])
         mock_agent_client.assert_called_once()
         mock_check_dir.assert_called_once()
@@ -213,9 +250,11 @@ def test_deploy_command_timeout(
             mock_deploy_fsm.webserver,
             ANY,
             ANY,
+            device_conf,
             ANY,
             ANY,
         )
+        mock_device_config.assert_called()
 
         mock_deploy_fsm.set_manifest.assert_called_once_with(deployment_manifest)
         mock_exec_deploy.assert_called_once_with(
@@ -283,7 +322,16 @@ async def test_attributes_request_handling(
 
 @given(deployment_manifest_strategy())
 def test_deploy_forced_webserver(deployment_manifest: DeploymentManifest) -> None:
+
+    simple_gconf = GlobalConfigurationSampler(num_of_devices=1).sample()
+    device_conf = simple_gconf.devices[0]
+    device_conf.webserver.host = "localhost"
     with (
+        patch("local_console.commands.deploy.config_obj.get_config") as mock_gconfig,
+        patch(
+            "local_console.commands.deploy.config_obj.get_active_device_config",
+            return_value=device_conf,
+        ) as mock_device_config,
         patch("local_console.commands.deploy.is_localhost", return_value=True),
         patch(
             "local_console.commands.deploy.get_my_ip_by_routing",
@@ -298,6 +346,8 @@ def test_deploy_forced_webserver(deployment_manifest: DeploymentManifest) -> Non
         ) as mock_setup_manifest,
         patch("pathlib.Path.is_dir") as mock_check_dir,
     ):
+        mock_gconfig.return_value.evp.iot_platform = "evp1"
+
         result = runner.invoke(app, ["-f"])
         mock_agent_client.assert_called_once()
         mock_check_dir.assert_called_once()
@@ -317,9 +367,11 @@ def test_deploy_forced_webserver(deployment_manifest: DeploymentManifest) -> Non
             mock_deploy_fsm.webserver,
             ANY,
             ANY,
+            device_conf,
             ANY,
             ANY,
         )
+        mock_device_config.assert_called()
 
         mock_deploy_fsm.set_manifest.assert_called_once_with(deployment_manifest)
         mock_exec_deploy.assert_called_once_with(
@@ -333,32 +385,25 @@ def test_deploy_forced_webserver_port_override() -> None:
     # Set a port to check against
     port_override = 9876
 
-    from local_console.core.schemas.schemas import MQTTParams
-    from local_console.core.schemas.schemas import WebserverParams
+    simple_gconf = GlobalConfigurationSampler(num_of_devices=1).sample()
+    device_conf = simple_gconf.devices[0]
+    device_conf.mqtt.host = "localhost"
+    device_conf.webserver.host = "localhost"
+    device_conf.webserver.port = port_override
 
     with (
+        patch("local_console.commands.deploy.config_obj.get_config") as mock_gconfig,
+        patch(
+            "local_console.commands.deploy.config_obj.get_active_device_config",
+            return_value=device_conf,
+        ) as mock_device_config,
         patch("local_console.commands.deploy.is_localhost", return_value=False),
         patch(
             "local_console.commands.deploy.get_my_ip_by_routing",
             return_value="192.168.1.13",
         ),
         patch("local_console.commands.deploy.Agent") as mock_agent_client,
-        patch(
-            "local_console.core.config.Config.get_active_device_config",
-            return_value=DeviceConnection(
-                mqtt=MQTTParams(
-                    host="localhost",
-                    port=1883,
-                    device_id=None,
-                ),
-                webserver=WebserverParams(
-                    host="localhost",
-                    port=port_override,
-                ),
-                name="Default",
-            ),
-        ),
-        patch("local_console.commands.deploy.exec_deployment"),
+        patch("local_console.commands.deploy.exec_deployment") as mock_exec_deploy,
         patch("local_console.core.commands.deploy.TimeoutBehavior"),
         patch("local_console.servers.webserver.threading.Thread") as mock_server_thread,
         patch(
@@ -367,14 +412,16 @@ def test_deploy_forced_webserver_port_override() -> None:
         patch("pathlib.Path.is_dir") as mock_check_dir,
         patch("pathlib.Path.write_text"),
     ):
-        mock_agent_client.return_value.onwire_schema = OnWireProtocol.EVP1
+        mock_gconfig.return_value.evp.iot_platform = "evp1"
         mock_manifest.return_value.model_dump.return_value = {}
+        mock_exec_deploy.return_value = True
 
         result = runner.invoke(app, ["-f"])
         assert result.exit_code == 0
 
         mock_agent_client.assert_called_once()
         mock_check_dir.assert_called_once()
+        mock_device_config.assert_called()
 
         mock_server_thread.assert_called_once_with(
             target=ANY, name=f"Webserver_{port_override}"
@@ -442,6 +489,9 @@ def test_multiple_module_setup(tmp_path):
         }
     )
 
+    simple_gconf = GlobalConfigurationSampler(num_of_devices=1).sample()
+    device_conf = simple_gconf.devices[0]
+    device_conf.webserver.host = "localhost"
     with (
         patch("local_console.core.config.Config.get_deployment", return_value=manifest),
     ):
@@ -451,7 +501,13 @@ def test_multiple_module_setup(tmp_path):
         overridden_port = 9999
         overridden_host = "9.8.7.6"
         dm = multiple_module_manifest_setup(
-            bin_dir, webserver, Target.XTENSA, True, overridden_port, overridden_host
+            bin_dir,
+            webserver,
+            Target.XTENSA,
+            True,
+            device_conf,
+            overridden_port,
+            overridden_host,
         )
 
         webserver.set_directory.assert_called_once_with(bin_dir)

@@ -19,6 +19,9 @@ from pathlib import Path
 from typing import Optional
 
 from local_console.core.enums import config_paths
+from local_console.core.error.base import UserException
+from local_console.core.error.code import ErrorCodes
+from local_console.core.files.exceptions import FileNotFound
 from local_console.core.schemas.schemas import DeploymentManifest
 from local_console.core.schemas.schemas import DeviceConnection
 from local_console.core.schemas.schemas import DeviceListItem
@@ -54,9 +57,7 @@ class Config:
     def get_default_config() -> GlobalConfiguration:
         return GlobalConfiguration(
             evp=EVPParams(iot_platform="EVP1"),
-            devices=[
-                Config._create_device_config(DeviceListItem(name="Default", port=1883))
-            ],
+            devices=[Config._create_device_config("Default", 1883)],
             active_device=1883,
         )
 
@@ -96,13 +97,26 @@ class Config:
         for device_config in self._config.devices:
             if device_config.mqtt.port == key:
                 return device_config
-        raise ConfigError(f"Device for port {key} not found")
+        raise FileNotFound(
+            filename=str(key), message=f"Device for port {key} not found"
+        )
 
     def get_device_config_by_name(self, name: str) -> DeviceConnection:
         for device_config in self._config.devices:
             if device_config.name == name:
                 return device_config
-        raise ConfigError(f"Device named '{name}' not found")
+        raise FileNotFound(
+            filename=str(name), message=f"Device named '{name}' not found"
+        )
+
+    def update_ip_address(self, key: int, new_ip: str) -> None:
+        for device_config in self._config.devices:
+            if device_config.mqtt.port == key:
+                device_config.mqtt.host = new_ip
+                return
+        raise FileNotFound(
+            filename=str(key), message=f"Device for port {key} not found"
+        )
 
     def get_active_device_config(self) -> DeviceConnection:
         if len(self._config.devices) == 1:
@@ -119,6 +133,10 @@ class Config:
         return active_device
 
     def rename_entry(self, port: int, new_name: str) -> None:
+        # First, validate by building an associated device record.
+        self._create_device_config(new_name, port)
+
+        # If not exceptions raised, then do rename.
         entry: DeviceConnection = next(
             d for d in self._config.devices if d.mqtt.port == port
         )
@@ -139,13 +157,11 @@ class Config:
                 f"Missing field in the deployment manifest: {missing_field}"
             )
 
-    def construct_device_record(self, device_item: DeviceListItem) -> DeviceConnection:
-        record_lookup = (
-            dev for dev in self.config.devices if dev.mqtt.port == device_item.port
-        )
+    def construct_device_record(self, name: str, port: int) -> DeviceConnection:
+        record_lookup = (dev for dev in self.config.devices if dev.mqtt.port == port)
         conn = next(record_lookup, None)
         if conn is None:
-            conn = self._create_device_config(device_item)
+            conn = self._create_device_config(name, port)
 
         return conn
 
@@ -157,11 +173,26 @@ class Config:
             self._config.devices.append(device_conn)
 
     def remove_device(self, key: int) -> None:
-        self._config.devices = [
+        if len(self._config.devices) <= 1:
+            # Duplicated from device services. Ensures no other ways to modify configuration breaks the invariant.
+            raise UserException(
+                ErrorCodes.EXTERNAL_ONE_DEVICE_NEEDED,
+                "You need at least one device to work with",
+            )
+
+        devices_after_remove = [
             connection
             for connection in self._config.devices
             if connection.mqtt.port != key
         ]
+
+        if key == self._config.active_device:
+            logger.debug(
+                "Setting arbitrary device as active after removing current active device"
+            )
+            self._config.active_device = devices_after_remove[0].mqtt.port
+
+        self._config.devices = devices_after_remove
 
     def get_device_configs(self) -> list[DeviceConnection]:
         return self._config.devices
@@ -173,19 +204,49 @@ class Config:
         ]
 
     @staticmethod
-    def _create_device_config(device: DeviceListItem) -> DeviceConnection:
-        return DeviceConnection(
-            mqtt=MQTTParams(
-                host="localhost",
-                port=device.port,
-                device_id=None,
-            ),
-            webserver=WebserverParams(
-                host="localhost",
-                port=0,
-            ),
-            name=device.name,
-            persist=Persist(),
+    def _create_device_config(name: str, port: int) -> DeviceConnection:
+        try:
+            return DeviceConnection(
+                mqtt=MQTTParams(
+                    host="localhost",
+                    port=port,
+                    device_id=None,
+                ),
+                webserver=WebserverParams(
+                    host="localhost",
+                    port=0,
+                ),
+                name=name,
+                persist=Persist(),
+            )
+        except ValidationError as e:
+            raise _render_validation_error(e)
+
+
+def _render_validation_error(error_obj: ValidationError) -> UserException:
+
+    error = error_obj.errors()[0]
+    kind = error["type"]
+    msg = error["msg"]
+
+    if kind == "string_too_long":
+        message = msg.replace("String", "Device name")
+
+        return UserException(
+            code=ErrorCodes.EXTERNAL_DEVICE_NAMES_TOO_LONG,
+            message=message,
+        )
+    elif any(kind.startswith(k) for k in ("less_than", "greater_than")):
+        message = msg.replace("Input", "MQTT port")
+
+        return UserException(
+            ErrorCodes.EXTERNAL_DEVICE_PORTS_MUST_BE_IN_TCP_RANGE,
+            message,
+        )
+    else:
+        return UserException(
+            ErrorCodes.EXTERNAL_DEVICE_CREATION_VALIDATION,
+            msg,
         )
 
 

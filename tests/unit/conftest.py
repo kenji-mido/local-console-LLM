@@ -13,11 +13,14 @@
 # limitations under the License.
 #
 # SPDX-License-Identifier: Apache-2.0
+import tempfile
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 from local_console.core.config import Config
 from local_console.core.config import config_obj
+from local_console.core.enums import config_paths
 
 
 @pytest.fixture(autouse=True)
@@ -25,8 +28,10 @@ def reset_global_config():
     """
     Each test restores the default configuration
     """
-    config_obj._config = Config.get_default_config()
-    yield
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        config_paths.home = Path(tmpdirname)
+        config_obj._config = Config.get_default_config()
+        yield
 
 
 @pytest.fixture(autouse=True)
@@ -50,19 +55,3 @@ def skip_connection():
         ),
     ):
         yield
-
-
-@pytest.fixture(autouse=True)
-def mock_schedule_once(request):
-    if "disable_mock_schedule_once" in request.keywords:
-        yield
-    else:
-        with patch(
-            "local_console.gui.utils.sync_async.Clock.schedule_once"
-        ) as mock_schedule:
-
-            def immediate_callback(callback, *args, **kwargs):
-                callback(0)
-
-            mock_schedule.side_effect = immediate_callback
-            yield

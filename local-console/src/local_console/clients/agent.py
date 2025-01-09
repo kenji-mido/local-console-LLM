@@ -20,13 +20,15 @@ import random
 import re
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import Any
 from typing import Callable
 from typing import Optional
 
 import paho.mqtt.client as paho
 import trio
-from exceptiongroup import catch
+from local_console.clients.command.base_command import CommandClient
+from local_console.clients.command.rpc import RPC
+from local_console.clients.command.rpc import RPCArgument
+from local_console.clients.command.rpc_injector import empty_injector
 from local_console.clients.trio_paho_mqtt import AsyncClient
 from local_console.core.camera.enums import MQTTTopics
 from local_console.core.schemas.schemas import DeploymentManifest
@@ -37,10 +39,10 @@ from paho.mqtt.client import MQTT_ERR_SUCCESS
 logger = logging.getLogger(__name__)
 
 
-class Agent:
+class Agent(CommandClient):
     def __init__(self, host: str, port: int, onwire_schema: OnWireProtocol) -> None:
-        self._host = host
-        self._port = port
+        self.host = host
+        self.port = port
         self.onwire_schema = onwire_schema
 
         self.client: Optional[AsyncClient] = None
@@ -82,48 +84,15 @@ class Agent:
 
         await self.publish(MQTTTopics.ATTRIBUTES.value, payload=deployment)
 
-    async def rpc(self, instance_id: str, method: str, params: str) -> None:
-        # TODO Schematize this across the on-wire schema versions
-
-        reqid = str(random.randint(0, 10**8))
-        RPC_TOPIC = f"v1/devices/me/rpc/request/{reqid}"
-        if self.onwire_schema == OnWireProtocol.EVP2:
-            # Following the implementation at:
-            # https://github.com/midokura/wedge-agent/blob/fa3d4840c37978938084cbc70612fdb8ea8dbf9f/src/libwedge-agent/hub/tb/tb.c#L218
-            # https://github.com/midokura/wedge-agent/blob/fa3d4840c37978938084cbc70612fdb8ea8dbf9f/src/libwedge-agent/direct_command.c#L206
-            # https://github.com/midokura/evp-onwire-schema/blob/9a0a861a6518681ceda5749890d4322a56dfbc3e/schema/direct-command-request.example.json#L2
-            evp2_body = {
-                "direct-command-request": {
-                    "reqid": reqid,
-                    "method": method,
-                    "instance": instance_id,
-                    "params": params,
-                }
-            }
-            payload = json.dumps(
-                {
-                    "method": "ModuleMethodCall",
-                    "params": evp2_body,
-                }
-            )
-        elif self.onwire_schema == OnWireProtocol.EVP1:
-            # Following the implementation at:
-            # https://github.com/midokura/wedge-agent/blob/fa3d4840c37978938084cbc70612fdb8ea8dbf9f/src/libwedge-agent/hub/tb/tb.c#L179
-            # https://github.com/midokura/wedge-agent/blob/fa3d4840c37978938084cbc70612fdb8ea8dbf9f/src/libwedge-agent/direct_command.c#L158
-            # https://github.com/midokura/evp-onwire-schema/blob/1164987a620f34e142869f3979ca63b186c0a061/schema/directcommandrequest/direct-command-request.example.json#L2
-            evp1_body = {
-                "moduleMethod": method,
-                "moduleInstance": instance_id,
-                "params": json.loads(params),
-            }
-            payload = json.dumps(
-                {
-                    "method": "ModuleMethodCall",
-                    "params": evp1_body,
-                }
-            )
-        logger.debug(f"payload: {payload}")
-        await self.publish(RPC_TOPIC, payload=payload)
+    async def rpc(self, instance_id: str, method: str, params: str) -> str:
+        rpc_input = RPCArgument(
+            onwire_schema=self.onwire_schema,
+            instance_id=instance_id,
+            method=method,
+            params=json.loads(params),
+        )
+        response = await RPC(self, empty_injector()).run(rpc_input)
+        return response.response_id
 
     async def configure(self, instance_id: str, topic: str, config: str) -> None:
         # TODO Schematize this across the on-wire schema versions
@@ -172,22 +141,32 @@ class Agent:
     @asynccontextmanager
     async def mqtt_scope(self, subs_topics: list[str]) -> AsyncIterator[None]:
         is_os_error = False  # Determines if an OSError occurred within the context
-        async with guarded_nursery() as nursery:
-            self.nursery = nursery
-            self.client = AsyncClient(self.mqttc, self.nursery)
-            try:
-                self.client.connect(self._host, self._port)
-                for topic in subs_topics:
-                    self.client.subscribe(topic)
-                yield
-            except OSError:
-                logger.error(
-                    f"Error while connecting to MQTT broker {self._host}:{self._port}"
+
+        try:
+            async with trio.open_nursery() as nursery:
+
+                self.nursery = nursery
+                self.client = AsyncClient(self.mqttc, self.nursery)
+                try:
+                    self.client.connect(self.host, self.port)
+                    for topic in subs_topics:
+                        self.client.subscribe(topic)
+                    yield
+                except OSError:
+                    logger.error(
+                        f"Error while connecting to MQTT broker {self.host}:{self.port}"
+                    )
+                    is_os_error = True
+                finally:
+                    self.client.disconnect()
+                    self.nursery.cancel_scope.cancel()
+
+        except* Exception as excgroup:
+            for e in excgroup.exceptions:
+                logger.exception(
+                    "Exception occurred within MQTT client processing:", exc_info=e
                 )
-                is_os_error = True
-            finally:
-                self.client.disconnect()
-                self.nursery.cancel_scope.cancel()
+            is_os_error = True
 
         if is_os_error:
             raise SystemExit
@@ -208,32 +187,6 @@ class Agent:
     async def request_instance_logs(self, instance_id: str) -> None:
         async with self.mqtt_scope([]):
             await self.rpc(instance_id, "$agent/set", '{"log_enable": true}')
-
-
-@asynccontextmanager
-async def guarded_nursery() -> AsyncIterator[trio.Nursery]:
-    with catch(
-        {
-            Exception: handle_task_exceptions,
-        }
-    ):
-        async with trio.open_nursery() as nursery:
-            yield nursery
-
-
-def handle_task_exceptions(excgroup: Any) -> None:
-    # The 'Any' annotation is used to silence mypy,
-    # as it is not raising a helpful error.
-    num_exceptions = len(excgroup.exceptions)
-    logger.error(
-        "%d Exception%s occurred, listed below:",
-        num_exceptions,
-        "s" if num_exceptions else "",
-    )
-    for e in excgroup.exceptions:
-        logger.exception(
-            "Exception occurred within MQTT client processing:", exc_info=e
-        )
 
 
 async def check_attributes_request(agent: Agent, topic: str, payload: str) -> bool:

@@ -10,59 +10,50 @@ An offline tool to interact with IMX500-equipped smart cameras and develop appli
 
 ## Prerequisites
 
-The Local Console requires the following dependencies to be installed on your system:
+Ensure the following dependencies are installed on your system and added to your `PATH` environment variable:
 
-* Python 3.11 (or higher), pip
+* Python 3.11 or higher (including pip)
 * [mosquitto](https://mosquitto.org/download)
 * [flatc](https://github.com/google/flatbuffers/releases/tag/v24.3.25)
 
-Make sure these programs are added to your system's `PATH` environment variable.
+Ensure these programs are added to your system's `PATH` environment variable.
 
 ## Installation
 
-The installation procedure depends on your machine. It is outlined for each supported OS below.
+The installation procedure depends on your machine. The details for each supported OS are outlined below.
 
 > [!TIP]
-> Make sure your machine has a working Internet access, as all variants of the installation procedure will require downloading third-party dependencies.
+> Make sure your machine has working Internet access, as all variants of the installation procedure will require downloading third-party dependencies.
 
 ### Windows
 
-You should execute the `local-console-setup.exe` installer, as your regular (i.e. non-admin) user. In order for the installer to download the system dependencies, the installer will attempt to run a shell script as an Administrator, causing Windows' UAC to prompt for your permission to do so. Once the system dependencies are installed, another shell script will be executed as your user, which will actually install the Local Console in your user account.
+You should execute the `local-console-setup-*.exe` installer, as your regular (i.e. non-admin) user. For the installer to download the system dependencies, the installer will attempt to run a shell script as an Administrator, causing Windows' UAC to prompt for your permission to do so. Once the system dependencies are installed, another shell script will be executed as your user, installing the Local Console in your user account.
 
 ### Linux
 Please note that Local Console for Linux is not actively tested/verified.
 
-Currently there is no stand-alone installer as there is for Windows. Hence, after fulfilling [the prerequisites](#prerequisites), perform the following steps:
+Currently, there is no stand-alone installer as there is for Windows. Hence, after fulfilling [the prerequisites](#prerequisites), perform the following steps:
 
-1. Install `xclip` (e.g. in Debian-based)
-2. Create a python virtual environment:
+Create a Python virtual environment:
 
 ```sh
 $ python3.11 -m venv lcenv
 $ . lcenv/bin/activate
-(lcenv)$
 ```
 
-3. Install the python wheel `local_console-*-py3-none-any.whl`:
+Install Local Console using the provided Python wheel `local_console-*-py3-none-any.whl`:
 
 ```sh
-(lcenv)$ pip install local_console-*-py3-none-any.whl
+(lcenv)$ pip install ./local_console-*-py3-none-any.whl
+```
+
+Or from the repository:
+
+```sh
+(lcenv)$ pip install -e local-console
 ```
 
 The Local Console has been installed. To use it, either run the `local-console` command with the `lcenv` virtualenv activated, or use the absolute path to the `local-console` binary located in the `bin` subdirectory at the location of the `lcenv` virtualenv.
-
-### OSX
-Please note that Local Console for OSX is not actively tested/verified.
-
-The procedure is pretty similar to [Linux](#linux), except for the `xclip` requirement, which is unnecessary for this platform.
-
-### Installing at your path
-
-Then, install Local Console with the following commands:
-
-```sh
-$PATH_TO_YOUR_PYTHON_INTERPRETER -m pip install -e local-console/
-```
 
 #### Mosquitto
 
@@ -81,59 +72,38 @@ sudo systemctl stop mosquitto.service
 
 This action is only necessary once after installing the software.
 
+### OSX
+
+Please note that Local Console for OSX is not actively tested/verified.
+
+The procedure is the same as for [Linux](#linux).
+
 ## Usage
 
-To display help information, use:
+Ensure the `lcenv` virtual environment is activated.
+
+### Backend
+
+Display help information:
 
 ```sh
-local-console --help
+(lcenv)$ local-console --help
 ```
 
-### Get Started
+### UI
 
+Check its [README](local-console-ui/README.md).
 
-#### GUI mode
+## Logs
 
-To run the Local Console GUI, use:
+Logs from both the GUI and the backend are available at `$USERDATA/local-console/logs/main.log`.
 
-```sh
-local-console gui
-```
+* On Windows: `$USERDATA` is `%APPDATA%`
+* On Linux: `$USERDATA` is `$HOME/.config`
 
-On start up, it spawns a MQTT broker instance listening on the configured port. Then a camera can connect to this broker, so that the GUI can provide access to camera actions such as image streaming.
+## Guidelines
 
-### Persistent configuration parameters via CLI
-
-For configuring connection parameters for the devices (or the simulated agents), you can use:
-
-```sh
-local-console config set <section> <value>
-```
-
-and you can query the current values by using
-
-```sh
-local-console config get <section>
-```
-
-To modify or query device parameters, use the option `-d/--device`.
-
-#### Optional parameters
-
-Some parameters are nullable, such as `device_id` in the `mqtt` section. If you need to set such a parameter back to null (i.e. clear the parameter), you may use the `unset` action as follows:
-
-```sh
-local-console config unset <section>
-```
-
-Nullable parameters will show up in the output of `config get` as assigned with `= None`
-
-### Configuring the camera via QR code via CLI
-
-The CLI can generate a QR code for camera onboarding, so that the camera can connect to its broker:
-
-```sh
-local-console qr
-```
-
-By default, it will use the settings of the CLI. If the MQTT host is set to localhost, it will produce the QR code with the IP address of the externally-accessible interface to the local machine. For other settings, try the `--help` flag.
+* [Build](docs/BUILD.md)
+* [Development](DEVELOPMENT.md)
+* [Contributing](CONTRIBUTING.md)
+* [Code of Conducts](CODE_OF_CONDUCT.md)

@@ -65,16 +65,7 @@
       ]
     },
     {
-      "bom-ref": "Kivy-Garden==0.1.5",
-      "externalReferences": [
-        {
-          "type": "license",
-          "url": "https://pypi.org/project/Kivy-Garden/0.1.5/"
-        }
-      ]
-    },
-    {
-      "bom-ref": "annotated-types==0.6.0",
+      "bom-ref": "annotated-types==0.7.0",
       "externalReferences": [
         {
           "type": "license",
@@ -83,20 +74,11 @@
       ]
     },
     {
-      "bom-ref": "attrs==23.2.0",
+      "bom-ref": "attrs==24.2.0",
       "externalReferences": [
         {
           "type": "license",
           "url": "https://github.com/python-attrs/attrs/blob/23.2.0/LICENSE"
-        }
-      ]
-    },
-    {
-      "bom-ref": "exceptiongroup==1.2.1",
-      "externalReferences": [
-        {
-          "type": "license",
-          "url": "https://github.com/agronholm/exceptiongroup/blob/1.2.1/LICENSE"
         }
       ]
     },
@@ -106,6 +88,149 @@
         {
           "type": "license",
           "url": "https://github.com/urllib3/urllib3/blob/2.0.7/LICENSE.txt"
+        }
+      ]
+    },
+    {
+      "bom-ref": "Jinja2==3.1.4",
+      "externalReferences": [
+        {
+          "type": "license",
+          "url": "https://github.com/pallets/jinja/blob/main/LICENSE.txt"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "BSD 3-Clause New or Revised License"
+          }
+        }
+      ]
+    },
+    {
+      "bom-ref": "httpcore==1.0.6",
+      "externalReferences": [
+        {
+          "type": "license",
+          "url": "https://github.com/encode/httpcore/blob/master/LICENSE.md"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "BSD 3-Clause New or Revised License"
+          }
+        }
+      ]
+    },
+    {
+      "bom-ref": "httpx==0.27.0",
+      "externalReferences": [
+        {
+          "type": "license",
+          "url": "https://github.com/encode/httpx/blob/master/LICENSE.md"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "BSD 3-Clause New or Revised License"
+          }
+        }
+      ]
+    },
+    {
+      "bom-ref": "python-multipart==0.0.9",
+      "externalReferences": [
+        {
+          "type": "license",
+          "url": "https://github.com/Kludex/python-multipart/blob/master/LICENSE.txt"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache 2"
+          }
+        }
+      ]
+    },
+    {
+      "bom-ref": "starlette==0.37.2",
+      "externalReferences": [
+        {
+          "type": "license",
+          "url": "https://github.com/encode/starlette/blob/master/LICENSE.md"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "BSD 3-Clause New or Revised License"
+          }
+        }
+      ]
+    },
+    {
+      "bom-ref": "uvicorn==0.30.5",
+      "externalReferences": [
+        {
+          "type": "license",
+          "url": "https://github.com/encode/uvicorn/blob/master/LICENSE.md"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "BSD 3-Clause New or Revised License"
+          }
+        }
+      ]
+    },
+    {
+      "bom-ref": "zipp==3.20.1",
+      "externalReferences": [
+        {
+          "type": "license",
+          "url": "https://github.com/jaraco/zipp/blob/main/LICENSE"
+        }
+      ]
+    },
+    {
+      "bom-ref": "numpy==2.1.2",
+      "externalReferences": [
+        {
+          "type": "license",
+          "url": "https://github.com/numpy/numpy/blob/main/LICENSE.txt"
+        },
+        {
+          "type": "license",
+          "url": "https://github.com/numpy/numpy/blob/main/numpy/linalg/lapack_lite/LICENSE.txt"
+        },
+        {
+          "type": "license",
+          "url": "https://github.com/numpy/numpy/blob/main/numpy/_core/src/multiarray/dragon4.c"
+        },
+        {
+          "type": "license",
+          "url": "https://github.com/numpy/numpy/blob/main/numpy/_core/include/numpy/libdivide/LICENSE.txt"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        },
+        {
+          "license": {
+            "id": "BSD-3-Clause"
+          }
+        },
+        {
+          "license": {
+            "id": "Zlib"
+          }
         }
       ]
     }

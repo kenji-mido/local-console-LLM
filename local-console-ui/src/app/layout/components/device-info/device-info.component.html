@@ -1,0 +1,122 @@
+<!--
+ Copyright 2024 Sony Semiconductor Solutions Corp.
+
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
+
+     http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+
+ SPDX-License-Identifier: Apache-2.0
+-->
+<table class="device-info-table">
+  <tr>
+    <th>
+      Hardware
+      <hr />
+    </th>
+    <th>
+      Firmware
+      <hr />
+    </th>
+  </tr>
+  <tr>
+    <td>
+      <table>
+        <tr>
+          <td>Sensor</td>
+          <td>
+            :
+            <span class="attribute-style" data-testid="sensor">
+              {{ device_info.sensor }}</span
+            >
+          </td>
+        </tr>
+      </table>
+    </td>
+    <td>
+      <table>
+        <tr>
+          <td>Main chip</td>
+          <td class="separator-align">
+            :
+            <span class="attribute-style" data-testid="main_chip">
+              {{ device_info.main_chip }}</span
+            >
+          </td>
+        </tr>
+        <tr>
+          <td>Sensor Chip FW (main)</td>
+          <td class="separator-align">
+            :
+            <span class="attribute-style" data-testid="sensor_fw_main">
+              {{ device_info.sensor_chip_fw_main }}</span
+            >
+          </td>
+        </tr>
+        <tr>
+          <td>Sensor Chip FW (loader)</td>
+          <td class="separator-align">
+            :
+            <span class="attribute-style" data-testid="sensor_fw_loader">
+              {{ device_info.sensor_chip_fw_loader }}</span
+            >
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+  <tr>
+    <th>
+      Status
+      <hr />
+    </th>
+    <th>
+      ID
+      <hr />
+    </th>
+  </tr>
+  <tr>
+    <td>
+      <table>
+        <tr>
+          <td>Processing State</td>
+          <td class="separator-align">
+            :
+            <span class="attribute-style" data-testid="processing_state">
+              {{ device_info.processing_state }}</span
+            >
+          </td>
+        </tr>
+      </table>
+    </td>
+    <td>
+      <table>
+        <tr>
+          <td>Device Id</td>
+          <td class="separator-align">
+            :
+            <span class="attribute-style" data-testid="device_id">
+              {{ device_info.device_id }}</span
+            >
+          </td>
+        </tr>
+        <tr>
+          <td>Internal ID</td>
+          <td class="separator-align">
+            :
+            <span class="attribute-style" data-testid="internal_id">
+              {{ device_info.internal_id }}</span
+            >
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+</table>

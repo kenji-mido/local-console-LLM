@@ -52,14 +52,31 @@ function Run-Privileged([string]$PrivilegedExecPath, [string]$ExtraArgs = "")
             Verb = "RunAs"
             ArgumentList = $joint
         }
-        Start-Process @Opts -Wait
-        Write-LogMessage "Finished '$joint'"
+        $process = Start-Process @Opts -Wait -PassThru
+
+        # Check if the process started successfully
+        if ($process -and $process.Id -gt 0) {
+            Write-LogMessage "Finished privileged execution of '$joint'"
+            return 0
+        } else {
+            Write-LogMessage "User declined privilege elevation."
+            return -1
+        }
     }
 }
 
 function Run-Unprivileged([string]$UnprivilegedExecPath, [string]$ExtraArgs = "")
 {
-    Start-Process -FilePath "powershell" -NoNewWindow -Wait -ArgumentList "`"$UnprivilegedExecPath`" $ExtraArgs"
+    $process = Start-Process -FilePath "powershell" -NoNewWindow -Wait -ArgumentList "`"$UnprivilegedExecPath`" $ExtraArgs" -PassThru
+
+    # Check if the process started successfully
+    if ($process -and $process.Id -gt 0) {
+        Write-LogMessage "Finished execution of '$joint'"
+        return 0
+    } else {
+        Write-LogMessage "Failure running '$joint'"
+        return -1
+    }
 }
 
 function Set-TemporalExecutionPolicy
@@ -72,6 +89,7 @@ function Set-TemporalExecutionPolicy
 function Restore-DefaultExecutionPolicy
 {
     Write-LogMessage "Restoring default execution policy (This will request Administrator Role)"
+    Write-LogMessage "You may refuse this step, installation is already successful."
     Start-Process -FilePath "powershell" -Verb RunAs -Wait -ArgumentList "Set-ExecutionPolicy -ExecutionPolicy Default -Scope CurrentUser"
     Write-LogMessage "Done"
 }

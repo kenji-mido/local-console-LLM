@@ -17,10 +17,13 @@ import json
 import logging
 from typing import Annotated
 from typing import Optional
+from typing import Self
 
+from local_console.core.camera.qr.schema import QRInfo
 from local_console.utils.enums import StrEnum
 from pydantic import BaseModel
 from pydantic import Field
+from pydantic import model_validator
 
 logger = logging.getLogger(__name__)
 
@@ -125,7 +128,7 @@ class WebserverParams(BaseModel):
     port: int = IPPortNumber
 
 
-DeviceName = Field(pattern=r"^[A-Za-z0-9\-_.]+$", min_length=1, max_length=15)
+DeviceName = Field(pattern=r"^[A-Za-z0-9\-_.]+$", min_length=1, max_length=255)
 
 
 class Persist(BaseModel):
@@ -146,13 +149,39 @@ class DeviceConnection(BaseModel):
     webserver: WebserverParams
     name: str = DeviceName
     persist: Persist = Persist()
+    qr: QRInfo | None = None
 
 
 class EVPParams(BaseModel):
     iot_platform: str = Field(pattern=r"^[a-zA-Z][\w]*$")
 
 
+class ModelDeploymentConfig(BaseModel):
+    undeploy_timeout: float = 200.0
+    deploy_timeout: float = 200.0
+
+
+class DeploymentConfig(BaseModel):
+    model: ModelDeploymentConfig = ModelDeploymentConfig()
+
+
+class LocalConsoleConfig(BaseModel):
+    deployment: DeploymentConfig = DeploymentConfig()
+
+
 class GlobalConfiguration(BaseModel):
     evp: EVPParams
     devices: list[DeviceConnection]
     active_device: int = IPPortNumber
+    config: LocalConsoleConfig = LocalConsoleConfig()
+
+    class Config:
+        validate_assignment = True
+
+    @model_validator(mode="after")
+    def verify_active_device_in_devices(self) -> Self:
+        if self.active_device not in [device.mqtt.port for device in self.devices]:
+            message = f"{self.active_device} is an invalid active device. It must be the MQTT port of one of the configured devices."
+            logger.error(message)
+            raise ValueError(message)
+        return self

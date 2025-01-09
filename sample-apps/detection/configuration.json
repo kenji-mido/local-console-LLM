@@ -1,5 +1,5 @@
 {
-  "dnn_output_detections": 10,
+  "dnn_output_detections": 50,
   "max_detections": 2,
   "threshold": 0.3,
   "input_width": 300,

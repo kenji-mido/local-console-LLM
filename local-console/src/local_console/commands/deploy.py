@@ -36,6 +36,7 @@ from local_console.core.enums import config_paths
 from local_console.core.enums import ModuleExtension
 from local_console.core.enums import Target
 from local_console.core.schemas.schemas import DeploymentManifest
+from local_console.core.schemas.schemas import DeviceConnection
 from local_console.core.schemas.schemas import OnWireProtocol
 from local_console.plugin import PluginBase
 from local_console.servers.webserver import SyncWebserver
@@ -130,6 +131,7 @@ def deploy(
             deploy_fsm.webserver,
             target,
             signed,
+            config_device,
             port,
             host_override,
         )
@@ -164,6 +166,7 @@ def multiple_module_manifest_setup(
     webserver: SyncWebserver,
     target_arch: Optional[Target],
     use_signed: bool,
+    target: DeviceConnection,
     port_override: Optional[int] = None,
     host_override: Optional[str] = None,
 ) -> DeploymentManifest:
@@ -184,7 +187,7 @@ def multiple_module_manifest_setup(
         )
 
     return manifest_setup_epilog(
-        files_dir, manifest, webserver, port_override, host_override
+        files_dir, manifest, webserver, target, port_override, host_override
     )
 
 

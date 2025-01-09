@@ -1,0 +1,23 @@
+{
+	"python.testing.pyTestEnabled": true,
+    "python.testing.pyTestArgs": [
+		"--no-cov",
+		"--hypothesis-seed=42",
+        "tests",
+    ],
+    "python.testing.unittestEnabled": false,
+    "python.testing.nosetestsEnabled": false,
+    "python.testing.pytestArgs": [
+        "tests"
+    ],
+    "python.testing.pytestEnabled": true,
+    "python.analysis.extraPaths": [
+        "./local-consle/src",
+        "./mocked-device"
+    ],
+    "python.autoComplete.extraPaths": [
+        "./local-consle/src",
+        "./mocked-device"
+    ],
+    "python.analysis.autoImportCompletions": true,
+}

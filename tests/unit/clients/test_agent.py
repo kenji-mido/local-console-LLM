@@ -32,6 +32,22 @@ from paho.mqtt.client import MQTT_ERR_SUCCESS
 from tests.strategies.configs import generate_text
 
 
+@pytest.mark.trio
+async def test_mqtt_scope_error_handling(caplog):
+    with (patch("local_console.clients.agent.AsyncClient") as mock_aclient,):
+        mock_aclient.return_value.connect.side_effect = ValueError("Error from Paho")
+
+        agent = Agent(ANY, ANY, ANY)
+        with pytest.raises(SystemExit):
+            async with agent.mqtt_scope([]):
+                # The connection being unsuccessful makes what
+                # happens here unreachble and hence irrelevant.
+                pass
+
+        assert "Exception occurred within MQTT client processing" in caplog.text
+        assert "Error from Paho" in caplog.text
+
+
 @given(
     generate_text(),
     generate_text(),
@@ -83,7 +99,7 @@ async def test_rpc(instance_id: str, onwire_schema: OnWireProtocol):
     ):
         method = "$agent/set"
         params = '{"log_enable": true}'
-        agent = Agent(ANY, ANY, ANY)
+        agent = Agent(ANY, ANY, onwire_schema)
         async with agent.mqtt_scope([]):
             agent.client.publish_and_wait = AsyncMock(
                 return_value=(MQTT_ERR_SUCCESS, None)
@@ -106,7 +122,7 @@ async def test_rpc_error(instance_id: str, onwire_schema: OnWireProtocol):
     ):
         method = "$agent/set"
         params = '{"log_enable": true}'
-        agent = Agent(ANY, ANY, ANY)
+        agent = Agent(ANY, ANY, onwire_schema)
         async with agent.mqtt_scope([]):
             agent.client.publish_and_wait = AsyncMock(
                 return_value=(MQTT_ERR_ERRNO, None)
@@ -115,6 +131,37 @@ async def test_rpc_error(instance_id: str, onwire_schema: OnWireProtocol):
                 await agent.rpc(instance_id, method, params)
 
         agent.client.publish_and_wait.assert_called_once()
+
+
+@pytest.mark.trio
+async def test_rpc_returns_id() -> None:
+    instance_id = "instance"
+    method = "method"
+    params = {"param": "value"}
+
+    agent = Agent(ANY, ANY, OnWireProtocol.EVP2)
+    agent.client = AsyncMock()
+    agent.client.publish_and_wait.return_value = (MQTT_ERR_SUCCESS, None)
+
+    id = await agent.rpc(instance_id, method, json.dumps(params))
+
+    expected_payload = json.dumps(
+        {
+            "method": "ModuleMethodCall",
+            "params": {
+                "direct-command-request": {
+                    "reqid": id,
+                    "method": method,
+                    "instance": instance_id,
+                    "params": json.dumps(params),
+                }
+            },
+        }
+    )
+
+    agent.client.publish_and_wait.assert_called_once_with(
+        f"v1/devices/me/rpc/request/{id}", payload=expected_payload
+    )
 
 
 @pytest.mark.trio

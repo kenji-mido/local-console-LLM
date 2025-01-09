@@ -13,7 +13,6 @@
 # limitations under the License.
 #
 # SPDX-License-Identifier: Apache-2.0
-from unittest.mock import ANY
 from unittest.mock import AsyncMock
 from unittest.mock import Mock
 from unittest.mock import patch
@@ -21,11 +20,10 @@ from unittest.mock import patch
 import pytest
 import trio
 from local_console.core.schemas.schemas import OnWireProtocol
-from local_console.gui.device_manager import DeviceManager
 from local_console.servers.broker import BrokerException
 
+from tests.fixtures.agent import mocked_agent
 from tests.fixtures.camera import cs_init
-from tests.fixtures.driver import mock_driver_with_agent
 
 
 @pytest.mark.trio
@@ -49,10 +47,9 @@ async def test_streaming_rpc_stop(cs_init, nursery):
         task_status.started(True)
 
     with (
-        mock_driver_with_agent() as (driver, mock_agent),
-        patch("local_console.gui.device_manager.config_obj.save_config"),
+        mocked_agent() as mock_agent,
         patch(
-            "local_console.gui.device_manager.CameraState.startup", new=mock_mqtt_setup
+            "local_console.core.camera.state.CameraState.startup", new=mock_mqtt_setup
         ),
         patch.object(cs_init, "startup", new=AsyncMock()),
     ):
@@ -60,16 +57,10 @@ async def test_streaming_rpc_stop(cs_init, nursery):
         mock_rpc = AsyncMock()
         mock_agent.rpc = mock_rpc
 
-        dman = DeviceManager(Mock(), nursery, Mock())
-        dman.bind_state_proxy = Mock()
-        dman.initialize_persistency = Mock()
+        camera_state = cs_init
+        camera_state.mqtt_client = mock_agent
 
-        driver.camera_state = cs_init
-        driver.device_manager = dman
-        await driver.device_manager.init_devices([])
-        driver.device_manager.get_active_device_state().mqtt_client = mock_agent
-
-        await driver.streaming_rpc_stop()
+        await camera_state.streaming_rpc_stop()
         mock_rpc.assert_awaited_with(
             "backdoor-EA_Main", "StopUploadInferenceData", "{}"
         )
@@ -94,10 +85,3 @@ async def test_broker_port_already_open(cs_init) -> None:
         ),
     ):
         await mixin.mqtt_setup()
-
-        mock_channel.send.assert_awaited_with(
-            (
-                "error",
-                ANY,
-            )
-        )

@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools >= 64", "setuptools-scm >= 8"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mocked-device"
+description = "Local Console for offline camera operation"
+license = {file = "LICENSE"}
+dynamic = ["version"]
+authors = [
+	{name = "DevTools and SDKs team", email = "engineering@midokura.com"}
+]
+classifiers = [
+    "License :: OSI Approved :: Apache Software License",
+	"Natural Language :: English",
+	"Framework :: Trio",
+    "Operating System :: OS Independent",
+	"Topic :: Scientific/Engineering :: Artificial Intelligence",
+	"Topic :: Scientific/Engineering :: Image Recognition",
+  	"Programming Language :: Python :: 3.10",
+  	"Programming Language :: Python :: 3.11",
+]
+requires-python = ">=3.10"
+dependencies = [
+    "paho-mqtt==1.6.1",
+	"local-console"
+]
+
+[tool.setuptools.packages.find]
+where = ["."]

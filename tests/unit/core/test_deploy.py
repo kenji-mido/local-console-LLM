@@ -32,6 +32,7 @@ from local_console.core.schemas.schemas import DeploymentManifest
 from local_console.core.schemas.schemas import OnWireProtocol
 
 from tests.strategies.deployment import deployment_manifest_strategy
+from tests.strategies.samplers.configs import GlobalConfigurationSampler
 
 
 @given(
@@ -119,6 +120,9 @@ def test_deployment_setup(tmpdir):
 
     computed_mod_name = f"{instance_name}-{mod_sha[:5]}"
 
+    simple_gconf = GlobalConfigurationSampler(num_of_devices=1).sample()
+    device_conf = simple_gconf.devices[0]
+    device_conf.webserver.host = "localhost"
     with (
         patch(
             "local_console.utils.local_network.get_my_ip_by_routing",
@@ -128,7 +132,7 @@ def test_deployment_setup(tmpdir):
         port = 8888
         webserver = Mock()
         webserver.port = port
-        dm = single_module_manifest_setup(instance_name, origin, webserver)
+        dm = single_module_manifest_setup(instance_name, origin, webserver, device_conf)
 
         webserver.set_directory.assert_called_once_with(origin.parent)
         assert instance_name in dm.deployment.instanceSpecs

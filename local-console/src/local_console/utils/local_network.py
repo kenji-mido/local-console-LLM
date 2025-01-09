@@ -19,7 +19,7 @@ import platform
 import socket
 
 import psutil
-from local_console.core.config import config_obj
+from local_console.core.schemas.schemas import DeviceConnection
 
 logger = logging.getLogger(__file__)
 
@@ -72,15 +72,13 @@ def get_my_ip_by_routing() -> str:
     return chosen.address
 
 
-def get_webserver_ip() -> str:
-    config = config_obj.get_active_device_config()
+def get_webserver_ip(config: DeviceConnection) -> str:
     if config.webserver.host == "localhost":
         return get_my_ip_by_routing()
     return config.webserver.host
 
 
-def get_mqtt_ip() -> str:
-    config = config_obj.get_active_device_config()
+def get_mqtt_ip(config: DeviceConnection) -> str:
     if config.mqtt.host == "localhost":
         return get_my_ip_by_routing()
     return config.mqtt.host
@@ -119,3 +117,13 @@ def is_valid_host(hostname: str) -> bool:
 
 def replace_local_address(hostname: str) -> str:
     return get_my_ip_by_routing() if is_localhost(hostname) else hostname
+
+
+def is_port_open(port: int) -> bool:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.settimeout(0.2)
+        try:
+            s.connect(("localhost", port))
+            return True
+        except OSError:
+            return False

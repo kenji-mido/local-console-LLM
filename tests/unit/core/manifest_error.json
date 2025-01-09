@@ -1,0 +1,14 @@
+{
+  "sw_list": [
+    {
+      "file_name": "filename1",
+      "version": "v2.0",
+      "type": "type1"
+    },
+    {
+      "file_name": "filename2",
+      "version": "v1.0",
+      "type": "type2"
+    }
+  ]
+}

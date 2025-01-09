@@ -40,7 +40,6 @@ function Main
 
     $binPath = Join-Path $VirtualenvDir "Scripts"
     Get-FlatcBinary -ScriptsDir $binPath
-    Create-DesktopShortcut -VirtualenvDir $virtualenvDir
 }
 
 function Create-PythonEnvWithExecutable([string]$VirtualenvDir, [string]$WheelPath)
@@ -153,32 +152,6 @@ function Create-AppDataDirectory([string]$Path)
             Write-LogMessage "Failed to create directory: $_"
         }
     }
-}
-
-function Create-DesktopShortcut([string]$VirtualenvDir)
-{
-    $WshShell = New-Object -comObject WScript.Shell
-    $DestinationPath = Join-Path $WshShell.SpecialFolders("Desktop") "Local Console.lnk"
-
-    # If icon already exists, just remove it so that we make sure it is
-    # kept up to date since recreating has zero cost.
-    if (Test-Path $DestinationPath -PathType Leaf) {
-        Remove-Item -Path $DestinationPath
-    }
-
-    $SourceExe = Join-Path $VirtualenvDir "Scripts" `
-               | Join-Path -ChildPath "local-console.exe"
-    $Command = '-v gui'
-
-    $Shortcut = $WshShell.CreateShortcut($DestinationPath)
-    $Shortcut.TargetPath = $SourceExe
-    $Shortcut.Arguments = $Command
-    $Shortcut.WorkingDirectory = $HOME
-    $Shortcut.Description = "Starts the Local Console"
-    #$Shortcut.IconLocation = ""
-    $Shortcut.Save()
-
-    Write-LogMessage "Created desktop shortcut at: $DestinationPath"
 }
 
 Main

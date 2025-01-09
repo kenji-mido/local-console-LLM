@@ -14,10 +14,10 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 import json
+import random
 from base64 import b64encode
 from pathlib import Path
 from unittest.mock import AsyncMock
-from unittest.mock import MagicMock
 from unittest.mock import Mock
 from unittest.mock import patch
 
@@ -25,30 +25,41 @@ import hypothesis.strategies as st
 import pytest
 import trio
 from hypothesis import given
+from local_console.core.camera.enums import ApplicationConfiguration
+from local_console.core.camera.enums import ApplicationType
 from local_console.core.camera.enums import DeploymentType
+from local_console.core.camera.enums import DeployStage
 from local_console.core.camera.enums import MQTTTopics
 from local_console.core.camera.enums import StreamStatus
 from local_console.core.camera.mixin_mqtt import DEPLOY_STATUS_TOPIC
 from local_console.core.camera.mixin_mqtt import EA_STATE_TOPIC
 from local_console.core.camera.mixin_mqtt import SYSINFO_TOPIC
-from local_console.core.camera.qr import get_qr_object
-from local_console.core.camera.qr import qr_string
+from local_console.core.camera.qr.qr import get_qr_object
+from local_console.core.camera.qr.qr import qr_string
+from local_console.core.commands.deploy import EVP1DeployFSM
+from local_console.core.commands.deploy import get_empty_deployment
+from local_console.core.error.base import UserException
+from local_console.core.error.code import ErrorCodes
 from local_console.core.schemas.edge_cloud_if_v1 import DeviceConfiguration
 from local_console.core.schemas.schemas import OnWireProtocol
-from local_console.gui.drawer.classification import ClassificationDrawer
-from local_console.gui.enums import ApplicationConfiguration
-from local_console.gui.enums import ApplicationType
 from local_console.utils.tracking import TrackingVariable
 
 from tests.fixtures.camera import cs_init
 from tests.fixtures.camera import cs_init_context
+from tests.mocks.mock_configs import config_without_io
 from tests.strategies.configs import generate_invalid_ip
 from tests.strategies.configs import generate_invalid_port_number
 from tests.strategies.configs import generate_random_characters
 from tests.strategies.configs import generate_valid_device_configuration
 from tests.strategies.configs import generate_valid_ip
 from tests.strategies.configs import generate_valid_port_number
-from tests.unit.gui.test_driver import create_new
+from tests.strategies.samplers.configs import GlobalConfigurationSampler
+
+
+def create_new(root: Path) -> Path:
+    new_file = root / f"{random.randint(1, int(1e6))}"
+    new_file.write_bytes(b"0")
+    return new_file
 
 
 @given(
@@ -66,7 +77,7 @@ def test_get_qr_object(
     text: str,
 ) -> None:
     with patch(
-        "local_console.core.camera.qr.qr_string", return_value=""
+        "local_console.core.camera.qr.qr.qr_string", return_value=""
     ) as mock_qr_string:
         qr_code = get_qr_object(
             mqtt_host=ip,
@@ -112,7 +123,7 @@ def test_get_qr_object_invalid(
     text: str,
 ) -> None:
     with patch(
-        "local_console.core.camera.qr.qr_string", return_value=""
+        "local_console.core.camera.qr.qr.qr_string", return_value=""
     ) as mock_qr_string:
         qr_code = get_qr_object(
             mqtt_host=ip,
@@ -194,7 +205,7 @@ async def test_lifecycle(cs_init, nursery) -> None:
     assert camera_state._cancel_scope is None
 
     # Behavior of startup()
-    assert await nursery.start(camera_state.startup)
+    assert await nursery.start(camera_state.startup, 1883)
     await camera_state._started.wait()
     mock_webserver.assert_called_once()
     mock_dir_monitor.start.assert_called_once()
@@ -354,7 +365,7 @@ async def test_process_incoming(topic, function, cs_init) -> None:
 
 
 @pytest.mark.trio
-async def test_process_deploy_fsm_(nursery, tmp_path, cs_init) -> None:
+async def test_process_deploy_fsm(nursery, tmp_path, cs_init) -> None:
     camera = cs_init
     camera.mqtt_client = AsyncMock()
 
@@ -366,23 +377,36 @@ async def test_process_deploy_fsm_(nursery, tmp_path, cs_init) -> None:
     module.touch()
 
     # async setup
+    simple_gconf = GlobalConfigurationSampler(num_of_devices=1).sample()
+    device_conf = simple_gconf.devices[0]
     with (
+        config_without_io(simple_gconf),
         patch("local_console.core.commands.deploy.SyncWebserver"),
         patch("local_console.core.camera.mixin_mqtt.Agent") as mock_agent,
         patch(
+            "local_console.core.camera.state.config_obj.get_device_config",
+            return_value=device_conf,
+        ) as mock_device_config,
+        patch(
             "local_console.core.camera.state.DeployFSM.instantiate"
         ) as mock_instantiate,
+        patch("trio.Event") as mock_trio_event,
         patch(
             "local_console.core.camera.state.single_module_manifest_setup"
         ) as mock_single_module,
         patch.object(camera, "deploy_operation", AsyncMock()) as mock_deploy,
     ):
         mock_agent.deploy = AsyncMock()
+        mock_instantiate.return_value = AsyncMock()
+        mock_trio_event.return_value = AsyncMock()
+        camera._nursery = nursery
 
         # trigger deployment
         camera.module_file.value = module
         await camera.do_app_deployment()
-        mock_instantiate.assert_called_once_with(
+
+        assert mock_instantiate.call_count == 2
+        mock_instantiate.assert_called_with(
             camera.mqtt_client.onwire_schema,
             camera.mqtt_client.deploy,
             camera.deploy_stage.aset,
@@ -391,11 +415,73 @@ async def test_process_deploy_fsm_(nursery, tmp_path, cs_init) -> None:
             ApplicationConfiguration.NAME,
             module,
             mock_instantiate.return_value.webserver,
+            device_conf,
         )
-        mock_instantiate.return_value.set_manifest.assert_called_once_with(
+        mock_instantiate.return_value.set_manifest.assert_called_with(
             mock_single_module.return_value
         )
         mock_deploy.aset.assert_awaited_once_with(DeploymentType.Application)
+        mock_device_config.assert_called()
+
+
+@pytest.mark.trio
+async def test_process_undeploy_fsm(nursery, tmp_path, cs_init) -> None:
+    camera = cs_init
+    camera._nursery = nursery
+    camera.mqtt_client = AsyncMock()
+    camera._onwire_schema = OnWireProtocol.EVP1
+    camera.mqtt_client.onwire_schema = camera._onwire_schema
+
+    empty_depl = get_empty_deployment()
+    dep_id = empty_depl.deployment.deploymentId
+
+    waiting_event = trio.Event()
+    applied_event = trio.Event()
+
+    # Intercept FSM instantiation such that the stage callback is
+    # augmented with the setting of the '*_event' signals above.
+    def instantiate_intercept(
+        onwire_schema, deploy_fn, stage_callback=None, **kwargs
+    ) -> EVP1DeployFSM:
+
+        async def sync_fn(stage: DeployStage) -> None:
+            if stage == DeployStage.WaitAppliedConfirmation:
+                waiting_event.set()
+            elif stage == DeployStage.Done:
+                applied_event.set()
+
+            await stage_callback(stage)
+
+        return EVP1DeployFSM(deploy_fn, sync_fn, **kwargs)
+
+    async def test_fn():
+        # patch()ing doesn't seem to cover async functions
+        # called via nursery.start_soon()...
+        with (
+            patch("local_console.core.commands.deploy.TimeoutBehavior"),
+            patch(
+                "local_console.core.camera.state.get_empty_deployment",
+                return_value=empty_depl,
+            ),
+            patch(
+                "local_console.core.commands.deploy.DeployFSM.instantiate",
+                instantiate_intercept,
+            ),
+        ):
+            await camera._undeploy_apps()
+
+    nursery.start_soon(test_fn)
+    await waiting_event.wait()
+
+    payload = {
+        "deploymentStatus": '{"instances":{},"modules":{},"deploymentId":"'
+        + dep_id
+        + '","reconcileStatus":"ok"}'
+    }
+    await camera.process_incoming("v1/devices/me/attributes", payload)
+
+    await applied_event.wait()
+    assert applied_event.is_set()
 
 
 @pytest.mark.trio
@@ -408,7 +494,9 @@ async def test_storage_paths(tmp_path_factory, cs_init) -> None:
 
     # Storing an image when image dir has not changed default
     new_image = create_new(tgd)
-    saved = camera_state._save_into_input_directory(new_image, tgd)
+    saved = camera_state._save_into_input_directory(
+        new_image.name, new_image.read_bytes(), tgd
+    )
     assert saved.parent == tgd
 
     # Change the target image dir
@@ -417,8 +505,50 @@ async def test_storage_paths(tmp_path_factory, cs_init) -> None:
 
     # Storing an image when image dir has been changed
     new_image = create_new(tgd)
-    saved = camera_state._save_into_input_directory(new_image, new_image_dir)
+    saved = camera_state._save_into_input_directory(
+        new_image.name, new_image.read_bytes(), new_image_dir
+    )
     assert saved.parent == new_image_dir
+
+
+@pytest.mark.trio
+async def test_storage_paths_validation_on_windows(tmp_path_factory, cs_init) -> None:
+    camera_state = cs_init
+    root_dir = tmp_path_factory.mktemp("root")
+    docs_dir = root_dir.joinpath("documents")
+    docs_dir.mkdir()
+    out_of_docs = root_dir.joinpath("rogue_dir")
+    out_of_docs.mkdir()
+
+    with (
+        patch("platform.system", return_value="Windows"),
+        patch(
+            "local_console.core.camera.mixin_streaming.get_default_files_dir",
+            return_value=docs_dir,
+        ),
+    ):
+        with pytest.raises(
+            UserException,
+            match="Please select your folders under your main 'Documents' folder",
+        ) as error:
+            camera_state.image_dir_path.value = out_of_docs
+        assert error.value.code == ErrorCodes.EXTERNAL_CANNOT_USE_DIRECTORY
+
+
+@pytest.mark.trio
+async def test_storage_paths_validation_other_error(tmp_path_factory, cs_init) -> None:
+    camera_state = cs_init
+    root_dir = tmp_path_factory.mktemp("root")
+    tgd = root_dir.joinpath("good_dir")
+    tgd.mkdir()
+
+    with (
+        patch("platform.system", return_value="Windows"),
+        patch("pathlib.Path.write_bytes", side_effect=IOError("could not write")),
+    ):
+        with pytest.raises(UserException) as error:
+            camera_state.image_dir_path.value = tgd
+        assert error.value.code == ErrorCodes.EXTERNAL_CANNOT_USE_DIRECTORY
 
 
 @pytest.mark.trio
@@ -434,7 +564,8 @@ async def test_save_into_image_directory(tmp_path, cs_init) -> None:
     tgd.rmdir()
 
     assert not tgd.exists()
-    camera_state._save_into_input_directory(create_new(root), tgd)
+    in_file = create_new(root)
+    camera_state._save_into_input_directory(in_file.name, in_file.read_bytes(), tgd)
     assert tgd.exists()
 
 
@@ -449,14 +580,18 @@ async def test_save_into_image_directory_exists(tmp_path, cs_init) -> None:
     camera_state.image_dir_path.value = tgd
     assert tgd.exists()
 
-    camera_state._save_into_input_directory(incoming_file, tgd)
+    camera_state._save_into_input_directory(
+        incoming_file.name, incoming_file.read_bytes(), tgd
+    )
     assert tgd.exists()
 
     # second path with the same name to force removing previous file
     incoming_file_2 = root / incoming_file.name
     incoming_file_2.write_bytes(b"0")
 
-    camera_state._save_into_input_directory(incoming_file_2, tgd)
+    camera_state._save_into_input_directory(
+        incoming_file_2.name, incoming_file_2.read_bytes(), tgd
+    )
     assert tgd.exists()
 
 
@@ -473,7 +608,8 @@ async def test_save_into_inferences_directory(tmp_path, cs_init) -> None:
     tgd.rmdir()
 
     assert not tgd.exists()
-    camera_state._save_into_input_directory(create_new(root), tgd)
+    in_file = create_new(root)
+    camera_state._save_into_input_directory(in_file.name, in_file.read_bytes(), tgd)
     assert tgd.exists()
 
 
@@ -488,20 +624,23 @@ async def test_save_into_inferences_directory_already_exists(tmp_path, cs_init) 
     camera_state.inference_dir_path.value = tgd
     assert tgd.exists()
 
-    camera_state._save_into_input_directory(incoming_file, tgd)
+    camera_state._save_into_input_directory(
+        incoming_file.name, incoming_file.read_bytes(), tgd
+    )
     assert tgd.exists()
 
     # second path with the same name to force removing previous file
     incoming_file_2 = root / incoming_file.name
     incoming_file_2.write_bytes(b"0")
 
-    camera_state._save_into_input_directory(incoming_file_2, tgd)
+    camera_state._save_into_input_directory(
+        incoming_file_2.name, incoming_file_2.read_bytes(), tgd
+    )
     assert tgd.exists()
 
 
 @pytest.mark.trio
 async def test_process_camera_upload_image(tmp_path_factory, cs_init) -> None:
-    root = tmp_path_factory.getbasetemp()
     inferences_dir = tmp_path_factory.mktemp("inferences")
     images_dir = tmp_path_factory.mktemp("images")
 
@@ -514,8 +653,8 @@ async def test_process_camera_upload_image(tmp_path_factory, cs_init) -> None:
             camera_state, "_save_into_input_directory", return_value=Path("/tmp/a.jpg")
         ) as mock_save,
     ):
-        file = root / "images/a.jpg"
-        camera_state._process_camera_upload(file)
+        file_name = "/images/a.jpg"
+        camera_state._process_camera_upload(b"", file_name)
         mock_save.assert_called()
 
 
@@ -531,16 +670,10 @@ async def test_process_camera_upload_inferences_with_schema(
     camera_state.inference_dir_path.value = inferences_dir
     camera_state.image_dir_path.value = images_dir
 
-    mock_storage = MagicMock()
-    camera_state.total_dir_watcher = mock_storage
-
     with (
         patch.object(
             camera_state, "_save_into_input_directory", return_value=Path("/tmp/a.jpg")
         ) as mock_save,
-        patch.object(
-            camera_state, "_get_flatbuffers_inference_data", return_value={"a": 3}
-        ) as mock_get_flatbuffers_inference_data,
         patch(
             "local_console.core.camera.mixin_streaming.get_output_from_inference_results"
         ) as mock_get_output_from_inference_results,
@@ -552,7 +685,6 @@ async def test_process_camera_upload_inferences_with_schema(
             "local_console.core.camera.mixin_streaming.Path.read_text",
             return_value="boo",
         ),
-        patch.object(ClassificationDrawer, "process_frame"),
     ):
         camera_state.vapp_type = TrackingVariable(ApplicationType.CLASSIFICATION.value)
         camera_state.vapp_schema_file.value = Path("objectdetection.fbs")
@@ -560,25 +692,16 @@ async def test_process_camera_upload_inferences_with_schema(
         image_file_in = root / "images/a.jpg"
         image_file_saved = images_dir / image_file_in.name
         mock_save.return_value = image_file_saved
-        camera_state._process_camera_upload(image_file_in)
-        mock_save.assert_called_with(image_file_in, images_dir)
-        mock_storage.update_file_size.assert_not_called()
-
-        # A pair has not been formed yet
-        ClassificationDrawer.process_frame.assert_not_called()
+        camera_state._process_camera_upload(b"", image_file_in)
+        mock_save.assert_called_with(image_file_in.name, b"", images_dir)
 
         inference_file_in = root / "inferences/a.txt"
         inference_file_saved = inferences_dir / inference_file_in.name
         mock_save.return_value = inference_file_saved
-        camera_state._process_camera_upload(inference_file_in)
-        mock_save.assert_called_with(inference_file_in, inferences_dir)
+        camera_state._process_camera_upload(b"", inference_file_in)
+        mock_save.assert_called_with(inference_file_in.name, b"", inferences_dir)
 
         mock_get_output_from_inference_results.assert_called_once_with(b"boo")
-        ClassificationDrawer.process_frame.assert_called_once_with(
-            image_file_saved,
-            mock_get_flatbuffers_inference_data.return_value,
-        )
-        mock_storage.update_file_size.assert_called_once_with(image_file_saved)
 
 
 @pytest.mark.trio
@@ -607,7 +730,6 @@ async def test_process_camera_upload_inferences_missing_schema(
             "local_console.core.camera.mixin_streaming.Path.read_text",
             return_value="boo",
         ),
-        patch.object(ClassificationDrawer, "process_frame"),
         patch.object(Path, "read_text", return_value=""),
     ):
         camera_state.vapp_type = TrackingVariable(ApplicationType.CLASSIFICATION.value)
@@ -615,20 +737,13 @@ async def test_process_camera_upload_inferences_missing_schema(
         inference_file_in = root / "inferences/a.txt"
         inference_file_saved = inferences_dir / inference_file_in.name
         mock_save.return_value = inference_file_saved
-        camera_state._process_camera_upload(inference_file_in)
-        mock_save.assert_called_with(inference_file_in, inferences_dir)
-
-        # A pair has not been formed yet
-        ClassificationDrawer.process_frame.assert_not_called()
+        camera_state._process_camera_upload(b"", inference_file_in)
+        mock_save.assert_called_with(inference_file_in.name, b"", inferences_dir)
 
         image_file_in = root / "images/a.jpg"
         image_file_saved = images_dir / image_file_in.name
         mock_save.return_value = image_file_saved
-        camera_state._process_camera_upload(image_file_in)
-        mock_save.assert_called_with(image_file_in, images_dir)
+        camera_state._process_camera_upload(b"", image_file_in)
+        mock_save.assert_called_with(image_file_in.name, b"", images_dir)
 
         mock_get_output_from_inference_results.assert_called_once_with(b"boo")
-        ClassificationDrawer.process_frame.assert_called_once_with(
-            image_file_saved,
-            mock_get_output_from_inference_results.return_value,
-        )

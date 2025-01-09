@@ -1,0 +1,74 @@
+<!--
+ Copyright 2024 Sony Semiconductor Solutions Corp.
+
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
+
+     http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+
+ SPDX-License-Identifier: Apache-2.0
+-->
+
+<div class="alert-dialog">
+  <img
+    *ngIf="data.type"
+    src="images/{{ theme }}/status-{{ data.type }}.svg"
+    alt=""
+    class="type-icon"
+  />
+  <div>
+    <h1
+      mat-dialog-title
+      class="alert-dialog-title"
+      data-testid="alert-dialog-title"
+      cdkDrag
+      cdkDragHandle
+      cdkDragRootElement=".cdk-overlay-pane"
+    >
+      {{ data.title }}
+    </h1>
+    <div mat-dialog-content class="alert-dialog-content">
+      {{ data.message }}
+    </div>
+  </div>
+</div>
+<ng-content></ng-content>
+<app-dialog-action>
+  <app-button
+    *ngFor="let actionButton of data.actionButtons"
+    right
+    type="submit"
+    [attr.data-testid]="'prompt-action-' + actionButton.id"
+    [variant]="actionButton.variant"
+    (click)="actionSubmit(actionButton)"
+    i18n
+    >{{ actionButton.text }}</app-button
+  >
+  <app-button
+    right
+    type="button"
+    variant="secondary"
+    mat-button
+    appDialogClose
+    data-testid="prompt-action-cancel"
+    aria-label="Cancel"
+    i18n
+    >{{ data.closeButtonText || 'Cancel' }}</app-button
+  >
+</app-dialog-action>
+<button
+  mat-icon-button
+  appDialogClose
+  class="dialog-close"
+  data-testid="prompt-action-close"
+  aria-label="Close"
+>
+  <mat-icon>close</mat-icon>
+</button>

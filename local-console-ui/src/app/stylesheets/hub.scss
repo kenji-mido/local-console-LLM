@@ -1,0 +1,362 @@
+/**
+ * Copyright 2024 Sony Semiconductor Solutions Corp.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+@import "./hub-button.scss";
+
+%command-button-layout {
+  padding: 5px 16px;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+}
+
+%command-button-style {
+  border-radius: 8px;
+}
+
+%command-button-font {
+  text-align: center;
+  font-size: 16px;
+  font-style: normal;
+  font-weight: 400;
+  line-height: 160%;
+}
+
+%command-button-field-layout {
+  margin: 0 0 0 24px;
+  display: inline-flex;
+  padding: 5px 16px;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+}
+
+%command-button-field-style {
+  border: none;
+  border-radius: 8px;
+  color: rgba(255, 255, 255, 1);
+  cursor: pointer;
+  background: #3e455c;
+}
+
+.btn-command--primary {
+  background: #4162cc;
+  color: #fff;
+  @extend %command-button-layout;
+  @extend %command-button-style;
+  @extend %command-button-font;
+}
+
+.btn-command--reverse {
+  color: #3e455c;
+  border: 1px solid #3e455c;
+  @extend %command-button-layout;
+  @extend %command-button-style;
+  @extend %command-button-font;
+}
+
+.hub-field {
+  &-container {
+    width: 1126px;
+    min-width: 1126px;
+    margin-bottom: 24px;
+    min-height: 180px;
+    border-radius: 8px;
+    border: 1px solid #d4d4d4;
+    background: #fff;
+  }
+
+  &-header {
+    display: flex;
+  }
+
+  &-footer {
+    display: flex;
+    margin-left: 24px;
+    margin-bottom: 30px;
+  }
+
+  &-btn {
+    @extend %command-button-field-layout;
+    @extend %command-button-field-style;
+
+    &:disabled {
+      opacity: 0.3;
+      cursor: default;
+    }
+  }
+}
+
+.view-more {
+  &-span {
+    width: 71px;
+    height: 18px;
+    font-size: 14px;
+    font-weight: 500;
+    line-height: 18px;
+    text-align: left;
+    color: rgba(62, 69, 92, 1);
+  }
+
+  &-icon {
+    padding-top: 9px;
+    padding-left: 9px;
+    width: 11px;
+    height: 5.5px;
+  }
+}
+
+.dialog-action-btn {
+  background: rgba(240, 240, 240, 1);
+  display: flex;
+  width: 80px;
+  height: 26px;
+  padding: 3px 12px 3px 8px;
+  justify-content: center;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  border-radius: 4px;
+  border: 1px solid #3e455c;
+
+  span {
+    color: #3e455c;
+    font-size: 11px;
+    @extend %command-button-font;
+  }
+}
+
+.hub-sort-arrow-icon {
+  width: 9px;
+  height: 4.5px;
+
+  &.up {
+    background: url("../../../public/images/light/hub-sort-arrow.svg") no-repeat
+      scroll left center transparent;
+  }
+
+  &.down {
+    background: url("../../../public/images/light/hub-sort-arrow.svg") no-repeat
+      scroll left center transparent;
+    transform: rotate(180deg);
+  }
+}
+
+%hub-dialog-button-layout {
+  justify-content: center;
+  align-items: center;
+  height: 26px;
+  width: 100%;
+  padding: 4px, 19px, 4px, 19px;
+  gap: 8px;
+}
+
+%hub-dialog-button-style {
+  border-radius: 8px;
+}
+
+%hub-dialog-button-font {
+  font-size: 11px;
+  line-height: 18px;
+  text-align: center;
+}
+
+.hug-dialog-btn-primary {
+  color: rgba(255, 255, 255, 1);
+  background: rgba(62, 69, 92, 1);
+  @extend %hub-dialog-button-layout;
+  @extend %hub-dialog-button-style;
+  @extend %hub-dialog-button-font;
+}
+
+.hug-dialog-btn-basic {
+  color: rgba(62, 69, 92, 1);
+  background: rgba(240, 240, 240, 1);
+  border: 1px solid rgba(62, 69, 92, 1);
+  @extend %hub-dialog-button-layout;
+  @extend %hub-dialog-button-style;
+  @extend %hub-dialog-button-font;
+}
+
+.mat-form-field {
+  height: 76px;
+}
+
+.mat-form-field-label {
+  height: 30px;
+  font-size: 20px;
+}
+
+.mat-input-element {
+  height: 42px;
+  border: 1px solid rgba(228, 232, 236, 1);
+  border-radius: 10px;
+  margin-top: 10px;
+  font-size: 16px;
+  text-indent: 10px;
+}
+
+.hub-page {
+  --hub-header-height: 80px;
+  width: 1162px;
+  padding: 5px 22px 22px;
+  height: auto;
+
+  .page-header {
+    display: flex;
+    align-items: center;
+    height: var(--hub-header-height);
+    margin-left: 2px;
+
+    .page-header-title {
+      color: #000;
+      font-size: 31px;
+      display: flex;
+      align-items: center;
+      span {
+        display: block;
+        margin: -0.12em 10px 0;
+      }
+    }
+  }
+
+  .page-body {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+  }
+
+  &.full-page {
+    box-sizing: border-box;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    .page-body {
+      width: 100%;
+      height: calc(100% - var(--hub-header-height));
+      overflow: hidden;
+    }
+  }
+}
+
+.hub-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 18px;
+  margin-bottom: 16px;
+  min-height: 60px;
+  height: auto;
+  border-radius: 8px;
+  border: 1px solid #d4d4d4;
+  background: #fff;
+
+  &.rows {
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 32px;
+  }
+
+  .section-column {
+    display: flex;
+    flex-direction: column;
+    flex-grow: 1;
+
+    .section-header,
+    .section-body {
+      margin-left: 0;
+      margin-right: 0;
+    }
+
+    app-text-input {
+      width: 100%;
+    }
+  }
+
+  .section-header {
+    display: flex;
+    font-size: 20px;
+
+    .header-title {
+      margin-right: 20px;
+    }
+
+    .header-sub-inline-title {
+      margin-left: 10px;
+      font-size: 14px;
+    }
+
+    .header-left {
+      width: 30%;
+      font-size: 25px;
+    }
+
+    .header-right {
+      width: 70%;
+      display: flex;
+      justify-content: flex-end;
+      align-items: center;
+    }
+  }
+
+  .section-sub-header {
+    display: flex;
+    font-size: 18px;
+  }
+
+  .section-body {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+
+    &.rows {
+      flex-direction: row;
+      gap: 32px;
+      width: 100%;
+
+      & > * {
+        flex: 1;
+      }
+    }
+  }
+
+  .section-footer {
+    display: flex;
+    justify-content: flex-end;
+
+    app-button {
+      margin-right: 15px;
+    }
+  }
+
+  &.minimal {
+    border: 0px;
+    padding: 0px;
+    .section-header {
+      display: flex;
+      margin: 0;
+    }
+
+    .section-body {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      margin: 0;
+    }
+  }
+}

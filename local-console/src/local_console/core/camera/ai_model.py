@@ -33,31 +33,45 @@ from local_console.core.schemas.edge_cloud_if_v1 import DnnDeleteBody
 from local_console.core.schemas.schemas import OnWireProtocol
 from local_console.servers.webserver import AsyncWebserver
 from local_console.utils.local_network import get_webserver_ip
+from local_console.utils.trio import TimeoutConfig
 
 logger = logging.getLogger(__name__)
 
 
 async def deployment_task(
-    camera_state: CameraState, package_file: Path, timeout_notify: Callable
+    camera_state: CameraState,
+    package_file: Path,
+    error_notify: Callable[[str], None],
+    timeout_undeploy: TimeoutConfig = TimeoutConfig(timeout_in_seconds=30),
+    timeout_deploy: TimeoutConfig = TimeoutConfig(timeout_in_seconds=90),
 ) -> None:
     network_id = get_network_id(package_file)
     logger.debug(f"Undeploying DNN model with ID {network_id}")
-    await undeploy_step(camera_state, network_id, timeout_notify)
+    await undeploy_step(camera_state, network_id, error_notify, timeout_undeploy)
     logger.debug("Deploying DNN model")
-    await deploy_step(camera_state, network_id, package_file, timeout_notify)
+    await deploy_step(
+        camera_state, network_id, package_file, timeout_deploy, error_notify
+    )
 
 
 async def undeploy_step(
-    state: CameraState, network_id: str, timeout_notify: Callable
+    state: CameraState,
+    network_id: str,
+    error_notify: Callable[[str], None],
+    timeout: TimeoutConfig,
 ) -> None:
     config = config_obj.get_config()
-    config_device = config_obj.get_active_device_config()
+    assert state.mqtt_port.value
+    config_device = config_obj.get_device_config(state.mqtt_port.value)
     schema = OnWireProtocol.from_iot_spec(config.evp.iot_platform)
     ephemeral_agent = Agent(config_device.mqtt.host, config_device.mqtt.port, schema)
 
-    timeout_secs = 30
     model_is_deployed = True
-    with trio.move_on_after(timeout_secs) as timeout_scope:
+    if state.device_config.value:
+        logger.debug(
+            f"The last status of the device is :{state.device_config.value.OTA.UpdateStatus}"
+        )
+    with trio.move_on_after(timeout.timeout_in_seconds) as timeout_scope:
         async with ephemeral_agent.mqtt_scope([]):
             await ephemeral_agent.configure(
                 "backdoor-EA_Main",
@@ -80,17 +94,20 @@ async def undeploy_step(
                         state.device_config.value.OTA.UpdateStatus in ["Done", "Failed"]
                         and not model_is_deployed
                     ):
-                        logger.debug("DNN model not loaded")
+                        logger.debug(
+                            f"DNN model unload operation result is: {state.device_config.value.OTA.UpdateStatus}"
+                        )
                         break
 
                 await state.ota_event()
-                timeout_scope.deadline += timeout_secs
-
+                timeout_scope.deadline += timeout.timeout_in_seconds
+    logger.debug(
+        f"Undeploy operation has finished. The model undeployment result is: {model_is_deployed}"
+    )
     if model_is_deployed:
         logger.warning("DNN Model hasn't been undeployed")
 
     if timeout_scope.cancelled_caught:
-        timeout_notify()
         logger.error("Timed out attempting to remove previous DNN model")
 
 
@@ -98,11 +115,13 @@ async def deploy_step(
     state: CameraState,
     network_id: str,
     package_file: Path,
-    timeout_notify: Callable,
+    timeout: TimeoutConfig,
+    error_notify: Callable[[str], None],
     use_configured_port: bool = False,
 ) -> None:
     config = config_obj.get_config()
-    config_device = config_obj.get_active_device_config()
+    assert state.mqtt_port.value
+    config_device = config_obj.get_device_config(state.mqtt_port.value)
     schema = OnWireProtocol.from_iot_spec(config.evp.iot_platform)
     ephemeral_agent = Agent(config_device.mqtt.host, config_device.mqtt.port, schema)
     webserver_port = config_device.webserver.port if use_configured_port else 0
@@ -111,18 +130,23 @@ async def deploy_step(
         tmp_dir = Path(temporary_dir)
         tmp_module = tmp_dir / package_file.name
         shutil.copy(package_file, tmp_module)
-        ip_addr = get_webserver_ip()
+
+        assert state.mqtt_port.value
+        device_conf = config_obj.get_device_config(state.mqtt_port.value)
+        ip_addr = get_webserver_ip(device_conf)
 
         # In my tests, the "Updating" phase may take this long:
-        timeout_secs = 90
         model_is_deployed = False
-        with trio.move_on_after(timeout_secs) as timeout_scope:
+        with trio.move_on_after(timeout.timeout_in_seconds) as timeout_scope:
             async with (
                 ephemeral_agent.mqtt_scope(
                     [MQTTTopics.ATTRIBUTES_REQ.value, MQTTTopics.ATTRIBUTES.value]
                 ),
                 AsyncWebserver(tmp_dir, webserver_port, None, True) as server,
             ):
+                logger.debug(
+                    f"Iteration to deploy a model on webserver port {server.port}"
+                )
                 assert ephemeral_agent.nursery  # make mypy happy
                 # Fill config spec
                 spec = configuration_spec(
@@ -132,6 +156,7 @@ async def deploy_step(
 
                 await ephemeral_agent.configure("backdoor-EA_Main", "placeholder", spec)
                 while True:
+                    logger.debug("Processing a message to deploy a model")
                     if state.device_config.value:
                         model_is_deployed = network_id in get_network_ids(
                             state.device_config.value.Version.DnnModelVersion  # type: ignore
@@ -142,14 +167,23 @@ async def deploy_step(
                             in ("Done", "Failed")
                             and model_is_deployed
                         ):
+                            if state.device_config.value.OTA.UpdateStatus == "Failed":
+                                error_notify("Failed to deploy model")
+                            logger.debug(
+                                f"DNN model upload operation result is: {state.device_config.value.OTA.UpdateStatus}"
+                            )
                             break
-
+                    logger.debug(
+                        "Message was not correct. We will wait for the next message to deploy a model"
+                    )
                     await state.ota_event()
-                    timeout_scope.deadline += timeout_secs
-
+                    timeout_scope.deadline += timeout.timeout_in_seconds
+        logger.debug(
+            f"Iteration for the model deployment has finished. Model is deployed {model_is_deployed}"
+        )
         if not model_is_deployed:
             logger.warning("DNN Model is not deployed")
 
         if timeout_scope.cancelled_caught:
-            timeout_notify()
+            error_notify(f"Model {network_id} Deployment Timeout")
             logger.error("Timed out attempting to deploy DNN model")

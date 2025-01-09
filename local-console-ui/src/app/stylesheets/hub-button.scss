@@ -1,0 +1,246 @@
+/**
+ * Copyright 2024 Sony Semiconductor Solutions Corp.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+// New designed figma button style
+// Normal Hub Button
+
+@import "./variables.scss";
+
+%btn {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  font-size: 14px;
+  font-weight: 400;
+  width: 104px;
+  height: 32px;
+  margin-left: 10px;
+  margin-right: 10px;
+}
+
+%normal-hub-button-rest {
+  color: #ffffff;
+  background: #3e455c;
+  border: 1px solid #3e455c;
+}
+
+%normal-hub-button-hover {
+  &:hover {
+    color: #ffffff;
+    background: linear-gradient(
+        0deg,
+        rgba(255, 255, 255, 0.3) 0%,
+        rgba(255, 255, 255, 0.3) 100%
+      ),
+      #3e455c;
+    border:
+      1px solid
+        linear-gradient(
+          0deg,
+          rgba(255, 255, 255, 0.3) 0%,
+          rgba(255, 255, 255, 0.3) 100%
+        ),
+      #3e455c;
+  }
+}
+
+%normal-hub-button-pressed {
+  &:active {
+    color: #ffffff;
+    background: linear-gradient(
+        0deg,
+        rgba(0, 0, 0, 0.2) 0%,
+        rgba(0, 0, 0, 0.2) 100%
+      ),
+      #3e455c;
+    border:
+      1px solid
+        linear-gradient(0deg, rgba(0, 0, 0, 0.2) 0%, rgba(0, 0, 0, 0.2) 100%),
+      #3e455c;
+  }
+}
+
+%normal-hub-button-disable {
+  &:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+  }
+}
+
+.normal-hub-btn {
+  @extend %btn;
+  border-radius: 8px;
+  opacity: 0px;
+  cursor: pointer;
+  @extend %normal-hub-button-rest;
+  @extend %normal-hub-button-disable;
+  @extend %normal-hub-button-hover;
+  @extend %normal-hub-button-pressed;
+}
+
+// Weak Hub Button
+%weak-hub-button-rest {
+  color: rgb(62, 69, 92);
+  background-color: white;
+  border: 1px solid rgb(62, 69, 92);
+}
+
+%weak-hub-button-hover {
+  &:hover {
+    color: rgba(116, 121, 137);
+    background: rgb(240, 240, 240);
+    border: 1px solid rgba(116, 121, 137);
+  }
+}
+
+%weak-hub-button-pressed {
+  &:active {
+    color: rgb(62, 69, 92);
+    background: rgb(193, 193, 193);
+    border: 1px solid rgba(62, 69, 92);
+  }
+}
+
+%weak-hub-button-disable {
+  &:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+  }
+}
+
+.weak-hub-btn {
+  @extend %btn;
+  border-radius: 8px;
+  cursor: pointer;
+  @extend %weak-hub-button-rest;
+  @extend %weak-hub-button-disable;
+  @extend %weak-hub-button-hover;
+  @extend %weak-hub-button-pressed;
+}
+
+// Strong-Positive Hub Button
+%strong-positive-hub-button-rest {
+  color: #ffffff;
+  background: $accentBlue;
+  border: 1px solid $accentBlue;
+}
+
+%strong-positive-hub-button-hover {
+  &:hover {
+    color: #ffffff;
+    background: linear-gradient(
+        0deg,
+        rgba(255, 255, 255, 0.3),
+        rgba(255, 255, 255, 0.3)
+      ),
+      $accentBlue;
+    border:
+      1px solid
+        linear-gradient(
+          0deg,
+          rgba(255, 255, 255, 0.3),
+          rgba(255, 255, 255, 0.3)
+        ),
+      $accentBlue;
+  }
+}
+
+%strong-positive-hub-button-pressed {
+  &:active {
+    color: #ffffff;
+    background: linear-gradient(0deg, rgba(0, 0, 0, 0.2), rgba(0, 0, 0, 0.2)),
+      $accentBlue;
+    border:
+      1px solid linear-gradient(0deg, rgba(0, 0, 0, 0.2), rgba(0, 0, 0, 0.2)),
+      $accentBlue;
+  }
+}
+
+%strong-positive-hub-button-disable {
+  &:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+  }
+}
+
+.strong-positive-hub-btn {
+  @extend %btn;
+  border-radius: 8px;
+  opacity: 0px;
+  cursor: pointer;
+  @extend %strong-positive-hub-button-rest;
+  @extend %strong-positive-hub-button-disable;
+  @extend %strong-positive-hub-button-hover;
+  @extend %strong-positive-hub-button-pressed;
+}
+
+// Strong-Negative Hub Button
+%strong-negative-hub-button-rest {
+  color: #ffffff;
+  background: #bf4d4d;
+  border: 1px solid #bf4d4d;
+}
+
+%strong-negative-hub-button-hover {
+  &:hover {
+    color: #ffffff;
+    background: linear-gradient(
+        0deg,
+        rgba(255, 255, 255, 0.3),
+        rgba(255, 255, 255, 0.3)
+      ),
+      #bf4d4d;
+    border:
+      1px solid
+        linear-gradient(
+          0deg,
+          rgba(255, 255, 255, 0.3),
+          rgba(255, 255, 255, 0.3)
+        ),
+      #bf4d4d;
+  }
+}
+
+%strong-negative-hub-button-pressed {
+  &:active {
+    color: #ffffff;
+    background: linear-gradient(0deg, rgba(0, 0, 0, 0.2), rgba(0, 0, 0, 0.2)),
+      #bf4d4d;
+    border:
+      1px solid linear-gradient(0deg, rgba(0, 0, 0, 0.2), rgba(0, 0, 0, 0.2)),
+      #bf4d4d;
+  }
+}
+
+%strong-negative-hub-button-disable {
+  &:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+  }
+}
+
+.strong-negative-hub-btn {
+  border-radius: 8px;
+  opacity: 0px;
+  cursor: pointer;
+  @extend %strong-negative-hub-button-rest;
+  @extend %strong-negative-hub-button-disable;
+  @extend %strong-negative-hub-button-hover;
+  @extend %strong-positive-hub-button-pressed;
+}

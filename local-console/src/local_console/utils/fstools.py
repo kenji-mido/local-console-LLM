@@ -15,19 +15,20 @@
 # SPDX-License-Identifier: Apache-2.0
 import contextlib
 import enum
+import heapq
 import logging
 import os
+import threading
 from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
-from typing import Optional
 
+from local_console.core.camera.enums import UnitScale
 from watchdog.events import DirDeletedEvent
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
 from watchdog.observers.api import ObservedWatch
-
 
 logger = logging.getLogger(__name__)
 
@@ -43,13 +44,96 @@ class WatchException(Exception):
     pass
 
 
+def size_unit_to_bytes(size: int, unit: UnitScale) -> int:
+    factors = {UnitScale.KB: 2**10, UnitScale.MB: 2**20, UnitScale.GB: 2**30}
+    return size * factors[unit]
+
+
+class FileInfoContainer:
+    def __init__(self) -> None:
+        self.unique: dict[Path, FileInfo] = {}
+        self.older: list[tuple[int, int, FileInfo]] = []
+        self.older_id = 0
+        self.size = 0
+        self.lock = threading.Lock()
+
+    def _accept(self, file: FileInfo) -> None:
+        heapq.heappush(self.older, (file.age, self.older_id, file))
+        self.unique[file.path] = file
+        self.older_id += 1
+        self.size += file.size
+
+    def _discard(self) -> FileInfo:
+        _, _, older = heapq.heappop(self.older)
+        del self.unique[older.path]
+        self.size -= older.size
+        return older
+
+    def _replace_by_newer(self, new: FileInfo) -> None:
+        temporal: list[FileInfo] = []
+        while self.older:
+            curr = self._discard()
+            if curr.path == new.path:
+                self._accept(new)
+                for missing in temporal:
+                    self._accept(missing)
+                return
+            else:
+                temporal.append(curr)
+
+    def _resolve_duplicate(self, prev: FileInfo, new: FileInfo) -> FileInfo:
+        if prev.age < new.age:
+            logger.error(
+                f"File {new.age} already registered. It will be replaced as new file age is {new.age} and previous is {prev.age}"
+            )
+            self._replace_by_newer(new)
+            return prev
+        else:
+            logger.error(
+                f"File {new.age} duplicated. But is ignored as is not newer than {prev.age}"
+            )
+            return new
+
+    def add(self, file: FileInfo) -> FileInfo | None:
+        """
+        Add file and return the discarded one if duplicated
+        """
+        with self.lock:
+            prev = self.unique.get(file.path)
+            if prev is None:
+                self._accept(file)
+                return None
+            else:
+                older = self._resolve_duplicate(prev, file)
+                return older
+
+    def pop(self) -> FileInfo | None:
+        """
+        Remove the older from container and returns it. But returns None if empty
+        """
+        with self.lock:
+            try:
+                older = self._discard()
+                return older
+            except IndexError:
+                return None
+
+    def paths(self) -> set[Path]:
+        return {f.path for f in self.unique.values()}
+
+    def clear(self) -> None:
+        self.older.clear()
+        self.unique.clear()
+        self.size = 0
+
+
 class StorageSizeWatcher:
     class State(enum.Enum):
         Start = enum.auto()
         Accumulating = enum.auto()
         Checking = enum.auto()
 
-    def __init__(self, check_frequency: int = 50) -> None:
+    def __init__(self, size_limit: int, check_frequency: int = 50) -> None:
         """
         Class for watching a directory for incoming files while maintaining
         the total storage usage within the directory under a given limit size,
@@ -65,9 +149,8 @@ class StorageSizeWatcher:
         self.check_frequency = check_frequency
         self._paths: set[Path] = set()
         self.state = self.State.Start
-        self._size_limit: Optional[int] = None
-        self.content: list[FileInfo] = []
-        self.storage_usage = 0
+        self._size_limit = size_limit
+        self.content = FileInfoContainer()
         self._remaining_before_check = self.check_frequency
 
     def set_path(self, path: Path) -> None:
@@ -76,6 +159,8 @@ class StorageSizeWatcher:
         p = path.resolve()
         if p in self._paths:
             return
+
+        logger.debug(f"Including path {p} in size limiting watchlist.")
         self._paths.add(p)
 
         # Execute regardless of current state
@@ -83,7 +168,9 @@ class StorageSizeWatcher:
 
     def unwatch_path(self, path: Path) -> None:
         assert path.is_dir()
+        logger.debug(f"Removing path {path} from size limiting watchlist.")
         self._paths.discard(path.resolve())
+        self._consistency_check()
 
     def set_storage_limit(self, limit: int) -> None:
         logger.debug(f"Setting storage limit to {limit} bytes")
@@ -108,7 +195,7 @@ class StorageSizeWatcher:
             self._register_file(path)
 
             self._remaining_before_check -= 1
-            if self._remaining_before_check == 0:
+            if self._remaining_before_check <= 0:
                 self._consistency_check()
                 self._remaining_before_check = self.check_frequency
 
@@ -118,46 +205,11 @@ class StorageSizeWatcher:
                 f"Deferring update of size statistic for incoming file {path} during state {self.state}"
             )
 
-    def update_file_size(self, path: Path) -> None:
-        # TODO: Optimize. Assumption: updates on files are for the newest ones.
-        curr = len(self.content)
-        while curr > 0:
-            if self.content[curr - 1].path == path:
-                entry = walk_entry(path)
-                self.storage_usage -= self.content[curr - 1].size
-                self.storage_usage += entry.size
-                self.content[curr - 1].size = entry.size
-                return
-            curr -= 1
-        logger.warning(f"Requested update of the size of {path} but does not exist")
-
-    def get_oldest(self) -> Optional[FileInfo]:
-        if self.content:
-            return self.content[0]
-        else:
-            return None
-
     def _register_file(self, path: Path) -> None:
         entry = walk_entry(path)
-        self.storage_usage += entry.size
-        curr = len(self.content)
-        while curr > 0:
-            if self.content[curr - 1].age < entry.age:
-                self.content.insert(curr, entry)
-                return
-            curr -= 1
+        logger.debug(f"Registering for size limiting: {entry}")
 
-        # if older than all elements
-        self.content.insert(0, entry)
-
-    def _unregister_file(self, path: Path) -> None:
-        new_content = []
-        for entry in self.content:
-            if entry.path == path:
-                self.storage_usage -= entry.size
-            else:
-                new_content.append(entry)
-        self.content = new_content
+        self.content.add(entry)
 
     def _build_content_list(self, root: Path) -> None:
         """
@@ -166,13 +218,8 @@ class StorageSizeWatcher:
         assert self._paths
         self.state = self.State.Accumulating
 
-        new_files = list(walk_files(root))
-
-        self.content = sorted(
-            new_files + self.content,
-            key=lambda e: e.age,
-        )
-        self.storage_usage += sum(e.size for e in new_files)
+        for file in list(walk_files(root)):
+            self.content.add(file)
 
     def _prune(self) -> None:
         if self._size_limit is None:
@@ -181,51 +228,67 @@ class StorageSizeWatcher:
         # In order to make this class thread-safe,
         # the following would be required:
         # self.state == self.State.Checking
-        while self.storage_usage > self._size_limit:
+        has_been_pruned = False
+        while self.content.size > self._size_limit:
             try:
-                entry = self.content.pop(0)
-                entry.path.unlink()
-                self.storage_usage -= entry.size
-            except FileNotFoundError:
-                logger.warning(f"File {entry.path} was already removed")
-            except KeyError:
-                break
+                entry = self.content.pop()
+                if not entry:
+                    logger.error(
+                        "There are no more files in the content, but the usage limits have been exceeded."
+                    )
+                    self._consistency_check()
+                    return
+                path = entry.path
+                path.unlink()
+                has_been_pruned = True
+                logger.debug(f"Removed {path} for pruning, freed {entry.size} bytes")
+            except FileNotFoundError as e:
+                logger.warning(f"File {path} was already removed", exc_info=e)
+            except Exception as e:
+                logger.warning("Unexpected exception while pruning", exc_info=e)
 
+        if has_been_pruned:
+            logger.debug(
+                f"Prune has been applied current storage is {self.content.size}"
+            )
         # In order to make this class thread-safe,
         # the following would be required:
         # self.state == self.State.Accumulating
 
     def _consistency_check(self) -> bool:
         assert self._paths
-        in_memory = {k.path for k in self.content}
-        in_storage = {p.path for root in self._paths for p in walk_files(root)}
+        in_memory = self.content.paths()
+        files_in_paths = [p for root in self._paths for p in walk_files(root)]
+        in_storage = {p.path for p in files_in_paths}
 
-        difference = in_storage - in_memory
-        if difference:
-            logger.warning(
-                f"File bookkeeping inconsistency: new files on disk are: {difference}"
-            )
-            for path in difference:
-                self._register_file(path)
-            return False
-
-        difference = in_memory - in_storage
-        if difference:
-            logger.warning(
-                f"File bookkeeping inconsistency: files unexpectedly removed: {difference}"
-            )
-            for path in difference:
-                self._unregister_file(path)
+        missing_in_memory = in_storage - in_memory
+        orphaned_in_memory = in_memory - in_storage
+        if missing_in_memory or orphaned_in_memory:
+            if orphaned_in_memory:
+                logger.warning(
+                    f"File bookkeeping inconsistency: new files on disk are: {missing_in_memory}"
+                )
+            if orphaned_in_memory:
+                logger.warning(
+                    f"File bookkeeping inconsistency: files unexpectedly removed: {orphaned_in_memory}"
+                )
+            self.content.clear()
+            for file in files_in_paths:
+                self.content.add(file)
             return False
 
         return True
 
 
-def walk_entry(path: Path) -> FileInfo:
-    st = os.stat(path)
-    file_age = st.st_mtime_ns
-    file_size = st.st_size
+def entry_from_stats(path: Path, stats: os.stat_result) -> FileInfo:
+    file_age = stats.st_mtime_ns
+    file_size = stats.st_size
     return FileInfo(file_age, path, file_size)
+
+
+def walk_entry(path: Path) -> FileInfo:
+    path = path.absolute()
+    return entry_from_stats(path, os.stat(path))
 
 
 def walk_files(root: Path) -> Iterator[FileInfo]:
@@ -233,8 +296,10 @@ def walk_files(root: Path) -> Iterator[FileInfo]:
     # without additional system calls in most of the cases
     for entry in os.scandir(root):
         if entry.is_file():
-            stat = entry.stat()
-            yield FileInfo(stat.st_mtime_ns, Path(entry.path), stat.st_size)
+            stat = (
+                entry.stat()
+            )  # do not remove From https://peps.python.org/pep-0471, stat(*, follow_symlinks=True): like os.stat(), but the return value is cached on the DirEntry
+            yield entry_from_stats(Path(entry.path), stat)
         elif entry.is_dir():
             yield from walk_files(Path(entry.path))
 
@@ -243,8 +308,8 @@ def check_and_create_directory(directory: Path) -> None:
     if not directory.exists():
         logger.warning(f"{directory} does not exist. Creating directory...")
         directory.mkdir(exist_ok=True, parents=True)
-    else:
-        assert directory.is_dir()
+
+    assert directory.is_dir()
 
 
 OnDeleteCallable = Callable[[Path], None]

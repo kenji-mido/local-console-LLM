@@ -14,9 +14,7 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 import logging
-import shutil
 from unittest.mock import Mock
-from unittest.mock import patch
 
 import pytest
 import requests
@@ -36,13 +34,46 @@ def test_happy_path(sync_webserver):
     url = f"http://localhost:{sync_webserver.port}/{file_name}"
     data = b"This is a test file"
 
+    recvd_data = b""
+    recvd_path = ""
+
+    def put_callback(data: bytes, path: str) -> None:
+        nonlocal recvd_data, recvd_path
+        recvd_data = data
+        recvd_path = path
+
+    sync_webserver.on_incoming = put_callback
+    sync_webserver.max_upload_size = 1024
+
     # Upload file
     response = requests.put(url, data=data)
     assert response.status_code == 200
 
-    # Verify the file was created
-    content = sync_webserver.dir.joinpath(file_name).read_bytes()
-    assert content == data
+    # Verify the callback was effective
+    assert recvd_data == data
+    assert recvd_path == f"/{file_name}"
+
+
+def test_size_limit_hit(sync_webserver):
+    file_name = "testfile.txt"
+    url = f"http://localhost:{sync_webserver.port}/{file_name}"
+    data = b"This is a test file"
+
+    content = b""
+
+    def put_callback(data: bytes) -> None:
+        nonlocal content
+        content = data
+
+    sync_webserver.on_incoming = Mock()
+    sync_webserver.max_upload_size = 2
+
+    # Upload file
+    response = requests.put(url, data=data)
+    assert response.status_code != 200
+
+    # Verify the size limit was effective
+    sync_webserver.on_incoming.assert_not_called()
 
 
 def test_save_error(sync_webserver, caplog):
@@ -50,12 +81,11 @@ def test_save_error(sync_webserver, caplog):
     url = f"http://localhost:{sync_webserver.port}/{file_name}"
     data = b"data"
 
-    with patch(
-        "local_console.servers.webserver.Path.write_bytes", side_effect=IOError()
-    ):
-        response = requests.put(url, data=data)
-        assert response.status_code == 200
-        assert "Error while receiving data" in caplog.text
+    sync_webserver.on_incoming = Mock(side_effect=IOError("Some error"))
+
+    response = requests.put(url, data=data)
+    assert response.status_code == 200
+    assert "Some error" in caplog.text
 
 
 def test_callback_error(sync_webserver, caplog):
@@ -70,27 +100,3 @@ def test_callback_error(sync_webserver, caplog):
     assert response.status_code == 200
     assert "Error while receiving data" not in caplog.text
     assert "Error while invoking callback" in caplog.text
-
-
-def test_unexpected_deletion_of_save_directory(sync_webserver, tmp_path_factory):
-    save_dir = tmp_path_factory.mktemp("savedir")
-    sync_webserver.dir = save_dir
-
-    file_name = "testfile.txt"
-    url = f"http://localhost:{sync_webserver.port}/{file_name}"
-    data = b"data"
-
-    # Upload before deletion should be normal
-    response = requests.put(url, data=data)
-    assert response.status_code == 200
-    content = save_dir.joinpath(file_name).read_bytes()
-    assert content == data
-
-    # Unexpectedly remove the save directory and upload again
-    shutil.rmtree(save_dir)
-    response = requests.put(url, data=data)
-
-    # Outcome should be success
-    assert response.status_code == 200
-    content = save_dir.joinpath(file_name).read_bytes()
-    assert content == data

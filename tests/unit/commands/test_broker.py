@@ -13,13 +13,17 @@
 # limitations under the License.
 #
 # SPDX-License-Identifier: Apache-2.0
+import signal
+import sys
 from unittest.mock import ANY
 from unittest.mock import AsyncMock
+from unittest.mock import MagicMock
 from unittest.mock import patch
 
 import pytest
 import trio
 from local_console.commands.broker import app
+from local_console.commands.broker import wait_for_signals
 from local_console.core.config import config_obj
 from local_console.servers.broker import BrokerException
 from local_console.servers.broker import spawn_broker
@@ -31,8 +35,9 @@ runner = CliRunner()
 def test_broker_command():
     with (
         patch("local_console.commands.broker.spawn_broker") as mock_spawn,
-        patch("local_console.commands.broker.sleep_forever"),
+        patch("local_console.commands.broker.Event") as mock_event,
     ):
+        mock_event.return_value.wait = AsyncMock()
         result = runner.invoke(app, [])
         mock_spawn.assert_called_once_with(
             config_obj.get_active_device_config().mqtt.port, ANY, False
@@ -74,3 +79,21 @@ async def test_spawn_broker_command_port_already_in_use(nursery):
             pass
 
     assert len(nursery.child_tasks) == 0
+
+
+@pytest.mark.trio
+@pytest.mark.skipif(
+    sys.platform == "win32", reason="To test signal handling on Windows is futile"
+)
+async def test_wait_for_signals():
+    finish_event = trio.Event()
+
+    async def mock_signal_aiter():
+        yield signal.SIGINT
+
+    mock_signal_receiver = MagicMock()
+    mock_signal_receiver.__enter__.return_value = mock_signal_aiter()
+    with patch("trio.open_signal_receiver", return_value=mock_signal_receiver):
+        await wait_for_signals(finish_event)
+
+    assert finish_event.is_set()

@@ -17,6 +17,7 @@ import os
 import platform
 from pathlib import Path
 
+import platformdirs
 from local_console.utils.enums import StrEnum
 
 
@@ -59,6 +60,10 @@ def get_default_home() -> Path:
         raise OSError(f"Unsupported runtime: {os_name}")
 
 
+def get_default_files_dir() -> Path:
+    return Path(platformdirs.user_documents_dir())
+
+
 config_paths = Config()
 
 
@@ -85,3 +90,21 @@ class ModuleExtension(StrEnum):
     WASM = "wasm"
     AOT = "aot"
     SIGNED = "signed"
+
+
+class ApplicationConfiguration:
+    FB_SCHEMA_PATH = Path(__file__).parent.parent / "assets/schemas"
+
+
+class ApplicationSchemaFile:
+    CLASSIFICATION = "classification.fbs"
+    DETECTION = "objectdetection.fbs"
+
+
+class ApplicationSchemaFilePath:
+    CLASSIFICATION = (
+        ApplicationConfiguration.FB_SCHEMA_PATH / ApplicationSchemaFile.CLASSIFICATION
+    )
+    DETECTION = (
+        ApplicationConfiguration.FB_SCHEMA_PATH / ApplicationSchemaFile.DETECTION
+    )

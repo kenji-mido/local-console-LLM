@@ -31,7 +31,7 @@ function Main
     if ($(Check-Privilege)) {
         Write-Error "This script must NOT be run as an Administrator role"
         Wait-UserInput 10
-        Exit 1
+        Return 1
     }
 
     $stepsPath = Join-Path $rootPath "steps"
@@ -45,18 +45,20 @@ function Main
         $SysRedirectArgs = "-TranscriptPath `"$SysLogFile`""
     }
     try {
-        Run-Privileged "$scriptSys" "$SysRedirectArgs"
+        if ($(Run-Privileged "$scriptSys" "$SysRedirectArgs") -ne 0) {
+            Return 1
+        }
         if ($DoRedirect) {
             cat "$SysLogFile" >> $RedirectLogPath
             rm "$SysLogFile"
         }
     }
     catch {
-        Write-LogMessage "Could not install system dependencies"
-        return 1
+        Write-LogMessage "Could not obtain Admin privileges to install system dependencies. Aborting install."
+        Return 1
     }
 
-    Write-LogMessage "Done ensuring system dependencies"
+    Write-LogMessage "Done ensuring system dependencies."
 
     if ([string]::IsNullOrWhiteSpace($AppInstallPath)) {
         $AppInstallPath = $DefaultInstallPath
@@ -72,15 +74,18 @@ function Main
     if ($DoRedirect) {
         $AppRedirectArgs += " -TranscriptPath `"$AppLogFile`""
     }
-    Run-Unprivileged "$scriptApp" "$AppInstallArgs $AppRedirectArgs"
+    if ($(Run-Unprivileged "$scriptApp" "$AppInstallArgs $AppRedirectArgs") -ne 0) {
+        Return 1
+    }
     if ($DoRedirect) {
         cat "$AppLogFile" >> $RedirectLogPath
         rm "$AppLogFile"
     }
     Write-LogMessage "Done installing Local Console"
 
-    Restore-DefaultExecutionPolicy
     Wait-UserInput
+
+    Return 0
 }
 
-Main
+Exit Main

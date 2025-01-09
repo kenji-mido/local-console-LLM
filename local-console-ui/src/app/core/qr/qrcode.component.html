@@ -1,0 +1,57 @@
+<!--
+ Copyright 2024 Sony Semiconductor Solutions Corp.
+
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
+
+     http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+
+ SPDX-License-Identifier: Apache-2.0
+-->
+
+<div class="qr-header">
+  <mat-icon (click)="fullScreen()">
+    <img src="images/{{ theme }}/qrcode_fullscreen.svg" />
+  </mat-icon>
+  <mat-icon (click)="zoomIn()">
+    <img src="images/{{ theme }}/qrcode_zoom_in.svg" />
+  </mat-icon>
+  <mat-icon (click)="zoomOut()">
+    <img src="images/{{ theme }}/qrcode_zoom_out.svg" />
+  </mat-icon>
+  <mat-icon (click)="saveQrImage()">
+    <img src="images/{{ theme }}/qrcode_save.svg" />
+  </mat-icon>
+  <mat-icon (click)="printQr()">
+    <img src="images/{{ theme }}/qrcode_print.svg" />
+  </mat-icon>
+  <mat-icon data-testid="qr-close" (click)="closeQr()">
+    <img src="images/{{ theme }}/qrcode_close.svg" />
+  </mat-icon>
+</div>
+<div [ngClass]="qrBodyClass" *ngIf="qrImage" #qrImageDiv>
+  <div class="qr-info">
+    <h1>Service QR Code</h1>
+    <h3>
+      Start provisioning by scanning Service QR Code using your Edge Device.
+    </h3>
+    <h3 *ngIf="qrExpiredDate">*Expiration: {{ qrExpiredDate }}</h3>
+  </div>
+  <div class="qr-code">
+    <img [src]="qrImage" />
+  </div>
+</div>
+<div [ngClass]="qrBodyClass" *ngIf="!qrImage" #qrImageDiv>
+  <div class="qr-error">
+    <h1>Service QR Code ERROR</h1>
+    <h3>Cannot Get QR Code</h3>
+    <h3>Please check your parameters or networks!</h3>
+  </div>
+</div>

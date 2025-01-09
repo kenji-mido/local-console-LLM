@@ -69,6 +69,7 @@ async def spawn_broker(
             data = await broker_proc.stdout.receive_some()
             if data:
                 data = data.decode("utf-8")
+                logger.debug(f"Received data from mosquitto: {data}")
                 for line in data.splitlines():
                     logger.debug(line)
 
@@ -90,7 +91,7 @@ async def spawn_broker(
 def populate_broker_conf(port: int, config_file: Path) -> None:
     data = {"mqtt_port": str(port)}
     variant = "no-tls"
-    logger.info(f"MQTT broker in {variant} mode")
+    logger.info(f"MQTT broker in {variant} mode at port {port}")
     template_file = broker_assets / f"config.{variant}.toml.tpl"
     template = Template(template_file.read_text())
     rendered = template.substitute(data)

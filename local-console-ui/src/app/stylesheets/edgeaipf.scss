@@ -1,0 +1,268 @@
+/**
+ * Copyright 2024 Sony Semiconductor Solutions Corp.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+@use "sass:math";
+@import "./variables.scss";
+
+// VARIABLES
+$max-layout-modifier: 6;
+$max-size-modifier: 24;
+$layout-divisions: 12;
+
+html {
+  --standard-spacing: 8px;
+  --standard-border: 1px;
+
+  // COLOR
+  --color-gray-soft: #d4d4d4;
+  --color-gray-mid: #5f5f5f;
+  --color-edgeaipf-gray: #d1d3d9;
+  --color-edgeaipf: #{$darkBlue};
+  --color-accent: #{$accentBlue};
+}
+
+// PALETTE
+
+.bg-white {
+  background-color: white;
+}
+
+.bg-edgeaipf {
+  background-color: var(--color-edgeaipf);
+}
+
+.bg-edgeaipf-gray {
+  background-color: var(--color-edgeaipf-gray);
+}
+
+.bg-accent {
+  background-color: var(--color-accent);
+}
+
+// COMPOUND
+html {
+  --compound-margin-over-std: 3;
+}
+.field-box {
+  border-radius: var(--standard-spacing);
+  border: var(--standard-border) solid var(--color-gray-soft);
+  box-sizing: border-box;
+  display: flex;
+  gap: var(--standard-spacing);
+  padding: calc(var(--standard-spacing) * var(--compound-margin-over-std));
+}
+
+.card-box {
+  border-radius: var(--standard-spacing);
+  box-sizing: border-box;
+  background-color: white;
+  padding: calc(var(--standard-spacing) * var(--compound-margin-over-std));
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--standard-spacing) * var(--compound-margin-over-std));
+}
+
+.hub {
+  padding: calc(var(--standard-spacing) * var(--compound-margin-over-std));
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--standard-spacing) * var(--compound-margin-over-std));
+  box-sizing: border-box;
+}
+
+// LAYOUT
+
+.row,
+.col,
+.stack {
+  display: flex;
+  gap: calc(var(--standard-spacing) * var(--compound-margin-over-std));
+  box-sizing: border-box;
+}
+
+.stack {
+  flex-direction: column;
+}
+
+.row {
+  flex-direction: row;
+  width: 100%;
+}
+
+.col {
+  flex-direction: column;
+  height: 100%;
+}
+
+.stack {
+  flex-direction: column;
+}
+
+.grow {
+  flex-grow: 1;
+}
+
+.fullwidth {
+  width: 100%;
+}
+
+.fullheight {
+  height: 100%;
+}
+
+.grid {
+  display: grid;
+}
+
+.center {
+  justify-content: center;
+}
+
+.align-center {
+  align-items: center;
+}
+
+@for $i from 0 through $max-layout-modifier {
+  .m-#{$i} {
+    margin: calc(var(--standard-spacing) * $i);
+  }
+  .mx-#{$i} {
+    margin-left: calc(var(--standard-spacing) * $i);
+    margin-right: calc(var(--standard-spacing) * $i);
+  }
+  .ml-#{$i} {
+    margin-left: calc(var(--standard-spacing) * $i);
+  }
+  .mr-#{$i} {
+    margin-right: calc(var(--standard-spacing) * $i);
+  }
+  .my-#{$i} {
+    margin-top: calc(var(--standard-spacing) * $i);
+    margin-bottom: calc(var(--standard-spacing) * $i);
+  }
+  .mt-#{$i} {
+    margin-top: calc(var(--standard-spacing) * $i);
+  }
+  .mb-#{$i} {
+    margin-bottom: calc(var(--standard-spacing) * $i);
+  }
+  .gap-#{$i} {
+    gap: calc(var(--standard-spacing) * $i);
+  }
+  .gap-x-#{$i} {
+    column-gap: calc(var(--standard-spacing) * $i);
+  }
+  .gap-y-#{$i} {
+    row-gap: calc(var(--standard-spacing) * $i);
+  }
+  .p-#{$i} {
+    padding: calc(var(--standard-spacing) * $i);
+  }
+  .px-#{$i} {
+    padding-left: calc(var(--standard-spacing) * $i);
+    padding-right: calc(var(--standard-spacing) * $i);
+  }
+  .pl-#{$i} {
+    padding-left: calc(var(--standard-spacing) * $i);
+  }
+  .pr-#{$i} {
+    padding-right: calc(var(--standard-spacing) * $i);
+  }
+  .py-#{$i} {
+    padding-top: calc(var(--standard-spacing) * $i);
+    padding-bottom: calc(var(--standard-spacing) * $i);
+  }
+  .pt-#{$i} {
+    padding-top: calc(var(--standard-spacing) * $i);
+  }
+  .pb-#{$i} {
+    padding-bottom: calc(var(--standard-spacing) * $i);
+  }
+  .grid-cols-#{$i} {
+    grid-template-columns: repeat(#{$i}, 1fr);
+  }
+  .round-#{$i} {
+    border-radius: calc(var(--standard-spacing) * $i);
+  }
+}
+
+.overflow {
+  overflow: auto;
+}
+
+.border-box {
+  box-sizing: border-box;
+}
+
+@for $i from 0 through $layout-divisions {
+  .w-#{$i} {
+    width: math.div(100% * $i, $layout-divisions);
+  }
+  .h-#{$i} {
+    height: math.div(100% * $i, $layout-divisions);
+  }
+}
+
+@for $i from 0 through $max-size-modifier {
+  .ws-#{$i} {
+    width: calc(var(--standard-spacing) * $i * 4);
+  }
+  .basis-#{$i} {
+    flex-basis: calc(var(--standard-spacing) * $i * 4);
+    width: calc(var(--standard-spacing) * $i * 4);
+    flex-grow: 0;
+    flex-shrink: 0;
+  }
+  .hs-#{$i} {
+    height: calc(var(--standard-spacing) * $i * 4);
+  }
+}
+
+.scroll {
+  overflow: auto;
+}
+
+.aspect-16-9 {
+  aspect-ratio: 16 / 9;
+}
+
+.aspect-square {
+  aspect-ratio: 1;
+}
+
+// TEXT
+
+.text-1 {
+  color: #000;
+  font-size: 31px;
+}
+
+.text-2 {
+  color: #000;
+  font-size: 25px;
+}
+
+.text-3 {
+  color: #000;
+  font-size: 20px;
+}
+
+.text-sub {
+  font-size: 16px;
+  color: var(--color-gray-mid);
+}

@@ -16,9 +16,11 @@
 
 ---
 exclude: .vscode/.*.json
+default_language_version:
+  python: python3.11
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.4.0
+    rev: v5.0.0
     hooks:
       - id: trailing-whitespace
       - id: check-docstring-first
@@ -47,10 +49,11 @@ repos:
       - id: pyupgrade
         args: [--py39-plus]
   - repo: https://github.com/pre-commit/mirrors-mypy
+    # Cannot update mypy due to https://github.com/python-trio/trio-typing/pull/97
     rev: v1.10.1
     hooks:
       - id: mypy
-        args: [--python-version=3.10]
+        args: []
         additional_dependencies:
           - types-paho-mqtt==1.6.0.7
           - types-retry
@@ -61,6 +64,7 @@ repos:
           - pytest
           - trio-typing
           - types-Pygments
+          - types-requests
           - types-qrcode
           - types-psutil
         exclude: tests
@@ -73,6 +77,6 @@ repos:
     hooks:
       - id: flake8
   - repo: https://github.com/crate-ci/typos
-    rev: v1.22.9
+    rev: v1.27.3
     hooks:
       - id: typos

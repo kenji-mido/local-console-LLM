@@ -30,6 +30,7 @@ import trio
 from local_console.core.camera.enums import DeployStage
 from local_console.core.schemas.schemas import Deployment
 from local_console.core.schemas.schemas import DeploymentManifest
+from local_console.core.schemas.schemas import DeviceConnection
 from local_console.core.schemas.schemas import OnWireProtocol
 from local_console.servers.webserver import SyncWebserver
 from local_console.utils.local_network import get_webserver_ip
@@ -241,6 +242,7 @@ def single_module_manifest_setup(
     module_name: str,
     module_file: Path,
     webserver: SyncWebserver,
+    target: DeviceConnection,
     port_override: Optional[int] = None,
     host_override: Optional[str] = None,
 ) -> DeploymentManifest:
@@ -271,7 +273,12 @@ def single_module_manifest_setup(
 
     webserver.set_directory(module_file.parent)
     return manifest_setup_epilog(
-        module_file.parent, deployment_manifest, webserver, port_override, host_override
+        module_file.parent,
+        deployment_manifest,
+        webserver,
+        target,
+        port_override,
+        host_override,
     )
 
 
@@ -279,6 +286,7 @@ def manifest_setup_epilog(
     files_dir: Path,
     manifest: DeploymentManifest,
     webserver: SyncWebserver,
+    target: DeviceConnection,
     port_override: Optional[int] = None,
     host_override: Optional[str] = None,
 ) -> DeploymentManifest:
@@ -292,7 +300,7 @@ def manifest_setup_epilog(
     assert files_dir.is_dir()
 
     dm = manifest.copy(deep=True)
-    host = get_webserver_ip() if not host_override else host_override
+    host = get_webserver_ip(target) if not host_override else host_override
     port = webserver.port if not port_override else port_override
     populate_urls_and_hashes(dm, host, port, files_dir)
     make_unique_module_ids(dm)

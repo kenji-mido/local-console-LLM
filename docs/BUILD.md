@@ -1,49 +1,24 @@
-# Building the Local Console
+# Building Local Console
 
-## Basic setup
+Ensure all dependencies are installed before building.
 
-1. Create a Python 3.11+ virtual environment
+## Backend
 
-```sh
-$ python3.11 -m venv lcenv
-```
-
-2. Install the local console in editable mode, plus test dependencies
+With a Python 3.11+ environment,
 
 ```sh
-$ . lcenv/bin/activate # on Linux and OSX
-# . .\lcenv\Scripts\Activate.ps1 on Windows PowerShell
-
-(lcenv)$ pip install -e local-console/
-...
-
-(lcenv)$ pip install -r tests/requirements.txt
-...
+$ pip install build
+$ python -m build local-console --wheel
 ```
 
-This editable installation uses the same configuration data as a normal end-user installation does (e.g. for settings such as `local-console config get`).
+The wheel is generated at `local-console/dist`.
 
-## Development habits
+## UI
 
-Before submitting a pull request, or a change to an existing one, please make sure to perform the following actions.
-
-1. Run linting
+From `local-console-ui`,
 
 ```sh
-(lcenv)$ pre-commit run --all-files
+yarn build:electron
 ```
 
-2. Run unit tests
-
-```sh
-(lcenv)$ pytest tests/
-```
-
-3. If you want to capture coverage data:
-
-```sh
-(lcenv)$ coverage run -m pytest tests -o junit_family=xunit1 --junitxml=xunit-result.xml
-...
-(lcenv)$ coverage xml
-...
-```
+The executable is generated in `local-console-ui/dist`.

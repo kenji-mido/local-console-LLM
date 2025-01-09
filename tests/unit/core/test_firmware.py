@@ -20,19 +20,17 @@ from unittest.mock import patch
 
 import pytest
 from local_console.core.camera.enums import OTAUpdateModule
+from local_console.core.camera.enums import OTAUpdateStatus
+from local_console.core.camera.firmware import FirmwareValidationStatus
 from local_console.core.camera.firmware import validate_firmware_file
 from local_console.core.commands.ota_deploy import get_package_hash
-from local_console.core.schemas.edge_cloud_if_v1 import DeviceConfiguration
+from local_console.core.error.code import ErrorCodes
 from local_console.core.schemas.edge_cloud_if_v1 import DnnOta
 from local_console.core.schemas.edge_cloud_if_v1 import DnnOtaBody
-from local_console.core.schemas.edge_cloud_if_v1 import Hardware
-from local_console.core.schemas.edge_cloud_if_v1 import OTA
-from local_console.core.schemas.edge_cloud_if_v1 import Permission
-from local_console.core.schemas.edge_cloud_if_v1 import Status
-from local_console.core.schemas.edge_cloud_if_v1 import Version
 
 from tests.fixtures.camera import cs_init
-from tests.fixtures.gui import driver_set
+from tests.fixtures.firmware import mock_get_ota_update_status
+from tests.strategies.samplers.device_config import DeviceConfigurationSampler
 
 
 @pytest.fixture(params=["Application Firmware", "Sensor Firmware"])
@@ -45,43 +43,15 @@ def update_status(request):
     return request.param
 
 
-def device_config(UpdateProgress, UpdateStatus):
-    return DeviceConfiguration(
-        Hardware=Hardware(
-            Sensor="", SensorId="", KG="", ApplicationProcessor="", LedOn=True
-        ),
-        Version=Version(
-            SensorFwVersion="010707",
-            SensorLoaderVersion="020301",
-            DnnModelVersion=[],
-            ApFwVersion="D52408",
-            ApLoaderVersion="D10300",
-        ),
-        Status=Status(Sensor="", ApplicationProcessor=""),
-        OTA=OTA(
-            SensorFwLastUpdatedDate="",
-            SensorLoaderLastUpdatedDate="",
-            DnnModelLastUpdatedDate=[],
-            ApFwLastUpdatedDate="",
-            UpdateProgress=UpdateProgress,
-            UpdateStatus=UpdateStatus,
-        ),
-        Permission=Permission(FactoryReset=False),
-    )
-
-
 @pytest.mark.trio
-async def test_select_path(driver_set, tmp_path, cs_init) -> None:
+async def test_select_path(tmp_path, cs_init) -> None:
     """
     Test how selection of file path and type results in
     hash computation and determining validity of the file,
     both in the state variables and proxy properties.
     """
-
-    driver, mock_gui = driver_set
-    driver.camera_state = cs_init
-    state = driver.camera_state
-    mock_gui.mdl.bind_firmware_file_functions(state)
+    state = cs_init
+    state._init_bindings()
 
     app_fw_filename = "ota.bin"
     app_fw_file_path = tmp_path / app_fw_filename
@@ -96,32 +66,24 @@ async def test_select_path(driver_set, tmp_path, cs_init) -> None:
     sensor_fw_file_hash = get_package_hash(sensor_fw_file_path)
 
     # Select Application Firmware
+    state.firmware_file_type.value = OTAUpdateModule.APFW
     state.firmware_file.value = app_fw_file_path
     assert state.firmware_file_hash.value == app_fw_file_hash
-    assert mock_gui.mdl.firmware_file_hash == app_fw_file_hash
-
     assert state.firmware_file_valid.value
-    assert mock_gui.mdl.firmware_file_valid
 
     # Switch path to not match its type
     state.firmware_file.value = sensor_fw_file_path
     assert not state.firmware_file_valid.value
-    assert not mock_gui.mdl.firmware_file_valid
 
     # Select Sensor Firmware
     state.firmware_file_type.value = OTAUpdateModule.SENSORFW
     state.firmware_file.value = sensor_fw_file_path
-
     assert state.firmware_file_hash.value == sensor_fw_file_hash
-    assert mock_gui.mdl.firmware_file_hash == sensor_fw_file_hash
-
     assert state.firmware_file_valid.value
-    assert mock_gui.mdl.firmware_file_valid
 
     # Switch path to not match its type
     state.firmware_file.value = app_fw_file_path
     assert not state.firmware_file_valid.value
-    assert not mock_gui.mdl.firmware_file_valid
 
 
 def test_validate_firmware_file(tmp_path):
@@ -130,7 +92,7 @@ def test_validate_firmware_file(tmp_path):
     hash computation and determining validity of the file,
     both in the state variables and proxy properties.
     """
-    from local_console.core.camera.firmware import FirmwareException
+    from local_console.core.error.base import UserException
 
     # Create dummy firmware files
     app_fw_file_path = tmp_path / "ota.bin"
@@ -139,102 +101,81 @@ def test_validate_firmware_file(tmp_path):
     sensor_fw_file_path.write_text("foobar")
 
     # For firmware validation, update report values in device config are irrelevant
-    a_config = device_config(-1, "irrelevant")
+    a_config = DeviceConfigurationSampler().sample()
 
     # Check what happens when passing an inexistent file
     inexistent_file = tmp_path / "i_dont_exist"
     assert not inexistent_file.exists()
-    with pytest.raises(FirmwareException, match="Firmware file does not exist!"):
+    with pytest.raises(UserException, match="Firmware file does not exist!") as error:
         validate_firmware_file(
             inexistent_file, OTAUpdateModule.APFW, "", current_cfg=a_config
         )
+    assert error.value.code == ErrorCodes.EXTERNAL_FIRMWARE_FILE_NOT_EXISTS
 
     # Check what happens when device configuration is not available
     with (patch("local_console.core.camera.firmware.logger") as mock_logger,):
-        assert not validate_firmware_file(
-            app_fw_file_path, OTAUpdateModule.APFW, "", current_cfg=None
+        assert (
+            validate_firmware_file(
+                app_fw_file_path, OTAUpdateModule.APFW, "", current_cfg=None
+            )
+            == FirmwareValidationStatus.INVALID
         )
         mock_logger.debug.assert_called_once_with("DeviceConfiguration is None.")
 
     # Test Application Firmware on mismatched file with the set type
-    with pytest.raises(FirmwareException, match="Invalid Application Firmware!"):
+    with pytest.raises(UserException, match="Invalid Application Firmware!") as error:
         validate_firmware_file(
             sensor_fw_file_path, OTAUpdateModule.APFW, "irrelevant", a_config
         )
+    assert error.value.code == ErrorCodes.EXTERNAL_FIRMWARE_INVALID_APPLICATION_FIRMWARE
 
     # Test matching file and type and version equal to a_config.Version.ApFwVersion
-    with pytest.raises(
-        FirmwareException, match="Version is the same as the current firmware."
-    ):
+    with (patch("local_console.core.camera.firmware.logger") as mock_logger,):
         version = a_config.Version.ApFwVersion
-        validate_firmware_file(
+        validation_result: FirmwareValidationStatus = validate_firmware_file(
             app_fw_file_path, OTAUpdateModule.APFW, version, a_config
+        )
+        assert validation_result == FirmwareValidationStatus.SAME_FIRMWARE
+        mock_logger.debug.assert_called_once_with(
+            "Received firmware is the same as the one currently installed in the device."
         )
 
     # Test matching file and type and a different version
-    assert validate_firmware_file(
-        app_fw_file_path, OTAUpdateModule.APFW, "D700T0", a_config
+    assert (
+        validate_firmware_file(
+            app_fw_file_path, OTAUpdateModule.APFW, "D700T0", a_config
+        )
+        == FirmwareValidationStatus.VALID
     )
 
     # Test Sensor Firmware on mismatched file with the set type
-    with pytest.raises(FirmwareException, match="Invalid Sensor Firmware!"):
+    with pytest.raises(UserException, match="Invalid Sensor Firmware!") as error:
         validate_firmware_file(
             app_fw_file_path, OTAUpdateModule.SENSORFW, "irrelevant", a_config
         )
+    assert error.value.code == ErrorCodes.EXTERNAL_FIRMWARE_INVALID_SENSOR_FIRMWARE
 
     # Test matching file and type and version equal to a_config.Version.ApFwVersion
-    with pytest.raises(
-        FirmwareException, match="Version is the same as the current firmware."
-    ):
+    with (patch("local_console.core.camera.firmware.logger") as mock_logger,):
+        a_config.Version.SensorFwVersion = "010707"
         version = a_config.Version.SensorFwVersion
-        validate_firmware_file(
-            sensor_fw_file_path, OTAUpdateModule.SENSORFW, version, a_config
+        assert (
+            validate_firmware_file(
+                sensor_fw_file_path, OTAUpdateModule.SENSORFW, version, a_config
+            )
+            == FirmwareValidationStatus.SAME_FIRMWARE
+        )
+        mock_logger.debug.assert_called_once_with(
+            "Received firmware is the same as the one currently installed in the device."
         )
 
     # Test matching file and type and a different version
-    assert validate_firmware_file(
-        sensor_fw_file_path, OTAUpdateModule.SENSORFW, "010300", a_config
+    assert (
+        validate_firmware_file(
+            sensor_fw_file_path, OTAUpdateModule.SENSORFW, "010300", a_config
+        )
+        == FirmwareValidationStatus.VALID
     )
-
-
-def test_progress_update_checkpoint():
-
-    from local_console.core.camera.firmware import progress_update_checkpoint
-    from local_console.core.camera.firmware import TransientStatus
-    from local_console.gui.view.firmware_screen.firmware_screen import (
-        FirmwareTransientStatus,
-    )
-
-    for indicator_class in (TransientStatus, FirmwareTransientStatus):
-        indicator = indicator_class()
-
-        assert not progress_update_checkpoint(
-            device_config(0, "Downloading"), indicator
-        )
-        assert indicator.progress_download == 0
-        assert indicator.progress_update == 0
-
-        assert not progress_update_checkpoint(
-            device_config(75, "Downloading"), indicator
-        )
-        assert indicator.progress_download == 75
-        assert indicator.progress_update == 0
-
-        assert not progress_update_checkpoint(device_config(25, "Updating"), indicator)
-        assert indicator.progress_download == 100
-        assert indicator.progress_update == 25
-
-        assert not progress_update_checkpoint(
-            device_config(100, "Rebooting"), indicator
-        )
-        assert indicator.progress_download == 100
-        assert indicator.progress_update == 100
-
-        assert progress_update_checkpoint(device_config(100, "Done"), indicator)
-        assert indicator.progress_download == 100
-        assert indicator.progress_update == 100
-
-        assert progress_update_checkpoint(device_config(75, "Failed"), indicator)
 
 
 @pytest.mark.trio
@@ -242,17 +183,19 @@ async def test_update_firmware_task_invalid(tmp_path, cs_init) -> None:
 
     from local_console.core.camera.firmware import update_firmware_task
 
-    from local_console.core.camera.firmware import TransientStatus
-    from local_console.core.camera.firmware import FirmwareException
+    from local_console.core.error.base import UserException
+    from local_console.core.error.code import ErrorCodes
 
     camera_state = cs_init
-    indicator = TransientStatus()
     error_notify = Mock()
     with (
         patch.object(camera_state, "ota_event") as mock_ota_event,
         patch(
             "local_console.core.camera.firmware.validate_firmware_file",
-            side_effect=FirmwareException("invalid file"),
+            side_effect=UserException(
+                ErrorCodes.EXTERNAL_FIRMWARE_INVALID_APPLICATION_FIRMWARE,
+                "invalid file",
+            ),
         ),
     ):
         # Pretend these values are meaningful
@@ -260,26 +203,43 @@ async def test_update_firmware_task_invalid(tmp_path, cs_init) -> None:
         camera_state.firmware_file_type.value = "some type"
         camera_state.firmware_file_version.value = "some version"
 
-        await update_firmware_task(camera_state, indicator, error_notify)
+        await update_firmware_task(camera_state, error_notify)
         mock_ota_event.assert_not_awaited()
         error_notify.assert_called_once_with("invalid file")
 
 
 @pytest.mark.trio
 @pytest.mark.parametrize(
-    "ota_type",
-    ["ApFw", "SensorFw"],
+    "ota_type,initial_status,final_status",
+    [
+        ("ApFw", OTAUpdateStatus.DONE, OTAUpdateStatus.DONE),
+        ("ApFw", OTAUpdateStatus.FAILED, OTAUpdateStatus.DONE),
+        ("ApFw", OTAUpdateStatus.FAILED, OTAUpdateStatus.FAILED),
+        ("ApFw", OTAUpdateStatus.DONE, OTAUpdateStatus.FAILED),
+        ("ApFw", OTAUpdateStatus.DOWNLOADING, OTAUpdateStatus.FAILED),
+        ("ApFw", OTAUpdateStatus.UPDATING, OTAUpdateStatus.FAILED),
+        ("ApFw", OTAUpdateStatus.DOWNLOADING, OTAUpdateStatus.DONE),
+        ("ApFw", OTAUpdateStatus.UPDATING, OTAUpdateStatus.DONE),
+        ("SensorFw", OTAUpdateStatus.DONE, OTAUpdateStatus.DONE),
+        ("SensorFw", OTAUpdateStatus.FAILED, OTAUpdateStatus.DONE),
+        ("SensorFw", OTAUpdateStatus.FAILED, OTAUpdateStatus.FAILED),
+        ("SensorFw", OTAUpdateStatus.DONE, OTAUpdateStatus.FAILED),
+        ("SensorFw", OTAUpdateStatus.DOWNLOADING, OTAUpdateStatus.FAILED),
+        ("SensorFw", OTAUpdateStatus.UPDATING, OTAUpdateStatus.FAILED),
+        ("SensorFw", OTAUpdateStatus.DOWNLOADING, OTAUpdateStatus.DONE),
+        ("SensorFw", OTAUpdateStatus.UPDATING, OTAUpdateStatus.DONE),
+    ],
 )
-async def test_update_firmware_task_valid(tmp_path, cs_init, ota_type) -> None:
+async def test_update_firmware_task_valid(
+    tmp_path, cs_init, ota_type, initial_status, final_status
+) -> None:
 
     from local_console.core.camera.firmware import update_firmware_task
 
-    from local_console.core.camera.firmware import TransientStatus
     from local_console.core.camera.enums import OTAUpdateModule
 
     camera_state = cs_init
 
-    indicator = TransientStatus()
     error_notify = Mock()
 
     extension = "bin" if ota_type == "ApFw" else "fpk"
@@ -291,7 +251,8 @@ async def test_update_firmware_task_valid(tmp_path, cs_init, ota_type) -> None:
     camera_state.firmware_file_version.value = "ABCDEF"
 
     # Set the end state
-    camera_state.device_config.value = device_config(100, "Done")
+    camera_state.device_config.value = DeviceConfigurationSampler().sample()
+    camera_state.mqtt_port.value = 1883
 
     mock_agent = MagicMock()
     mock_agent.mqtt_scope.return_value = AsyncMock()
@@ -310,6 +271,15 @@ async def test_update_firmware_task_valid(tmp_path, cs_init, ota_type) -> None:
         )
     ).model_dump_json()
 
+    sequence_updates = [
+        initial_status,
+        OTAUpdateStatus.DOWNLOADING,
+        OTAUpdateStatus.DOWNLOADING,
+        OTAUpdateStatus.DOWNLOADING,
+        OTAUpdateStatus.UPDATING,
+        final_status,
+    ]
+
     with (
         patch.object(camera_state, "ota_event") as mock_ota_event,
         patch("local_console.core.camera.firmware.Agent", return_value=mock_agent),
@@ -321,14 +291,16 @@ async def test_update_firmware_task_valid(tmp_path, cs_init, ota_type) -> None:
             "local_console.core.camera.firmware.get_webserver_ip",
             return_value="1.1.1.1",
         ),
+        mock_get_ota_update_status(sequence_updates),
     ):
-        await update_firmware_task(camera_state, indicator, error_notify)
+
+        await update_firmware_task(camera_state, error_notify)
 
         mock_agent.configure.assert_awaited_once_with(
             "backdoor-EA_Main", "placeholder", payload
         )
-        mock_ota_event.assert_awaited_once_with()
-        error_notify.assert_not_called()
-        assert indicator.progress_download == 100
-        assert indicator.progress_update == 100
-        assert indicator.update_status == "Done"
+        assert len(mock_ota_event.mock_calls) == len(sequence_updates) - 1
+        if sequence_updates[-1] == OTAUpdateStatus.DONE:
+            error_notify.assert_not_called()
+        else:
+            error_notify.assert_called()

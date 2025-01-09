@@ -1,0 +1,165 @@
+<!--
+ Copyright 2024 Sony Semiconductor Solutions Corp.
+
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
+
+     http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+
+ SPDX-License-Identifier: Apache-2.0
+-->
+
+<div class="hub-page">
+  <div class="page-header">
+    <div class="page-header-title">
+      <img src="images/{{ theme }}/provisioning_hub.svg" alt="" />
+      <span>Provisioning</span>
+    </div>
+  </div>
+  <div class="text-2 my-2 row align-center">
+    <span>Device Identity</span>
+    <app-infotip
+      tip="Choose 'Register' to register a new devices, or 'Connect' to generate a QR code for an existing device and getting a preview"
+    />
+    <app-segments
+      data-testid="hub-mode-selector"
+      [(ngModel)]="hubMode"
+      [options]="['Register', 'Connect']"
+    />
+  </div>
+
+  <div class="page-body">
+    <app-card
+      [title]="'Register Device Identity'"
+      subtitle="Register your device to Local Console with device name and MQTT port number to be used."
+      *ngIf="hubMode === 'Register'"
+      infoTip="Click 'Register' to register a new device and 'Reset' to empty the fields"
+    >
+      <form [formGroup]="createDeviceGroup" card-body>
+        <div class="hub-section minimal rows">
+          <div class="section-column">
+            <div class="section-header">
+              <div class="header-title">
+                <span>Device Name</span>
+              </div>
+            </div>
+            <div class="section-body flex-break">
+              <app-text-input
+                data-testid="device-register-name"
+                type="text"
+                formName="device_name"
+                placeholder="My Device"
+              >
+              </app-text-input>
+            </div>
+          </div>
+          <div class="section-column">
+            <div class="section-header">
+              <div class="header-title">
+                <span>MQTT Port</span>
+              </div>
+            </div>
+            <div class="section-body flex-break">
+              <app-text-input
+                data-testid="device-register-port"
+                type="number"
+                formName="mqtt_port"
+                placeholder="1883"
+              >
+              </app-text-input>
+            </div>
+          </div>
+        </div>
+      </form>
+      <!-- footer buttons -->
+      <button
+        card-footer
+        data-testid="device-reset"
+        mat-button
+        class="weak-hub-btn qrcode-btn"
+        [disabled]="!createDeviceGroup.dirty"
+        (click)="clearDeviceCreation()"
+      >
+        Reset
+      </button>
+      <button
+        card-footer
+        data-testid="device-register"
+        mat-button
+        class="normal-hub-btn qrcode-btn"
+        [disabled]="!createDeviceGroup.valid"
+        (click)="createDevice()"
+      >
+        Register
+      </button>
+    </app-card>
+
+    <!-- network settings pane -->
+    <app-card
+      [hidden]="hubMode === 'Register'"
+      title="Connect with QR Code"
+      subtitle="Configure network settings through QR code to start provisioning device"
+      infoTip="Select a device at 'Device Name', fill the fields with the desired setting values and click 'Generate' to obtain the QR"
+    >
+      <div card-body class="w-6 pr-2 border-box">
+        <div class="text-3">Device Name</div>
+        <mat-form-field class="fullwidth">
+          <mat-select [(ngModel)]="selectedDevice">
+            @for (device of (deviceService.devices$ | async) | localDevices;
+            track device.port) {
+            <mat-option [value]="device"
+              >{{device.device_name}}
+              <span style="color: #696969; font-size: 13px"
+                >(MQTT port: {{device.port}})</span
+              ></mat-option
+            >
+            }
+          </mat-select>
+        </mat-form-field>
+      </div>
+      <app-network-settings
+        card-body
+        #networkSettings
+        (qrCode)="onGenerateQrCode($event)"
+        [mqttPort]="selectedDevice?.port"
+        id="NetworkSettings"
+      ></app-network-settings>
+
+      <!-- footer buttons -->
+      <button
+        card-footer
+        mat-button
+        class="weak-hub-btn qrcode-btn"
+        [disabled]="!networkSettings.qrcodeFormGroup || !networkSettings.qrcodeFormGroup.dirty"
+        (click)="networkSettings.clearAll()"
+      >
+        Reset
+      </button>
+      <button
+        card-footer
+        data-testid="qr-generate"
+        mat-button
+        class="normal-hub-btn qrcode-btn"
+        (click)="networkSettings.generateQRCode()"
+      >
+        Generate
+      </button>
+    </app-card>
+
+    <app-device-details
+      *ngIf="hubMode !== 'Register'"
+      [selectedDevice]="selectedDevice"
+    ></app-device-details>
+  </div>
+</div>
+
+<div *ngIf="isLoading" class="loader">
+  <mat-spinner></mat-spinner>
+</div>

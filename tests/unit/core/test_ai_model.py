@@ -21,6 +21,7 @@ import pytest
 from local_console.core.camera.ai_model import deploy_step
 from local_console.core.camera.ai_model import undeploy_step
 from local_console.core.commands.ota_deploy import get_package_hash
+from local_console.utils.trio import TimeoutConfig
 
 from tests.fixtures.camera import cs_init
 
@@ -47,7 +48,7 @@ async def test_undeploy_step_rpc_sent(network_id: str, cs_init):
         patch.object(camera_state, "device_config") as mock_config,
     ):
         mock_config.value.OTA.UpdateStatus = "Done"
-        await undeploy_step(camera_state, network_id, MagicMock())
+        await undeploy_step(camera_state, network_id, MagicMock(), TimeoutConfig())
         payload = (
             f'{{"OTA":{{"UpdateModule":"DnnModel","DeleteNetworkID":"{network_id}"}}}}'
         )
@@ -68,7 +69,7 @@ async def test_undeploy_step_not_deployed_model(update_status: str, cs_init):
         patch.object(camera_state, "ota_event") as mock_ota_event,
     ):
         mock_config.value.OTA.UpdateStatus = update_status
-        await undeploy_step(camera_state, "000001", MagicMock())
+        await undeploy_step(camera_state, "000001", MagicMock(), TimeoutConfig())
         mock_ota_event.assert_not_awaited()
 
 
@@ -104,7 +105,9 @@ async def test_deploy_step(tmp_path, network_id, update_status: str, cs_init):
         mock_config.value.OTA.UpdateStatus = update_status
         with open(tmp_file, "w") as f:
             f.write("dummy")
-        await deploy_step(camera_state, network_id, tmp_file, MagicMock())
+        await deploy_step(
+            camera_state, network_id, tmp_file, TimeoutConfig(), MagicMock()
+        )
         hashvalue = get_package_hash(tmp_file)
         payload = (
             '{"OTA":{"UpdateModule":"DnnModel","DesiredVersion":"",'

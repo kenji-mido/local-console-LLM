@@ -1,0 +1,183 @@
+<!--
+ Copyright 2024 Sony Semiconductor Solutions Corp.
+
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
+
+     http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+
+ SPDX-License-Identifier: Apache-2.0
+-->
+
+<div class="deployment-hub-screen">
+  <div class="deployment-hub-page">
+    <div class="page-header">
+      <div class="component-title">
+        <img
+          src="images/{{ theme }}/deployment-hub.svg"
+          alt=""
+          class="page-icon"
+        />
+        <span class="span">Deployment</span>
+      </div>
+    </div>
+    <div class="page-body">
+      <app-card
+        title="Deploy Edge Device Software"
+        subtitle="Select a target device and Edge Device Software to be deployed"
+      >
+        <form [formGroup]="bodyForm" card-body>
+          <!-- Select Device section -->
+          <div class="section">
+            <div class="section-title">Select Device</div>
+            <div class="hub-section">
+              <div class="section-body" data-testid="select-device-section">
+                <button
+                  data-testid="select-device-to-deploy-button"
+                  class="weak-hub-btn"
+                  type="button"
+                  (click)="openDeviceSelectionDialog()"
+                >
+                  Select
+                </button>
+                <div class="device-section">
+                  <app-icon-text
+                    [text]="selectedDevice?.device_name || 'Not selected'"
+                  ></app-icon-text>
+                  @if(selectedDevice && selectedDevice.connection_state !==
+                  DeviceStatus.Unknown) {
+                  <div class="ws-12 row gap-1 align-center">
+                    <img
+                      [src]="selectedDevice.connection_state | deviceStatusSvg"
+                    />
+                    <span>{{ selectedDevice.connection_state }}</span>
+                  </div>
+                  }
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Select AI Model and Application Section -->
+          <div class="section">
+            <div class="section-title">Select AI Model and Application</div>
+            <div class="hub-section">
+              <div class="section-body rows element-layout">
+                <app-file-input
+                  #modelFile
+                  data-testid="model-selector"
+                  title="AI Model"
+                  (fileSelected)="[onModelSelection($event)]"
+                  extension=".pkg"
+                ></app-file-input>
+                <app-file-input
+                  #appFile
+                  title="Application"
+                  data-testid="app-selector"
+                  (fileSelected)="[onApplicationSelection($event)]"
+                  extension=".aot"
+                ></app-file-input>
+              </div>
+
+              <!-- Firmware Options Section -->
+              <div class="section-header">
+                <div class="card-belt">
+                  <span style="margin-right: 10px">Firmware Options</span>
+                  <app-infotip
+                    tip="If you select a firmware file to deploy, you must specify the version. If not the deployment will not be enabled"
+                  />
+                  <app-toggle
+                    [toggleStatus]="firmwareOptions"
+                    (click)="firmwareOptions = !this.firmwareOptions; resetFirmwareOptions()"
+                    >Firmware Options</app-toggle
+                  >
+                </div>
+              </div>
+
+              <div class="section-body rows">
+                <ng-container *ngIf="firmwareOptions">
+                  <!-- Firmware Fields Row -->
+                  <div class="element-layout">
+                    <app-file-input
+                      #mainChipFile
+                      title="Main Chip Firmware"
+                      data-testid="chip-fw-selector"
+                      (fileSelected)="[bodyForm.markAsDirty(), onMainChipFwSelection($event)]"
+                      extension=".bin"
+                    ></app-file-input>
+                    <span class="version-layout">Version</span>
+                    <app-text-input
+                      type="text"
+                      formName="camFwControl"
+                      placeholder="D700F6"
+                      maxLength="10"
+                    ></app-text-input>
+                  </div>
+                  <div class="element-layout">
+                    <app-file-input
+                      #sensorChipFile
+                      title="Sensor Chip Firmware (Main)"
+                      data-testid="sensor-fw-selector"
+                      (fileSelected)="[bodyForm.markAsDirty(), onSensorChipFwSelection($event)]"
+                      extension=".fpk"
+                    ></app-file-input>
+                    <span class="version-layout">Version</span>
+                    <app-text-input
+                      type="text"
+                      formName="sensorFwControl"
+                      placeholder="010707"
+                      maxLength="10"
+                    ></app-text-input>
+                  </div>
+                </ng-container>
+              </div>
+            </div>
+          </div>
+          <div class="row gap-0">
+            <button
+              class="weak-hub-btn"
+              [disabled]="!(bodyForm.dirty || app_id || model_id)"
+              (click)="reset()"
+            >
+              Reset
+            </button>
+            <button
+              class="normal-hub-btn"
+              type="button"
+              (click)="onDeploy()"
+              [disabled]="isDeployButtonDisabled()"
+            >
+              Deploy
+            </button>
+          </div>
+        </form>
+      </app-card>
+    </div>
+    <div class="page-body">
+      <app-card title="Deployment Status" subtitle="Check deployment status">
+        <div card-header-right>
+          <span class="span-refresh">Last Update: {{ refresh_datetime }}</span>
+          <button
+            mat-button
+            class="weak-hub-btn refresh-btn"
+            (click)="refresh()"
+          >
+            <img [src]="refreshIcon" alt="" />
+            <span class="btn-span">Refresh</span>
+          </button>
+        </div>
+        <form [formGroup]="bodyStatus" card-body>
+          <app-deployment-list card-body></app-deployment-list>
+        </form>
+      </app-card>
+    </div>
+    <div class="page-footer"></div>
+  </div>
+</div>

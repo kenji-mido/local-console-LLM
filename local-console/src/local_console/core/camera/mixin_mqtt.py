@@ -23,10 +23,9 @@ from typing import Optional
 from typing import Protocol
 
 import trio
-from exceptiongroup import ExceptionGroup
 from local_console.clients.agent import Agent
 from local_console.clients.agent import check_attributes_request
-from local_console.core.camera._shared import IsAsyncReady
+from local_console.core.camera.enums import ConnectionState
 from local_console.core.camera.enums import MQTTTopics
 from local_console.core.camera.enums import StreamStatus
 from local_console.core.schemas.edge_cloud_if_v1 import DeviceConfiguration
@@ -34,10 +33,11 @@ from local_console.core.schemas.edge_cloud_if_v1 import Permission
 from local_console.core.schemas.edge_cloud_if_v1 import SetFactoryReset
 from local_console.core.schemas.schemas import DeviceConnection
 from local_console.core.schemas.schemas import OnWireProtocol
-from local_console.servers.broker import BrokerException
 from local_console.servers.broker import spawn_broker
 from local_console.utils.timing import TimeoutBehavior
 from local_console.utils.tracking import TrackingVariable
+from local_console.utils.trio import TaskStatus
+from pydantic import BaseModel
 from pydantic import ValidationError
 from trio import TASK_STATUS_IGNORED
 
@@ -73,7 +73,12 @@ class CanStopStreaming(Protocol):
     async def streaming_rpc_stop(self) -> None: ...
 
 
-class MQTTMixin(HoldsDeployStatus, CanStopStreaming, IsAsyncReady):
+class MQTTEvent(BaseModel):
+    topic: str
+    payload: dict[str, Any]
+
+
+class MQTTMixin(HoldsDeployStatus, CanStopStreaming):
     """
     This Mix-in class covers the MQTT management concern belonging
     to a camera's state. This includes handling the MQTT broker and
@@ -84,6 +89,7 @@ class MQTTMixin(HoldsDeployStatus, CanStopStreaming, IsAsyncReady):
 
         # Ancillary variables
         self.mqtt_client: Optional[Agent] = None
+        self.mqtt_client_status: TaskStatus = TaskStatus.STARTING
         self._onwire_schema: Optional[OnWireProtocol] = None
         self.timeouts: dict[str, TimeoutBehavior] = {}
         self._last_reception: Optional[datetime] = None
@@ -101,13 +107,11 @@ class MQTTMixin(HoldsDeployStatus, CanStopStreaming, IsAsyncReady):
 
         self.mqtt_host: TrackingVariable[str] = TrackingVariable("")
         self.mqtt_port: TrackingVariable[int] = TrackingVariable()
-        self.ntp_host: TrackingVariable[str] = TrackingVariable("")
-        self.ip_address: TrackingVariable[str] = TrackingVariable("")
-        self.subnet_mask: TrackingVariable[str] = TrackingVariable("")
-        self.gateway: TrackingVariable[str] = TrackingVariable("")
-        self.dns_server: TrackingVariable[str] = TrackingVariable("")
         self.wifi_ssid: TrackingVariable[str] = TrackingVariable("")
         self.wifi_password: TrackingVariable[str] = TrackingVariable("")
+        self.rpc_response: TrackingVariable[MQTTEvent] = TrackingVariable(
+            MQTTEvent(topic="", payload={})
+        )
 
     def _setup_timeouts(self, nursery: trio.Nursery) -> None:
         assert self._onwire_schema
@@ -173,7 +177,6 @@ class MQTTMixin(HoldsDeployStatus, CanStopStreaming, IsAsyncReady):
         self.mqtt_host.value = config.mqtt.host
         self.mqtt_port.value = int(config.mqtt.port)
         self._onwire_schema = OnWireProtocol.from_iot_spec(iot_platform)
-        self.ntp_host.value = "pool.ntp.org"
 
     async def mqtt_setup(self, *, task_status: Any = TASK_STATUS_IGNORED) -> None:
         assert self.mqtt_client is None
@@ -183,8 +186,8 @@ class MQTTMixin(HoldsDeployStatus, CanStopStreaming, IsAsyncReady):
 
         port = self.mqtt_port.value
 
-        self.mqtt_client = Agent(self.mqtt_host.value, port, self._onwire_schema)
         try:
+            self.mqtt_client = Agent(self.mqtt_host.value, port, self._onwire_schema)
             async with (
                 trio.open_nursery() as nursery,
                 spawn_broker(port, nursery, False),
@@ -199,9 +202,12 @@ class MQTTMixin(HoldsDeployStatus, CanStopStreaming, IsAsyncReady):
             ):
                 assert self.mqtt_client.client
                 self._setup_timeouts(nursery)
-
                 task_status.started(True)
+                self.mqtt_client_status = TaskStatus.SUCCESS
                 streaming_stop_required = True
+                logger.debug(
+                    f"Broker started up and listening to the correct port {port}"
+                )
                 async with self.mqtt_client.client.messages() as mgen:
                     async for msg in mgen:
                         if await check_attributes_request(
@@ -221,11 +227,9 @@ class MQTTMixin(HoldsDeployStatus, CanStopStreaming, IsAsyncReady):
                         if self._onwire_schema == OnWireProtocol.EVP2 and self.is_ready:
                             self.timeouts["periodic-reports"].tap()
 
-        except ExceptionGroup as exc_grp:
+        except Exception:
             task_status.started(False)
-            for e in exc_grp.exceptions:
-                if isinstance(e, BrokerException):
-                    await self.message_send_channel.send(("error", str(e)))
+            self.mqtt_client_status = TaskStatus.ERROR
 
     async def set_periodic_reports(self) -> None:
         # Configure the device to emit status reports twice
@@ -250,6 +254,14 @@ class MQTTMixin(HoldsDeployStatus, CanStopStreaming, IsAsyncReady):
         if self.is_connected.value:
             self.timeouts["connection-alive"].tap()
 
+    @property
+    def connection_status(self) -> ConnectionState:
+        return (
+            ConnectionState.CONNECTED
+            if self.is_connected.value
+            else ConnectionState.DISCONNECTED
+        )
+
     async def connection_status_timeout(self) -> None:
         logger.debug("Connection status timed out: camera is disconnected")
         self.stream_status.value = StreamStatus.Inactive
@@ -271,6 +283,10 @@ class MQTTMixin(HoldsDeployStatus, CanStopStreaming, IsAsyncReady):
                 await self._process_deploy_status_topic(payload)
 
         if topic == MQTTTopics.TELEMETRY.value:
+            sent_from_camera = True
+
+        if MQTTTopics.RPC_RESPONSES.matches(topic):
+            self.rpc_response.value = MQTTEvent(topic=topic, payload=payload)
             sent_from_camera = True
 
         if sent_from_camera:

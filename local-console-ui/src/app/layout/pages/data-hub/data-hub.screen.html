@@ -1,0 +1,207 @@
+<!--
+ Copyright 2024 Sony Semiconductor Solutions Corp.
+
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
+
+     http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+
+ SPDX-License-Identifier: Apache-2.0
+-->
+
+<div class="hub scroll fullheight">
+  <div class="stack">
+    <div class="text-1 row">
+      <img src="images/light/data_hub_icon.svg" />
+      <span>Inference</span>
+    </div>
+  </div>
+  <div class="row grow">
+    <div class="card-box basis-11">
+      <div class="stack">
+        <div class="text-2 my-2 row align-center">
+          <span> Environment </span>
+          <app-infotip
+            tip="Configure settings for AI Inference. Optionally, you can select local folders of your choice to save Image files and Inference Result Metadata files."
+          />
+        </div>
+      </div>
+      <div class="col">
+        <div class="field-box stack">
+          <div class="text-3">Device</div>
+          <div class="row gap-1 align-center">
+            <app-icon-text
+              [text]="selectedDevice?.device_name || 'Not selected'"
+            ></app-icon-text>
+            <button
+              (click)="openDeviceSelectionDialog()"
+              class="stack center align-center bg-edgeaipf round-1 ws-1 hs-1"
+            >
+              <img class="bleached" src="images/light/device_item.svg" />
+            </button>
+          </div>
+        </div>
+        <div class="field-box stack">
+          <div class="text-3 row align-center">
+            <span> Operation Mode </span>
+            <app-infotip tip="Select a type of AI inference operation." />
+          </div>
+          <div class="stack">
+            <mat-form-field class="fullwidth mb-0">
+              <mat-select [(ngModel)]="operationMode">
+                <mat-option value="classification"
+                  >{{getModelName("classification")}}</mat-option
+                >
+                <mat-option value="detection"
+                  >{{getModelName("detection")}}</mat-option
+                >
+                <mat-option value="image">Image Capture</mat-option>
+              </mat-select>
+            </mat-form-field>
+            <app-file-input
+              *ngIf="operationMode !== 'image'"
+              iconButton="images/light/file_folder.svg"
+              #modelFile
+              title="Label File"
+              (fileSelected)="onLabelsSelected($event)"
+            ></app-file-input>
+            <app-file-input
+              *ngIf="operationMode !== 'image'"
+              #paramsFile
+              iconButton="images/light/file_folder.svg"
+              title="PPL Parameters File"
+              (fileSelected)="onPPLFileSelected($event)"
+            ></app-file-input>
+          </div>
+        </div>
+        <div class="field-box stack">
+          <div class="text-3">Storage</div>
+          <div class="stack">
+            <app-folder-picker
+              title="Image Folder Path"
+              [folderPath]="selectedDeviceConfiguration.image_dir_path || 'Not Selected'"
+              (folderSelected)="onImagePathSelected($event)"
+            ></app-folder-picker>
+            <app-folder-picker
+              title="Inference Folder Path"
+              [folderPath]="selectedDeviceConfiguration.inference_dir_path || 'Not Selected'"
+              (folderSelected)="onInferencePathSelected($event)"
+            ></app-folder-picker>
+            <div class="col storage">
+              <span>Storage Size Limitation</span>
+              <div class="row align-center">
+                <app-number-spinner
+                  [min]="1"
+                  [max]="50000"
+                  [data]="selectedDeviceConfiguration.size!"
+                  [editableDisabled]="false"
+                  [minusPlusDisabled]="false"
+                  (DataChange)="onStorageSizeChange($event)"
+                ></app-number-spinner>
+                <span>MB</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="grow"></div>
+        <div class="row">
+          <button
+            class="normal-hub-btn"
+            aria-label="Apply configuration"
+            data-testid="apply-configuration"
+            [disabled]="!selectedDevice"
+            (click)="onApply()"
+          >
+            Apply
+          </button>
+        </div>
+      </div>
+    </div>
+    <div class="card-box grow">
+      <div class="stack">
+        <div class="text-3 row align-center">
+          <span> Inference Control </span>
+          <app-infotip
+            tip="Start/Stop AI Inference.  Inference results will be decoded and annotated for visualization. "
+          />
+        </div>
+      </div>
+      <div class="inference row grow">
+        <div class="field-box basis-11 stack">
+          <div class="text-3 row align-center">
+            <span> Region of Interest </span>
+            <app-infotip
+              tip="Select the area of view you are interested in for inference using your mouse."
+            />
+          </div>
+          @if(visualizer && (visualizer.status | async)) {
+          <app-roi-display [visualizer]="visualizer"></app-roi-display>
+          }
+        </div>
+        <div class="field-box visualization row">
+          <div class="image-stream">
+            <div class="text-3 pb-1">Image</div>
+            <div>
+              <app-device-visualizer
+                class="p-1 border-box fullwidth aspect-square"
+                [device]="selectedDevice"
+                [mode]="operationMode === 'image' ? Mode.ImageOnly : Mode.ImageAndInferenceResult"
+                [labels]="labels"
+                (frameReceived)="onFrameReceived($event)"
+              >
+              </app-device-visualizer>
+            </div>
+          </div>
+          <div class="inference-result">
+            <div class="text-3 subtitle">Results and Status</div>
+            <div class="text-info">
+              <div class="text-info-content">
+                <span><b>Status</b></span>
+                <span
+                  >{{(visualizer?.status | async) ? 'Streaming':
+                  'Stopped'}}</span
+                >
+              </div>
+              <div class="text-info-content">
+                <span><b>Mode</b></span>
+                <span>{{getModeName(operationMode)}}</span>
+              </div>
+              <div class="text-info-content">
+                <span><b>AI Model</b></span>
+                <span>{{getModelName(operationMode)}}</span>
+              </div>
+            </div>
+            <app-inference-display
+              [disabled]="operationMode === 'image'"
+              [inference]="inference"
+              [labels]="labels"
+            ></app-inference-display>
+          </div>
+        </div>
+      </div>
+      <div class="row start-stop">
+        <button
+          class="weak-hub-btn button"
+          [disabled]="!(visualizer?.status | async)"
+          (click)="stopStreaming()"
+        >
+          Stop
+        </button>
+        <button
+          class="normal-hub-btn button"
+          [disabled]="(visualizer?.status | async)"
+          (click)="startStreaming()"
+        >
+          Start
+        </button>
+      </div>
+    </div>
+  </div>
+</div>

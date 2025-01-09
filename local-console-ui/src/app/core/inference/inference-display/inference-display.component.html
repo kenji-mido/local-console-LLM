@@ -1,0 +1,72 @@
+<!--
+ Copyright 2024 Sony Semiconductor Solutions Corp.
+
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
+
+     http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+
+ SPDX-License-Identifier: Apache-2.0
+-->
+
+<!-- TODO: revisit itemSize. Arbitrary number. -->
+<app-segments
+  data-testid="hub-mode-selector"
+  [(ngModel)]="displayMode"
+  [options]="['Label', 'Json']"
+  [disabled]="disabled"
+  class="selector"
+/>
+@if (displayMode === "Label") {
+  <div class="field-box p-1 col hs-10">
+    @if (rawInference) {
+      <cdk-virtual-scroll-viewport [itemSize]="100" class="viewport">
+        <div class="format">
+          <div>
+            @for (inference of inferenceItems; track inference.class_id) {
+              <div class="element-spacing">
+                @if (isClassificationInference(rawInference)) {
+                  <div class="row">
+                    <div
+                      class="square"
+                      [appRgbBackground]="inference.color"
+                    ></div>
+                    <div>{{ inference.label }}</div>
+                  </div>
+                  <div class="row align-center pb-1 row">
+                    <div class="line row w-9">
+                      <div
+                        class="line-complete"
+                        [ngStyle]="{ width: inference.score + '%' }"
+                      ></div>
+                    </div>
+                    <div class="w-3">{{ inference.score }}%</div>
+                  </div>
+                } @else {
+                  <div class="row align-center pb-1">
+                    <div
+                      class="square"
+                      [appRgbBackground]="inference.color"
+                    ></div>
+                    <div>{{ inference.label }}</div>
+                  </div>
+                }
+              </div>
+            }
+          </div>
+        </div>
+      </cdk-virtual-scroll-viewport>
+    }
+  </div>
+} @else {
+  <div class="field-box p-0 col hs-10">
+    <app-json [object]="rawInference"></app-json>
+  </div>
+}

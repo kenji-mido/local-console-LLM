@@ -20,7 +20,7 @@ from typing import Annotated
 from typing import Optional
 
 import typer
-from local_console.core.camera.qr import get_qr_object
+from local_console.core.camera.qr.qr import get_qr_object
 from local_console.core.config import config_obj
 from local_console.plugin import PluginBase
 from local_console.utils.local_network import get_mqtt_ip
@@ -65,7 +65,7 @@ def qr(
     port = device_config.mqtt.port if port is None else port
     tls_enabled = enable_tls
 
-    local_ip = get_mqtt_ip()
+    local_ip = get_mqtt_ip(device_config)
     if is_localhost(host) or host == local_ip:
         host = local_ip
 

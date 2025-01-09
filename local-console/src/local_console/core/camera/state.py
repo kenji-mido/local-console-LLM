@@ -16,22 +16,26 @@
 import logging
 from pathlib import Path
 from typing import Any
+from typing import Callable
 from typing import Optional
 
 import trio
 from local_console.core.camera._shared import MessageType
+from local_console.core.camera.enums import ApplicationConfiguration
 from local_console.core.camera.enums import DeploymentType
 from local_console.core.camera.enums import DeployStage
 from local_console.core.camera.enums import FirmwareExtension
 from local_console.core.camera.enums import OTAUpdateModule
 from local_console.core.camera.mixin_mqtt import MQTTMixin
+from local_console.core.camera.mixin_streaming import default_process_camera_upload
 from local_console.core.camera.mixin_streaming import StreamingMixin
 from local_console.core.commands.deploy import deploy_status_empty
 from local_console.core.commands.deploy import DeployFSM
+from local_console.core.commands.deploy import get_empty_deployment
 from local_console.core.commands.deploy import single_module_manifest_setup
 from local_console.core.commands.deploy import verify_report
 from local_console.core.commands.ota_deploy import get_package_hash
-from local_console.gui.enums import ApplicationConfiguration
+from local_console.core.config import config_obj
 from local_console.utils.tracking import TrackingVariable
 from local_console.utils.validation import validate_imx500_model_file
 from trio import CancelScope
@@ -62,9 +66,12 @@ class CameraState(MQTTMixin, StreamingMixin):
         self,
         message_send_channel: MemorySendChannel[MessageType],
         trio_token: TrioToken,
+        process_camera_upload: Callable[
+            [StreamingMixin, bytes, str], None
+        ] = default_process_camera_upload,
     ) -> None:
         MQTTMixin.__init__(self)
-        StreamingMixin.__init__(self)
+        StreamingMixin.__init__(self, process_camera_upload)
 
         self.message_send_channel = message_send_channel
         self.trio_token: TrioToken = trio_token
@@ -100,7 +107,6 @@ class CameraState(MQTTMixin, StreamingMixin):
         self._init_bindings_streaming()
 
         self.deploy_stage.subscribe_async(self._on_deploy_stage)
-        self.deploy_status.subscribe_async(self._on_deploy_status)
         self.deploy_operation.subscribe_async(self._on_deployment_operation)
 
         def validate_fw_file(current: Optional[Path], previous: Optional[Path]) -> None:
@@ -166,12 +172,21 @@ class CameraState(MQTTMixin, StreamingMixin):
     ) -> None:
         if current in (DeployStage.Done, DeployStage.Error):
             await self.deploy_operation.aset(None)
+            self.deploy_status.unsubscribe_async(self._on_deploy_status)
 
     async def do_app_deployment(self) -> None:
+        assert self._nursery
         assert self.mqtt_client
+        assert self.mqtt_port.value
         assert self.module_file.value
         assert self._deploy_fsm is None
 
+        my_config = config_obj.get_device_config(self.mqtt_port.value)
+
+        # 1. Perform empty deployment
+        await self._undeploy_apps()
+
+        # 2. Actually deploy the module
         self._deploy_fsm = DeployFSM.instantiate(
             self.mqtt_client.onwire_schema,
             self.mqtt_client.deploy,
@@ -181,17 +196,54 @@ class CameraState(MQTTMixin, StreamingMixin):
             ApplicationConfiguration.NAME,
             self.module_file.value,
             self._deploy_fsm.webserver,
+            my_config,
         )
         self._deploy_fsm.set_manifest(manifest)
+        self.deploy_status.subscribe_async(self._on_deploy_status)
         await self.deploy_operation.aset(DeploymentType.Application)
 
-    async def startup(self, *, task_status: Any = TASK_STATUS_IGNORED) -> None:
+    async def _undeploy_apps(self) -> None:
+        """
+        Create a Deploy FSM with an empty manifest and
+        see to its completion, to reset the camera to
+        a blank deployment state.
+        """
+        assert self._nursery
+        assert self.mqtt_client
+
+        status_ev = trio.Event()
+
+        async def wait_for_completion(stage: DeployStage) -> None:
+            if stage == DeployStage.Done:
+                status_ev.set()
+
+        async def undeploy_fsm_update(
+            current: Optional[dict[str, Any]], previous: Optional[dict[str, Any]]
+        ) -> None:
+            if current:
+                await undeploy_fsm.update(current)
+
+        undeploy_fsm = DeployFSM.instantiate(
+            self.mqtt_client.onwire_schema,
+            self.mqtt_client.deploy,
+            wait_for_completion,
+            deploy_webserver=False,
+        )
+        undeploy_fsm.set_manifest(get_empty_deployment())
+        self.deploy_status.subscribe_async(undeploy_fsm_update)
+        await undeploy_fsm.start(self._nursery)
+        await status_ev.wait()
+        self.deploy_status.unsubscribe_async(undeploy_fsm_update)
+
+    async def startup(
+        self, mqtt_port: int, *, task_status: Any = TASK_STATUS_IGNORED
+    ) -> None:
         async with trio.open_nursery() as nursery:
             if not await nursery.start(self.mqtt_setup):
                 task_status.started(False)
                 return
 
-            nursery.start_soon(self.blobs_webserver_task)
+            nursery.start_soon(self.blobs_webserver_task, mqtt_port)
             self.dir_monitor.start()
 
             self._nursery = nursery
