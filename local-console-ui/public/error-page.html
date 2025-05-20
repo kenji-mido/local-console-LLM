@@ -39,27 +39,88 @@
         background-color: var(--color-edgeaipf);
         height: 100px;
       }
+
       .footer img {
         width: 480px;
         height: 40px;
       }
+
       pre {
         background-color: var(--color-gray-soft);
+        flex-shrink: 0;
       }
+
       .alert {
         width: 60px;
         height: 60px;
+      }
+
+      .problem p {
+        margin-top: 0.5em;
+        margin-bottom: 0.5em;
+      }
+
+      .hidden {
+        display: none;
       }
     </style>
   </head>
 
   <body class="fullwidth fullheight">
     <div class="stack fullheight center align-center gap-2">
-      <div class="stack center align-center grow">
+      <div class="stack align-center grow overflow">
         <h1 class="stack align-center gap-1">
           <img alt="" class="alert" src="images/light/status-warning.svg" />
           <span>Backend Process Closed Unexpectedly</span>
         </h1>
+        <div class="w-8 problem mosquitto-problem hidden">
+          <h2>
+            Problem: The Mosquitto broker cannot be started because another
+            instance is running at the configured ports
+          </h2>
+          <h3>What can you do?</h3>
+          <h4>Restart</h4>
+          <p>
+            Close the application and wait a minute before retrying. If the
+            problem persists, try to fully uninstall/reinstall the application.
+            <span class="text-14 bold"
+              >Warning: If you choose to reinstall, you may loose your device
+              configuration.</span
+            >
+          </p>
+          <h4>Kill Mosquitto process (cmd):</h4>
+          <p class="text-16 bold">
+            Warning: This next section will guide you through killing a running
+            process. Make sure you understand the risks and are willing to
+            accept them before continuing. If unsure, please DO NOT continue.
+          </p>
+          <p>Open a new CMD prompt and type the following:</p>
+          <p>
+            <span style="font-family: monospace !important"
+              >tasklist | findstr mosquitto</span
+            >
+          </p>
+          <p>
+            If you can see an output similar to
+            <span style="font-family: monospace !important"
+              >mosquitto.exe 123456 Console 1 1.234 KB</span
+            >
+            that means that mosquitto is indeed running, so you can try killing
+            it with
+          </p>
+          <p>
+            <span style="font-family: monospace !important"
+              >taskkill /F /IM mosquitto.exe</span
+            >
+          </p>
+          <p>If multiple instances are found, you can do</p>
+          <p>
+            <span style="font-family: monospace !important"
+              >for /F "tokens=2" %i in ('tasklist ^| findstr mosquitto') do
+              taskkill /F /PID %i</span
+            >
+          </p>
+        </div>
         <p>Please find the last error messages below:</p>
         <pre
           id="message"
@@ -76,6 +137,12 @@
       const params = new URLSearchParams(window.location.search);
       const message = params.get("message");
       const messageElement = document.getElementById("message");
+      if (
+        message.indexOf("INTERNAL_MQTT") > 0 &&
+        message.indexOf("Please stop the foreign process") > 0
+      ) {
+        document.querySelector(".mosquitto-problem").classList.remove("hidden");
+      }
       messageElement.textContent = message;
     </script>
   </body>

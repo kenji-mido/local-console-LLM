@@ -20,13 +20,20 @@ from fastapi import Depends
 from fastapi import FastAPI
 from fastapi import Request
 from local_console.core.device_services import DeviceServices
+from local_console.servers.webserver import AsyncWebserver
 
 
-def add_device_service(app: FastAPI, nursery: trio.Nursery) -> None:
+def add_device_service(
+    app: FastAPI,
+    nursery: trio.Nursery,
+    send_channel: trio.MemorySendChannel,
+    webserver: AsyncWebserver,
+) -> None:
     if not hasattr(app.state, "device_service"):
-        send, _ = trio.open_memory_channel(0)
         token = trio.lowlevel.current_trio_token()
-        app.state.device_service = DeviceServices(nursery, send, token)
+        app.state.device_service = DeviceServices(
+            nursery, send_channel, webserver, token
+        )
 
 
 def device_service_from_app(app: FastAPI) -> DeviceServices:

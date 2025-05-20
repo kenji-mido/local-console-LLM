@@ -17,15 +17,18 @@
  */
 
 import {
-  RawDrawing,
   DrawingElement,
   ImageDrawingElement,
+  RawDrawing,
 } from '../drawing/drawing';
 import {
   getDrawingElementsForClassification,
   getDrawingElementsForDetection,
 } from '../inference/drawing-adapter';
-import { isClassificationInference } from '../inference/inference';
+import {
+  isClassificationInference,
+  isDetectionInference,
+} from '../inference/inference';
 import { DeviceFrame } from './device';
 
 export function toDrawing(frame: DeviceFrame) {
@@ -37,9 +40,10 @@ export function toDrawing(frame: DeviceFrame) {
   if (frame.inference) {
     if (isClassificationInference(frame.inference)) {
       elements.push(...getDrawingElementsForClassification(frame.inference));
-    } else {
+    } else if (isDetectionInference(frame.inference)) {
       elements.push(...getDrawingElementsForDetection(frame.inference));
     }
+    // else if custom, we already have the image and that's all we draw
   }
   return <RawDrawing>{ elements };
 }

@@ -22,14 +22,16 @@ from unittest.mock import patch
 
 import pytest
 import trio
-from local_console.core.camera.state import CameraState
+from local_console.core.camera.machine import Camera
 
-from tests.fixtures.camera import cs_init_context
+from tests.mocks.config import set_configuration
+from tests.mocks.devices import cs_init_context
 from tests.mocks.files import mock_files_manager
 from tests.mocks.files import MockedFileManager
+from tests.mocks.http import AsyncWebserver
 from tests.mocks.http import mocked_http_server
-from tests.mocks.http import MockedHttpServer
 from tests.mocks.mock_paho_mqtt import MockMqttAgent
+from tests.strategies.samplers.configs import GlobalConfigurationSampler
 from tests.strategies.samplers.device_config import DeviceConfigurationSampler
 
 
@@ -37,57 +39,97 @@ class MockedIOs:
     def __init__(
         self,
         mqtt: MockMqttAgent,
-        http: MockedHttpServer,
+        http: AsyncWebserver,
         files: MockedFileManager,
-        state: CameraState,
+        camera: Camera,
     ):
         self.mqtt = mqtt
         self.http = http
         self.files = files
-        self.state = state
+        self.camera = camera
 
 
 @contextmanager
 def mocked_agent() -> Generator[MockMqttAgent, None, None]:
-    agent = MagicMock()
+
+    agent_class_mock = MagicMock()
+    mocked_agent = MockMqttAgent(agent_class_mock)
+
     with (
-        patch("local_console.core.camera.mixin_mqtt.TimeoutBehavior"),
-        patch("local_console.core.camera.firmware.Agent", agent),
-        patch("local_console.core.camera.mixin_mqtt.Agent", agent),
-        patch("local_console.core.camera.ai_model.Agent", agent),
-        patch("local_console.core.camera.mixin_mqtt.spawn_broker"),
-        patch("local_console.core.camera.state.CameraState._undeploy_apps"),
-        patch(
-            "local_console.core.camera.mixin_streaming.StreamingMixin.blobs_webserver_task"
-        ),
+        # From `git grep "TimeoutBehavior"`
+        patch("local_console.core.camera.states.common.TimeoutBehavior"),
+        patch("local_console.core.camera.states.v2.ready.TimeoutBehavior"),
+        # From `git grep "Agent("`
+        patch("local_console.commands.config.Agent", agent_class_mock),
+        patch("local_console.commands.get.Agent", agent_class_mock),
+        patch("local_console.commands.logs.Agent", agent_class_mock),
+        patch("local_console.core.camera.states.base.Agent", agent_class_mock),
+        patch("local_console.core.camera.states.v1.ota_sensor.Agent", agent_class_mock),
+        patch("local_console.core.camera.states.v1.ota_sys.Agent", agent_class_mock),
+        patch("local_console.core.camera.states.v1.rpc.Agent", agent_class_mock),
+        patch("local_console.core.commands.rpc_with_response.Agent", agent_class_mock),
     ):
-        yield MockMqttAgent(agent)
+        yield mocked_agent
+
+
+@asynccontextmanager
+async def single_device_cxmg() -> AsyncGenerator[
+    [
+        Camera,
+        MockMqttAgent,
+    ],
+    None,
+]:
+    simple_gconf = GlobalConfigurationSampler(num_of_devices=1).sample()
+    device_conn_conf = simple_gconf.devices[0]
+    set_configuration(simple_gconf)
+    with mocked_agent() as agent:
+        async with (
+            trio.open_nursery() as nursery,
+            cs_init_context(
+                mqtt_host=device_conn_conf.mqtt.host,
+                mqtt_port=device_conn_conf.mqtt.port,
+                device_config=DeviceConfigurationSampler().sample(),
+            ) as state,
+        ):
+            state._init_bindings_mqtt()
+            state._nursery = nursery
+            await nursery.start(state.mqtt_setup)
+            yield (
+                state,
+                agent,
+            )
+            agent.stop_receiving_messages()
+
+
+@pytest.fixture
+async def single_device_ctx() -> AsyncGenerator[
+    [
+        Camera,
+        MockMqttAgent,
+    ],
+    None,
+]:
+    async with single_device_cxmg() as objects:
+        yield objects
 
 
 @asynccontextmanager
 async def running_servers() -> AsyncGenerator[MockedIOs, None]:
     with (
-        mocked_agent() as agent,
         mocked_http_server() as http,
         mock_files_manager() as file_manager,
     ):
-        async with (
-            cs_init_context(
-                device_config=DeviceConfigurationSampler().sample()
-            ) as state,
-            trio.open_nursery() as nursery,
+        async with single_device_cxmg() as (
+            camera,
+            agent,
         ):
-            agent.wait_for_messages = True
-            state._init_bindings_mqtt()
-            state._nursery = nursery
-            with trio.move_on_after(120):
-                nursery.start_soon(state.mqtt_setup)
-                for _ in range(40):
-                    await trio.sleep(0.005)
-                    if state.mqtt_client:
-                        break
-                yield MockedIOs(mqtt=agent, http=http, files=file_manager, state=state)
-            agent.wait_for_messages = False
+            yield MockedIOs(
+                mqtt=agent,
+                http=http,
+                files=file_manager,
+                camera=camera,
+            )
 
 
 @pytest.fixture()
@@ -97,5 +139,6 @@ def mocked_agent_fixture():
     support using custom pytest fixtures from cases that it
     manages (i.e. cases decorated with @given).
     """
-    with mocked_agent() as agent:
+    with (mocked_agent() as agent,):
         yield agent
+        agent.stop_receiving_messages()

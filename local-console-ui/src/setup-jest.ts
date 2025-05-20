@@ -16,5 +16,5 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import 'jest-preset-angular/setup-jest';
 import '@angular/localize/init';
+import 'jest-preset-angular/setup-jest';

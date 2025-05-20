@@ -433,8 +433,8 @@ def test_validate_fields_added_dts_1003_t3w():
           "PPLParameter":"not_provided",
           "CropHOffset":0,
           "CropVOffset":0,
-          "CropHSize":4056,
-          "CropVSize":3040,
+          "CropHSize":2028,
+          "CropVSize":1520,
           "NetworkId":"999996"
       }
     }
@@ -503,11 +503,11 @@ def test_validate_fields_added_dts_1003_t3w():
     )
     assert (
         device_config.FWOperation.PeriodicParameter.UploadInferenceParameter.CropHSize
-        == 4056
+        == 2028
     )
     assert (
         device_config.FWOperation.PeriodicParameter.UploadInferenceParameter.CropVSize
-        == 3040
+        == 1520
     )
     assert (
         device_config.FWOperation.PeriodicParameter.UploadInferenceParameter.NetworkId

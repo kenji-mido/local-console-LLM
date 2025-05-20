@@ -15,9 +15,12 @@
 # SPDX-License-Identifier: Apache-2.0
 import logging
 
-from local_console.core.camera.firmware import TransientStatus
-from local_console.core.camera.firmware import update_firmware_task
-from local_console.core.camera.state import CameraState
+import trio
+from local_console.core.camera.enums import FirmwareExtension
+from local_console.core.camera.enums import OTAUpdateModule
+from local_console.core.camera.firmware import FirmwareInfo
+from local_console.core.camera.machine import Camera
+from local_console.core.commands.ota_deploy import get_package_hash
 from local_console.core.deploy.tasks.base_task import DeployHistoryInfo
 from local_console.core.deploy.tasks.base_task import Status
 from local_console.core.deploy.tasks.base_task import Task
@@ -25,12 +28,6 @@ from local_console.core.deploy.tasks.base_task import TaskState
 from local_console.core.firmwares import Firmware
 
 logger = logging.getLogger(__name__)
-
-
-class FirmwareTransientStatus(TransientStatus):
-    update_status: str
-    progress_download: int
-    progress_update: int
 
 
 class FirmwareDeployHistoryInfo(DeployHistoryInfo):
@@ -42,29 +39,47 @@ class FirmwareDeployHistoryInfo(DeployHistoryInfo):
 class FirmwareTask(Task):
     def __init__(
         self,
-        state: CameraState,
+        camera: Camera,
         firmware: Firmware,
         task_state: TaskState | None = None,
     ):
-        self.camera_state = state
+        self.camera = camera
         self.firmware = firmware
         self._task_state = task_state or TaskState()
 
     def get_state(self) -> TaskState:
         return self._task_state
 
+    @staticmethod
+    def _prepare_firmware_info(firmware: Firmware) -> FirmwareInfo:
+        fw_path = firmware.file.path
+        fw_type = firmware.info.firmware_type
+
+        is_valid = (
+            fw_type == OTAUpdateModule.APFW
+            and fw_path.suffix == FirmwareExtension.APPLICATION_FW
+        ) or (
+            fw_type == OTAUpdateModule.SENSORFW
+            and fw_path.suffix == FirmwareExtension.SENSOR_FW
+        )
+
+        return FirmwareInfo(
+            path=fw_path,
+            hash=get_package_hash(firmware.file.path),
+            type=fw_type,
+            version=firmware.info.version,
+            is_valid=is_valid,
+        )
+
     async def run(self) -> None:
+        task_flag = trio.Event()
         self._task_state.set(Status.RUNNING)
-        self.camera_state.firmware_file.value = self.firmware.file.path
-        self.camera_state.firmware_file_type.value = self.firmware.info.firmware_type
-        self.camera_state.firmware_file_version.value = self.firmware.info.version
-        await update_firmware_task(
-            self.camera_state,
+        await self.camera.perform_firmware_update(
+            self._prepare_firmware_info(self.firmware),
+            task_flag,
             self._task_state.error_notification,
         )
-        self.camera_state.firmware_file.value = None
-        self.camera_state.firmware_file_type.value = None
-        self.camera_state.firmware_file_version.value = None
+        await task_flag.wait()
         self._task_state.set(Status.SUCCESS)
 
     def errored(self, error: BaseException) -> None:
@@ -75,8 +90,7 @@ class FirmwareTask(Task):
         # There is no nice way to close the firmware task internals
 
     def id(self) -> str:
-        assert self.camera_state.mqtt_port.value, "Id of the camera is needed"
-        return f"firmware_task_for_device_{self.camera_state.mqtt_port.value}"
+        return f"firmware_task_for_device_{self.camera.id}"
 
     def get_deploy_history_info(self) -> FirmwareDeployHistoryInfo:
         return FirmwareDeployHistoryInfo(

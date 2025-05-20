@@ -19,7 +19,6 @@ from local_console.core.deploy_config import DeployConfig
 from local_console.fastapi.dependencies.deploy import deploy_config_manager
 from starlette.testclient import TestClient
 
-from tests.fixtures.fastapi import fa_client
 from tests.strategies.samplers.files import FileInfoSampler
 from tests.strategies.samplers.files import FirmwareSampler
 

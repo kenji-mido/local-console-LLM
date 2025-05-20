@@ -17,23 +17,56 @@
  */
 
 @use "sass:math";
+@use "sass:color";
 @import "./variables.scss";
 
 // VARIABLES
 $max-layout-modifier: 6;
 $max-size-modifier: 24;
+$max-z-stack: 10;
 $layout-divisions: 12;
+
+// Define SCSS color variables
+$color-primary-blue: #3e455c;
+$color-secondary-blue: #676d80;
+$color-accent-yellow: #fdff19;
+$color-highlight-base: #509ef9;
+$color-highlight-selected: rgba($color-highlight-base, 0.3);
+$color-highlight-hover: rgba($color-highlight-base, 0.15);
+$color-black: #000000;
+$color-white: #ffffff;
+$color-main: #292929;
+$color-gray-mid: #6b6b6b;
+$color-bg-main: #f4f4f4;
+$color-gray-soft: #d4d4d4;
+$color-gray-divider: #ececec;
+$color-edgeaipf-gray: #d1d3d9;
+$color-edgeaipf: $darkBlue;
+$color-accent: $accentBlue;
+$color-border-text-field: #e4e8ec;
 
 html {
   --standard-spacing: 8px;
   --standard-border: 1px;
 
   // COLOR
-  --color-gray-soft: #d4d4d4;
-  --color-gray-mid: #5f5f5f;
-  --color-edgeaipf-gray: #d1d3d9;
-  --color-edgeaipf: #{$darkBlue};
-  --color-accent: #{$accentBlue};
+  --color-primary-blue: #{$color-primary-blue};
+  --color-secondary-blue: #{$color-secondary-blue};
+  --color-accent-yellow: #{$color-accent-yellow};
+  --color-highlight-base: #{$color-highlight-base};
+  --color-highlight-selected: #{$color-highlight-selected};
+  --color-highlight-hover: #{$color-highlight-hover};
+  --color-black: #{$color-black};
+  --color-white: #{$color-white};
+  --color-main: #{$color-main};
+  --color-gray-mid: #{$color-gray-mid};
+  --color-bg-main: #{$color-bg-main};
+  --color-gray-soft: #{$color-gray-soft};
+  --color-gray-divider: #{$color-gray-divider};
+  --color-edgeaipf-gray: #{$color-edgeaipf-gray};
+  --color-edgeaipf: #{$color-edgeaipf};
+  --color-accent: #{$color-accent};
+  --color-border-text-field: #{$color-border-text-field};
 }
 
 // PALETTE
@@ -83,13 +116,40 @@ html {
   flex-direction: column;
   gap: calc(var(--standard-spacing) * var(--compound-margin-over-std));
   box-sizing: border-box;
+  width: 1208px;
+  min-width: 1208px;
+
+  & > * {
+    max-width: 1920px;
+  }
+
+  &.fullheight {
+    max-height: 1080px;
+  }
+}
+
+.hr {
+  border-bottom: var(--standard-border) solid var(--color-gray-soft);
 }
 
 // LAYOUT
 
+.block {
+  display: block;
+}
+
+.relative {
+  position: relative;
+}
+
+.absolute {
+  position: absolute;
+}
+
 .row,
 .col,
-.stack {
+.stack,
+.line {
   display: flex;
   gap: calc(var(--standard-spacing) * var(--compound-margin-over-std));
   box-sizing: border-box;
@@ -97,6 +157,12 @@ html {
 
 .stack {
   flex-direction: column;
+}
+
+.line {
+  flex-direction: row;
+  gap: calc(var(--standard-spacing));
+  align-items: center;
 }
 
 .row {
@@ -109,12 +175,8 @@ html {
   height: 100%;
 }
 
-.stack {
-  flex-direction: column;
-}
-
 .grow {
-  flex-grow: 1;
+  flex: 1 1 0px;
 }
 
 .fullwidth {
@@ -125,6 +187,10 @@ html {
   height: 100%;
 }
 
+.height-cap {
+  max-height: 100vh;
+}
+
 .grid {
   display: grid;
 }
@@ -133,8 +199,30 @@ html {
   justify-content: center;
 }
 
+.end {
+  justify-content: flex-end;
+}
+
+.space-around {
+  justify-content: space-around;
+}
+
 .align-center {
   align-items: center;
+}
+
+@for $i from 0 through $max-z-stack {
+  .z-#{$i} {
+    z-index: 10 * $i;
+  }
+}
+
+.gap-half {
+  gap: calc(var(--standard-spacing) / 2);
+}
+
+.round-half {
+  border-radius: calc(var(--standard-spacing) / 2);
 }
 
 @for $i from 0 through $max-layout-modifier {
@@ -205,6 +293,10 @@ html {
   overflow: auto;
 }
 
+.overflow-hidden {
+  overflow: hidden;
+}
+
 .border-box {
   box-sizing: border-box;
 }
@@ -213,14 +305,32 @@ html {
   .w-#{$i} {
     width: math.div(100% * $i, $layout-divisions);
   }
+  .max-w-#{$i} {
+    max-width: math.div(100% * $i, $layout-divisions);
+  }
+  .min-w-#{$i} {
+    min-width: math.div(100% * $i, $layout-divisions);
+  }
   .h-#{$i} {
     height: math.div(100% * $i, $layout-divisions);
+  }
+  .max-h-#{$i} {
+    max-height: math.div(100% * $i, $layout-divisions);
+  }
+  .min-h-#{$i} {
+    min-height: math.div(100% * $i, $layout-divisions);
   }
 }
 
 @for $i from 0 through $max-size-modifier {
   .ws-#{$i} {
     width: calc(var(--standard-spacing) * $i * 4);
+  }
+  .max-ws-#{$i} {
+    max-width: calc(var(--standard-spacing) * $i * 4);
+  }
+  .min-ws-#{$i} {
+    min-width: calc(var(--standard-spacing) * $i * 4);
   }
   .basis-#{$i} {
     flex-basis: calc(var(--standard-spacing) * $i * 4);
@@ -230,6 +340,12 @@ html {
   }
   .hs-#{$i} {
     height: calc(var(--standard-spacing) * $i * 4);
+  }
+  .max-hs-#{$i} {
+    max-height: calc(var(--standard-spacing) * $i * 4);
+  }
+  .min-hs-#{$i} {
+    min-height: calc(var(--standard-spacing) * $i * 4);
   }
 }
 
@@ -245,24 +361,122 @@ html {
   aspect-ratio: 1;
 }
 
-// TEXT
+// Font Definitions
 
-.text-1 {
-  color: #000;
-  font-size: 31px;
+.text-14,
+.text-16,
+.text-18,
+.text-20,
+.text-24,
+.text-28 {
+  color: var(--color-main);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+  font-weight: 400;
+
+  &.bold,
+  & .bold {
+    font-weight: bold;
+  }
+
+  &.sub {
+    color: var(--color-gray-mid);
+  }
+
+  &.caution {
+    color: #ce1543;
+  }
 }
 
-.text-2 {
-  color: #000;
-  font-size: 25px;
+.text-14 {
+  font-size: 14px;
+  line-height: 22px;
 }
 
-.text-3 {
-  color: #000;
-  font-size: 20px;
-}
-
-.text-sub {
+.text-16 {
   font-size: 16px;
-  color: var(--color-gray-mid);
+  line-height: 26px;
+}
+
+.text-18 {
+  font-size: 18px;
+  line-height: 28px;
+}
+
+.text-20 {
+  font-size: 20px;
+  line-height: 32px;
+}
+
+.text-24 {
+  font-size: 24px;
+  line-height: 38px;
+}
+
+.text-28 {
+  font-size: 28px;
+  line-height: 45px;
+}
+
+.ellipsis {
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.text-center {
+  text-align: center;
+}
+
+// MISC
+
+.page-title-icon {
+  width: 25px;
+  height: 25px;
+}
+
+i.required::before {
+  content: "*";
+  color: red;
+  font-style: normal;
+}
+
+.pointer {
+  cursor: pointer;
+}
+
+.disableable.disabled {
+  & * {
+    pointer-events: none;
+  }
+  cursor: not-allowed;
+  opacity: 0.38;
+}
+
+// ANIMATIONS
+
+@keyframes blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0.38;
+  }
+}
+
+.blinking {
+  animation: blink 634ms infinite ease-in-out alternate-reverse;
+}
+
+@keyframes fadeOut {
+  0% {
+    background-color: #808080;
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
+.highlight {
+  animation: fadeOut 3s forwards;
 }

@@ -16,26 +16,26 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { Component, Output, EventEmitter } from '@angular/core';
+import { ScrollingModule } from '@angular/cdk/scrolling';
 import { CommonModule } from '@angular/common';
+import { Component } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { FormsModule } from '@angular/forms';
+import { MatButtonModule } from '@angular/material/button';
+import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { MatTableModule } from '@angular/material/table';
+import { DevicePipesModule } from '@app/core/device/device.pipes';
+import { FirmwarePipesModule } from '@app/core/firmware/firmware.pipes';
+import { DialogService } from '@app/layout/dialogs/dialog.service';
+import { action } from '@app/layout/dialogs/user-prompt/action';
 import {
   TableVirtualScrollDataSource,
   TableVirtualScrollModule,
 } from 'ng-table-virtual-scroll';
+import { LocalDevice } from '../../../core/device/device';
+import { DeviceStatusBadgeComponent } from '../../../core/device/device-status/device-status-badge.component';
 import { DeviceService } from '../../../core/device/device.service';
-import { DeviceV2, isLocalDevice } from '../../../core/device/device';
 import { TABLE_ROW_HEIGHT } from '../../constants';
-import { ScrollingModule } from '@angular/cdk/scrolling';
-import { FormsModule } from '@angular/forms';
-import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
-import { MatTableModule } from '@angular/material/table';
-import { FeaturesService } from '@app/core/common/features.service';
-import { MatButtonModule } from '@angular/material/button';
-import { DialogService } from '@app/layout/dialogs/dialog.service';
-import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { isSysModule } from '@app/core/module/module';
-import { FirmwarePipesModule } from '@app/core/firmware/firmware.pipes';
-import { DevicePipesModule } from '@app/core/device/device.pipes';
 
 @Component({
   selector: 'app-device-list',
@@ -52,6 +52,7 @@ import { DevicePipesModule } from '@app/core/device/device.pipes';
     MatTableModule,
     MatButtonModule,
     FirmwarePipesModule,
+    DeviceStatusBadgeComponent,
   ],
 })
 export class DeviceListComponent {
@@ -59,64 +60,47 @@ export class DeviceListComponent {
   theme = 'light';
   tableRowHeight = TABLE_ROW_HEIGHT;
   displayedColumns: string[] = ['id', 'type', 'status', 'created_time'];
-  devices: DeviceV2[] = [];
-  dataSource: TableVirtualScrollDataSource<DeviceV2> =
-    new TableVirtualScrollDataSource<DeviceV2>();
+  devices: LocalDevice[] = [];
+  dataSource: TableVirtualScrollDataSource<LocalDevice> =
+    new TableVirtualScrollDataSource<LocalDevice>();
   emptyDataSource = new TableVirtualScrollDataSource([
     { id: 1 },
     { id: 2 },
     { id: 3 },
     { id: 4 },
   ]);
-  get features() {
-    return this.featuresService.getFeatures();
-  }
 
   constructor(
     private deviceService: DeviceService,
-    private featuresService: FeaturesService,
     private dialogs: DialogService,
   ) {
-    if (this.features.device_list.local_devices) {
-      this.displayedColumns = [
-        'name',
-        'port',
-        'sensorfw',
-        'appfw',
-        'status',
-        'remove',
-      ];
-    }
+    this.displayedColumns = [
+      'name',
+      'port',
+      'sensorfw',
+      'appfw',
+      'status',
+      'remove',
+    ];
 
-    deviceService.devices$
-      .pipe(takeUntilDestroyed())
-      .subscribe((devices) => this.onDevicesLoaded(devices));
+    deviceService.devices$.pipe(takeUntilDestroyed()).subscribe((devices) => {
+      this.devices = devices;
+      this.dataSource = new TableVirtualScrollDataSource(this.devices);
+    });
   }
 
-  private onDevicesLoaded(devices: DeviceV2[]) {
-    this.devices = devices.filter(this.showDevice.bind(this));
-    this.dataSource = new TableVirtualScrollDataSource(this.devices);
-  }
-
-  showDevice(device: DeviceV2) {
-    // If device is local or V2, then show
-    if (this.features.device_list.local_devices) return true;
-    return device.modules?.some(isSysModule);
-  }
-
-  async deleteDevice(device: DeviceV2) {
-    if (this.features.device_list.local_devices && isLocalDevice(device)) {
-      const result = await this.dialogs.prompt({
-        message: `Are you sure you want to delete device '${device.device_name}'?`,
-        title: 'Delete device?',
-        actionButtons: [{ id: 'delete', text: 'Delete', variant: 'primary' }],
-        type: 'warning',
-      });
-      if (result?.id == 'delete') {
-        this.isLoading = true;
-        await this.deviceService.deleteDevice(device);
-        this.isLoading = false;
-      }
+  async deleteDevice(device: LocalDevice) {
+    const result = await this.dialogs.prompt({
+      message: `Are you sure you want to delete device '${device.device_name}'?`,
+      title: 'Delete device?',
+      actionButtons: [action.negative('delete', 'Delete')],
+      type: 'warning',
+      showCancelButton: true,
+    });
+    if (result?.id == 'delete') {
+      this.isLoading = true;
+      await this.deviceService.deleteDevice(device);
+      this.isLoading = false;
     }
   }
 }

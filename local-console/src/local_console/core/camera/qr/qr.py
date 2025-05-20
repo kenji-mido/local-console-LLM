@@ -18,9 +18,8 @@ from typing import Optional
 
 import qrcode
 from local_console.core.camera.qr.schema import QRInfo
-from local_console.core.config import config_obj
-from local_console.core.schemas.edge_cloud_if_v1 import DeviceConfiguration
-from local_console.utils.local_network import replace_local_address
+from local_console.core.camera.schemas import PropertiesReport
+from local_console.core.config import Config
 
 logger = logging.getLogger(__name__)
 
@@ -121,8 +120,6 @@ class QRService:
         self.in_memory: list[QRInfo] = []
 
     def generate(self, info: QRInfo) -> qrcode.main.QRCode:
-        info.mqtt_host = replace_local_address(info.mqtt_host)
-        info.ntp = replace_local_address(info.ntp)
         self.in_memory.append(info)
         return get_qr_object(
             mqtt_host=info.mqtt_host,
@@ -138,33 +135,26 @@ class QRService:
         )
 
     def _qr_match_device_state(
-        self, port: int, qr: QRInfo, device_state: DeviceConfiguration
+        self, port: int, qr: QRInfo, device_state: PropertiesReport
     ) -> bool:
-        if not device_state.Network:
-            return False
         return (
             qr.mqtt_port == port
-            and qr.ntp == device_state.Network.NTP
-            and qr.ip_address == device_state.Network.IPAddress
-            and qr.subnet_mask == device_state.Network.SubnetMask
-            and qr.gateway == device_state.Network.Gateway
-            and qr.dns == device_state.Network.DNS
+            and qr.ntp == device_state.ntp_url
+            and qr.ip_address == device_state.ip_address
+            and qr.subnet_mask == device_state.subnet_mask
+            and qr.gateway == device_state.gateway_address
+            and qr.dns == device_state.dns_address
         )
 
     def _update_device_with_qr(self, qr: QRInfo) -> None:
-        for device in config_obj.config.devices:
+        for device in Config().data.devices:
             if device.mqtt.port == qr.mqtt_port:
                 device.qr = qr
-                config_obj.save_config()
+                device.mqtt.host = qr.mqtt_host
+                Config().save_config()
                 break
 
-    def _save_best_qr_on_disk(
-        self, port: int, device_state: DeviceConfiguration
-    ) -> None:
-        if not device_state.Network:
-            logger.info("Unexpected device status without network information")
-            return
-
+    def _save_best_qr_on_disk(self, port: int, device_state: PropertiesReport) -> None:
         for qr in reversed(self.in_memory):
             if self._qr_match_device_state(port, qr, device_state):
                 self._update_device_with_qr(qr)
@@ -185,17 +175,8 @@ class QRService:
 
     def persist_to(
         self,
-        port: int,  # Surprisingly, the device state port is empty
-        device_state: DeviceConfiguration | None,
-        _: DeviceConfiguration | None,
+        port: int,
+        device_state: PropertiesReport,
     ) -> None:
-
-        if not device_state or not device_state.Network:
-            logger.info(
-                f"Unexpected device status update without {'new state' if not device_state else 'network information'}"
-            )
-            return
-
         self._save_best_qr_on_disk(port, device_state)
-
         self._forget_all_qr_on_port(port)

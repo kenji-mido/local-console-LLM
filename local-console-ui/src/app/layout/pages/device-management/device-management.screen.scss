@@ -48,6 +48,7 @@
   vertical-align: top;
   flex: 1;
   padding-left: 16px;
+  padding-right: 16px;
   border-radius: 10px;
 
   .device-details-header {
@@ -73,6 +74,7 @@
     display: flex;
     flex-direction: row;
     width: 100%;
+    border-bottom: 1px solid var(--color-primary-blue);
     justify-content: flex-start; /* Align items to the left */
 
     .button {
@@ -80,11 +82,11 @@
       height: 40px;
       background: #fff;
       border: none;
-      border-bottom: 1px solid #3e455c;
+      padding: 0;
     }
 
     .selected-tab {
-      border-bottom: 4px solid #3e455c;
+      border-bottom: 4px solid var(--color-primary-blue);
     }
   }
 }
@@ -95,18 +97,18 @@
   border-collapse: collapse;
 
   .mat-mdc-header-row {
-    height: 40px;
+    height: 50px;
+    border-bottom: 1px solid #d1d3d9;
     .mat-mdc-header-cell {
       background-color: #d1d3d9;
-      border-bottom: #d1d3d9;
     }
   }
 
   .mat-mdc-row {
     background-color: #fff;
-    border: 1px solid transparent;
+    border-bottom: 1px solid #d1d3d9;
     box-sizing: border-box;
-    height: 47px;
+    height: 42px;
   }
 
   .mat-mdc-cell {
@@ -115,12 +117,12 @@
 
   .mat-mdc-row:hover {
     background: rgba(80, 158, 249, 0.15);
-    border-color: rgba(59, 176, 255, 0.5);
+    box-shadow: inset 0 0 0 1px rgba(59, 176, 255, 0.5);
   }
 
   .mat-mdc-row.focus {
     background: rgba(80, 158, 249, 0.3);
-    border-color: #3bb0ff;
+    box-shadow: inset 0 0 0 1px #3bb0ff;
   }
 
   .selector {
@@ -130,6 +132,9 @@
     position: relative; /* Ensures button is the reference for menu positioning */
   }
   .selector-button:hover {
+    background: rgba(62, 69, 92, 0.2);
+  }
+  .selector-button:active {
     background: rgba(62, 69, 92, 0.4);
   }
 }
@@ -152,22 +157,19 @@
   right: 100%; /* menu to the left of the button */
 
   transform: translateY(-40px); /* move menu up */
+  border: none;
+  box-shadow: 0px 2px 4px rgba(0, 0, 0, 0.5);
+  border-radius: 8px;
+  background: #ffffff;
 }
 
 .menu-item {
-  width: 232px;
-  height: 56px;
-
+  background-color: transparent;
   border: none;
-  /* FIXME: setting 'border: 1px solid black;' duplicates the border between items */
-  border-top: 1px solid black;
-  border-left: 1px solid black;
-  border-right: 1px solid black;
-  background-color: #ffffff;
-
-  font-size: 16px;
+  width: 100px;
+  height: 42px;
   text-align: left;
-  padding-left: 16px;
+  padding: 8px 24px;
 }
 
 .menu-item:first-child {
@@ -178,10 +180,12 @@
 .menu-item:last-child {
   border-bottom-left-radius: 8px;
   border-bottom-right-radius: 8px;
-  border-bottom: 1px solid black;
 }
 
 .menu-item:hover {
-  background-color: #3e455c;
-  color: #ffffff;
+  background: rgba(62, 69, 92, 0.05);
+}
+
+.menu-item:active {
+  background: rgba(62, 69, 92, 0.08);
 }

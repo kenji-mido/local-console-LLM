@@ -16,16 +16,16 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { Injectable } from '@angular/core';
 import { Dialog, DialogRef } from '@angular/cdk/dialog';
 import { ComponentType } from '@angular/cdk/portal';
+import { Injectable } from '@angular/core';
+import { firstValueFrom } from 'rxjs';
+import { logError } from '../../core/common/logging';
+import { ActionButton } from './user-prompt/action';
 import {
-  ActionButton,
   UserPromptDialog,
   UserPromptDialogData,
 } from './user-prompt/user-prompt.dialog';
-import { logError } from '../../core/common/logging';
-import { firstValueFrom } from 'rxjs';
 
 export type DialogClass<C> = ComponentType<C> & {
   cssClass?: string;
@@ -57,6 +57,8 @@ export class DialogService {
       message,
       type,
       closeButtonText: 'OK',
+      showCancelButton: true,
+      btnType: 'normal',
     });
   }
 

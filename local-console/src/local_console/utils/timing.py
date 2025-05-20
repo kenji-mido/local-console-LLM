@@ -13,9 +13,12 @@
 # limitations under the License.
 #
 # SPDX-License-Identifier: Apache-2.0
+from datetime import datetime
+from datetime import timezone
 from typing import Callable
 
 import trio
+from local_console.core.enums import Frame
 
 
 class TimeoutBehavior:
@@ -56,3 +59,13 @@ class TimeoutBehavior:
 
             if time_cs.cancelled_caught:
                 await self.callback()
+
+
+def now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def as_timestamp(datetime: datetime | None = None) -> str:
+    if not datetime:
+        datetime = now()
+    return datetime.strftime("%Y%m%d%H%M%S%f")[: Frame.TIMESTAMP_SIZE]

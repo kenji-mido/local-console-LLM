@@ -13,74 +13,67 @@
 # limitations under the License.
 #
 # SPDX-License-Identifier: Apache-2.0
-from collections import defaultdict
-from collections.abc import Iterator
-from pathlib import PurePath
-from queue import Empty
-from queue import Queue
-from typing import Any
+from datetime import datetime
+from pathlib import Path
+
+from local_console.core.config import Config
+from local_console.core.schemas.schemas import DeviceID
+from local_console.utils.timing import now
 
 
-FileGroup = dict[str, Any]
+# Webserver constants
+PREVIEW_TARGET = "pre"
 
 
-class FileGroupingError(Exception):
+class PreviewBuffer:
     """
-    Conveys an error when trying to group files
-    """
-
-
-class FileGrouping:
-    """
-    This class assembles groups of files that have the same
-    name stem, and different extensions. For instance, the
-    files "1001.jpg" and "1001.txt" form the "1001" file group,
-    and their data is accessible via a dictionary whose keys
-    are the parent directory names of the corresponding data:
-    {
-        "1001": {
-            "jpg": [...],
-            "txt": [...],
-        }
-    }
-
-    When a group contains a specified set of parent keys,
-    it will be available for popping out of the dictionary,
-    so that its data gets consumed elsewhere.
+    Encapsulates the operation of preview mode that holds
+    the most recent image from the camera in-memory, hence
+    avoiding the file system.
     """
 
-    def __init__(self, expected_extensions: set[str]) -> None:
-        self.extensions = expected_extensions
-        self._groups: dict[str, FileGroup] = defaultdict(dict)
-        self._queue: Queue[FileGroup] = Queue()
+    def __init__(self) -> None:
+        self._in_preview = False
+        self._data = b""
+        self._timestamp: datetime | None = None
 
-    def register(self, file_name: PurePath, file_data: Any) -> None:
-        """
-        Register a file for grouping. Its associated data is arbitrary.
-        For instance, it can be a pathlib.Path or a bytes instance.
+    @property
+    def active(self) -> bool:
+        return self._in_preview
 
-        Args:
-            file_name (PurePath): the file name object
-            file_data (Any): data associated to the file
-        """
-        extension = file_name.suffix.lstrip(".")
-        if extension not in self.extensions:
-            raise FileGroupingError(f"File {file_name} has unexpected parent")
+    @property
+    def last_updated(self) -> datetime | None:
+        return self._timestamp
 
-        stem = file_name.stem
-        self._groups[stem][extension] = file_data
-        if set(self._groups[stem]) == self.extensions:
-            self._queue.put(self._groups.pop(stem))
+    def enable(self) -> None:
+        self._in_preview = True
 
-    def __next__(self) -> FileGroup:
-        try:
-            return self._queue.get_nowait()
-        except Empty:
-            raise StopIteration
+    def disable(self) -> None:
+        self._in_preview = False
 
-    def __iter__(self) -> Iterator[FileGroup]:
-        while True:
-            try:
-                yield next(self)
-            except StopIteration:
-                break
+    def get(self) -> bytes:
+        return self._data
+
+    def update(self, data: bytes) -> None:
+        self._data = data
+        self._timestamp = now()
+
+
+def base_dir_for(device_id: DeviceID, base: Path | None = None) -> Path | None:
+    base = base or Config().get_persistent_attr(device_id, "device_dir_path")
+    return base / str(device_id) if base else None
+
+
+def dir_for(
+    device_id: DeviceID, subfolder: str, base: Path | None = None
+) -> Path | None:
+    base_dir = base_dir_for(device_id, base)
+    return base_dir / subfolder if base_dir else None
+
+
+def image_dir_for(device_id: DeviceID, base: Path | None = None) -> Path | None:
+    return dir_for(device_id, "Images", base)
+
+
+def inference_dir_for(device_id: DeviceID, base: Path | None = None) -> Path | None:
+    return dir_for(device_id, "Metadata", base)

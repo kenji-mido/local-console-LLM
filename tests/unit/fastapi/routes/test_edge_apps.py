@@ -18,7 +18,6 @@ from local_console.fastapi.routes.edge_apps import EdgeAppInfoDTO
 from local_console.fastapi.routes.edge_apps import GetEdgeAppsRequestOutDTO
 from starlette.testclient import TestClient
 
-from tests.fixtures.fastapi import fa_client
 from tests.mocks.files import MockedFileManager
 
 
@@ -94,7 +93,7 @@ def test_post_edge_apps_invalid_json(fa_client: TestClient) -> None:
     payload = "Invalid JSON string"
 
     response = fa_client.post(
-        "/edge_apps", data=payload, headers={"Content-Type": "application/json"}
+        "/edge_apps", content=payload, headers={"Content-Type": "application/json"}
     )
 
     assert response.status_code == 422

@@ -16,12 +16,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { DeviceInfo } from './device-info.component';
-import { DeviceV2 } from '@app/core/device/device';
-import { EdgeAppModuleStateV2 } from '@app/core/module/edgeapp';
-import { SysAppModuleStateV2, isSysModuleState } from '@app/core/module/sysapp';
-import { Device } from '@samplers/device';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { LocalDevice } from '@app/core/device/device';
+import { EdgeAppModuleConfigurationV2 } from '@app/core/module/edgeapp';
+import {
+  SysAppModuleConfigV2,
+  isSysModuleConfig,
+} from '@app/core/module/sysapp';
+import { Device } from '@samplers/device';
+import { DeviceInfo } from './device-info.component';
 
 describe('DeviceInfoComponent', () => {
   let component: DeviceInfo;
@@ -33,7 +36,6 @@ describe('DeviceInfoComponent', () => {
     sensor_chip_fw_loader: undefined,
     processing_state: undefined,
     device_id: undefined,
-    internal_id: undefined,
   };
 
   beforeEach(async () => {
@@ -48,50 +50,49 @@ describe('DeviceInfoComponent', () => {
 
   describe('onDeviceInfoReceived', () => {
     it('should define all elements undefined if device is null', () => {
-      const device: DeviceV2 | null = null;
+      const device: LocalDevice | null = null;
       component.onDeviceInfoReceived(device);
       expect(component.device_info).toEqual(device_info_null);
     });
     it('should define all elements undefined if modules is null', () => {
-      let device: DeviceV2 | null = Device.sample();
+      let device: LocalDevice | null = Device.sample();
       device.modules = undefined;
       component.onDeviceInfoReceived(device);
       expect(component.device_info).toEqual(device_info_null);
     });
     it('should define all elements undefined if not sysmodules', () => {
-      let device: DeviceV2 | null = Device.sample();
-      const edge_app_state: EdgeAppModuleStateV2 = { edge_app: undefined };
-      if (device.modules?.[0].property.state) {
-        device.modules[0].property.state = edge_app_state;
+      let device: LocalDevice | null = Device.sample();
+      const edge_app_state: EdgeAppModuleConfigurationV2 = {
+        edge_app: undefined,
+      };
+      if (device.modules?.[0].property.configuration) {
+        device.modules[0].property.configuration = edge_app_state;
       }
       component.onDeviceInfoReceived(device);
       expect(component.device_info).toEqual(device_info_null);
     });
     it('should define all elements correctly', () => {
-      let device: DeviceV2 | null = Device.sample();
+      let device: LocalDevice | null = Device.sample();
       component.onDeviceInfoReceived(device);
-      if (isSysModuleState(device.modules?.[0].property.state!)) {
-        let device_state: SysAppModuleStateV2 =
-          device.modules?.[0].property.state!;
+      if (isSysModuleConfig(device.modules?.[0].property.configuration!)) {
+        let device_config: SysAppModuleConfigV2 =
+          device.modules?.[0].property.configuration!;
 
         expect(component.device_info.device_id).toEqual(device.device_id);
-        expect(component.device_info.internal_id).toEqual(
-          device.internal_device_id,
-        );
         expect(component.device_info.main_chip).toEqual(
-          device_state.device_info?.processors?.[0].firmware_version,
+          device_config.device_info?.processors?.[0].firmware_version,
         );
         expect(component.device_info.processing_state).toEqual(
-          device_state.device_state?.process_state,
+          device_config.device_state?.process_state,
         );
         expect(component.device_info.sensor).toEqual(
-          device_state.device_info?.sensors?.[0].name,
+          device_config.device_info?.sensors?.[0].name,
         );
         expect(component.device_info.sensor_chip_fw_loader).toEqual(
-          device_state.device_info?.sensors?.[0].loader_version,
+          device_config.device_info?.sensors?.[0].loader_version,
         );
         expect(component.device_info.sensor_chip_fw_main).toEqual(
-          device_state.device_info?.sensors?.[0].firmware_version,
+          device_config.device_info?.sensors?.[0].firmware_version,
         );
       }
     });

@@ -13,11 +13,8 @@
 # limitations under the License.
 #
 # SPDX-License-Identifier: Apache-2.0
-import base64
-import json
 from unittest.mock import ANY
 from unittest.mock import AsyncMock
-from unittest.mock import MagicMock
 from unittest.mock import patch
 
 import pytest
@@ -25,7 +22,7 @@ from hypothesis import given
 from hypothesis import strategies as st
 from local_console.clients.agent import Agent
 from local_console.core.camera.enums import MQTTTopics
-from local_console.core.schemas.schemas import OnWireProtocol
+from local_console.core.helpers import check_attributes_request
 from paho.mqtt.client import MQTT_ERR_ERRNO
 from paho.mqtt.client import MQTT_ERR_SUCCESS
 
@@ -37,7 +34,7 @@ async def test_mqtt_scope_error_handling(caplog):
     with (patch("local_console.clients.agent.AsyncClient") as mock_aclient,):
         mock_aclient.return_value.connect.side_effect = ValueError("Error from Paho")
 
-        agent = Agent(ANY, ANY, ANY)
+        agent = Agent(ANY)
         with pytest.raises(SystemExit):
             async with agent.mqtt_scope([]):
                 # The connection being unsuccessful makes what
@@ -51,126 +48,68 @@ async def test_mqtt_scope_error_handling(caplog):
 @given(
     generate_text(),
     generate_text(),
-    generate_text(),
-    st.sampled_from(OnWireProtocol),
 )
 @pytest.mark.trio
-async def test_configure_instance(
-    instance_id: str,
+async def test_publish(
     topic: str,
     config: str,
-    onwire_schema: OnWireProtocol,
 ):
     with (
-        patch(
-            "local_console.clients.agent.OnWireProtocol.from_iot_spec",
-            return_value=onwire_schema,
-        ),
         patch("local_console.clients.agent.paho.Client"),
-        patch("local_console.clients.agent.AsyncClient"),
-        patch("local_console.clients.agent.Agent.publish"),
+        patch("local_console.clients.agent.AsyncClient") as mock_client,
     ):
-        agent = Agent(ANY, ANY, ANY)
-        async with agent.mqtt_scope([]):
-            await agent.configure(instance_id, topic, config)
+        mock_client.return_value.publish_and_wait = AsyncMock()
+        mock_client.return_value.publish_and_wait.return_value = [MQTT_ERR_SUCCESS]
 
-        payload = json.dumps(
-            {
-                f"configuration/{instance_id}/{topic}": base64.b64encode(
-                    config.encode("utf-8")
-                ).decode("utf-8")
-            }
-        )
-        agent.publish.assert_called_once_with(
-            MQTTTopics.ATTRIBUTES.value, payload=payload
+        agent = Agent(ANY)
+        async with agent.mqtt_scope([]):
+            await agent.publish(topic, config)
+
+        mock_client.return_value.publish_and_wait.assert_awaited_once_with(
+            topic, payload=config
         )
 
 
-@given(generate_text(), st.sampled_from(OnWireProtocol))
+@given(
+    generate_text(),
+    generate_text(),
+)
 @pytest.mark.trio
-async def test_rpc(instance_id: str, onwire_schema: OnWireProtocol):
+async def test_publish_error(
+    topic: str,
+    config: str,
+):
     with (
-        patch(
-            "local_console.clients.agent.OnWireProtocol.from_iot_spec",
-            return_value=onwire_schema,
-        ),
         patch("local_console.clients.agent.paho.Client"),
-        patch("local_console.clients.agent.AsyncClient"),
+        patch("local_console.clients.agent.AsyncClient") as mock_client,
     ):
-        method = "$agent/set"
-        params = '{"log_enable": true}'
-        agent = Agent(ANY, ANY, onwire_schema)
-        async with agent.mqtt_scope([]):
-            agent.client.publish_and_wait = AsyncMock(
-                return_value=(MQTT_ERR_SUCCESS, None)
-            )
-            await agent.rpc(instance_id, method, params)
+        mock_client.return_value.publish_and_wait = AsyncMock()
+        mock_client.return_value.publish_and_wait.return_value = [MQTT_ERR_ERRNO]
 
-        agent.client.publish_and_wait.assert_called_once()
-
-
-@given(generate_text(), st.sampled_from(OnWireProtocol))
-@pytest.mark.trio
-async def test_rpc_error(instance_id: str, onwire_schema: OnWireProtocol):
-    with (
-        patch(
-            "local_console.clients.agent.OnWireProtocol.from_iot_spec",
-            return_value=onwire_schema,
-        ),
-        patch("local_console.clients.agent.paho.Client"),
-        patch("local_console.clients.agent.AsyncClient"),
-    ):
-        method = "$agent/set"
-        params = '{"log_enable": true}'
-        agent = Agent(ANY, ANY, onwire_schema)
-        async with agent.mqtt_scope([]):
-            agent.client.publish_and_wait = AsyncMock(
-                return_value=(MQTT_ERR_ERRNO, None)
-            )
-            with pytest.raises(ConnectionError):
-                await agent.rpc(instance_id, method, params)
-
-        agent.client.publish_and_wait.assert_called_once()
-
-
-@pytest.mark.trio
-async def test_rpc_returns_id() -> None:
-    instance_id = "instance"
-    method = "method"
-    params = {"param": "value"}
-
-    agent = Agent(ANY, ANY, OnWireProtocol.EVP2)
-    agent.client = AsyncMock()
-    agent.client.publish_and_wait.return_value = (MQTT_ERR_SUCCESS, None)
-
-    id = await agent.rpc(instance_id, method, json.dumps(params))
-
-    expected_payload = json.dumps(
-        {
-            "method": "ModuleMethodCall",
-            "params": {
-                "direct-command-request": {
-                    "reqid": id,
-                    "method": method,
-                    "instance": instance_id,
-                    "params": json.dumps(params),
-                }
-            },
-        }
-    )
-
-    agent.client.publish_and_wait.assert_called_once_with(
-        f"v1/devices/me/rpc/request/{id}", payload=expected_payload
-    )
-
-
-@pytest.mark.trio
-async def test_connection():
-    mock_client = MagicMock()
-    with patch("local_console.clients.agent.AsyncClient", return_value=mock_client):
-        mock_client.connect.side_effect = OSError
-        agent = Agent(ANY, ANY, ANY)
-        print(mock_client)
+        agent = Agent(ANY)
         with pytest.raises(SystemExit):
             async with agent.mqtt_scope([]):
-                pass
+                await agent.publish(topic, config)
+
+            mock_client.return_value.publish_and_wait.assert_awaited_once_with(
+                topic, payload=config
+            )
+
+
+@given(st.integers(min_value=1))
+@pytest.mark.trio
+async def test_attributes_request_handling(mqtt_req_id: int):
+    with (
+        patch("local_console.clients.agent.paho.Client"),
+        patch("local_console.clients.agent.AsyncClient"),
+    ):
+        request_topic = MQTTTopics.ATTRIBUTES_REQ.value.replace("+", str(mqtt_req_id))
+
+        agent = Agent(ANY)
+        agent.publish = AsyncMock()
+        async with agent.mqtt_scope([MQTTTopics.ATTRIBUTES_REQ.value]):
+            check = await check_attributes_request(agent, request_topic, "{}")
+
+        response_topic = request_topic.replace("request", "response")
+        agent.publish.assert_called_once_with(response_topic, "{}")
+        assert check

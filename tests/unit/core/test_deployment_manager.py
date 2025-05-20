@@ -18,30 +18,28 @@ from unittest.mock import MagicMock
 import pytest
 import trio
 from local_console.core.camera.enums import ConnectionState
+from local_console.core.camera.machine import Camera
 from local_console.core.camera.schemas import DeviceStateInformation
 from local_console.core.deploy.deployment_manager import DeploymentManager
 from local_console.core.device_services import DeviceServices
-from local_console.core.error.base import UserException
-from local_console.core.error.code import ErrorCodes
+from local_console.core.schemas.schemas import DeviceType
 from local_console.fastapi.routes.deploy_history.dto import DeviceDeployHistoryInfo
+from local_console.servers.webserver import AsyncWebserver
+from local_console.servers.webserver import FileInbox
+
+from tests.mocks.config import set_configuration
+from tests.strategies.samplers.configs import GlobalConfigurationSampler
 
 
-def test_deployment_manager_add_and_get_device():
-    device_service = MagicMock()
-    deployment_manager = DeploymentManager(device_service=device_service)
-    deployment_manager.add_device_to_deployment("deploy_1", 1001)
-    assert deployment_manager.get_devices_for_deployment("deploy_1") == [1001]
-
-
-def test_deployment_manager_get_device_history():
+def test_deployment_manager_add_and_get_device_history():
     device_service = MagicMock()
 
     mock_device_dto = DeviceStateInformation(
         device_name="Device 1001",
+        device_type=DeviceType.T3P_AIH,
         device_id="1001",
         internal_device_id="1001",
         description="Test Device",
-        port=1001,
         modules=None,
         connection_state=ConnectionState.DISCONNECTED,
     )
@@ -58,19 +56,43 @@ def test_deployment_manager_get_device_history():
     device_service.get_device.assert_called_once_with(1001)
 
 
-def test_deployment_manager_device_not_found():
-    deployment_manager = DeploymentManager(
-        device_service=DeviceServices(
-            MagicMock(spec=trio.Nursery),
-            MagicMock(spec=trio.MemorySendChannel),
-            MagicMock(spec=trio.lowlevel.TrioToken),
-        )
+@pytest.mark.trio
+async def test_deployment_manager_if_device_has_been_removed_from_service():
+
+    simple_gconf = GlobalConfigurationSampler(num_of_devices=2).sample()
+    set_configuration(simple_gconf)
+
+    device_conn_conf = simple_gconf.devices[0]
+    device_name = device_conn_conf.name
+    device_id = device_conn_conf.mqtt.port
+    assert device_id != 3001
+    set_configuration(simple_gconf)
+
+    device_service = DeviceServices(
+        MagicMock(spec=trio.Nursery),
+        MagicMock(spec=trio.MemorySendChannel),
+        MagicMock(spec=AsyncWebserver),
+        MagicMock(spec=trio.lowlevel.TrioToken),
     )
 
-    deployment_manager.add_device_to_deployment("deploy_3", 3001)
+    for device_conn in simple_gconf.devices:
+        camera = Camera(
+            device_conn,
+            MagicMock(spec=trio.MemorySendChannel),
+            MagicMock(spec=AsyncWebserver),
+            MagicMock(spec=FileInbox),
+            MagicMock(spec=trio.lowlevel.TrioToken),
+            lambda *args: None,
+        )
+        device_service.set_camera(device_conn.id, camera)
 
-    with pytest.raises(UserException) as e:
-        deployment_manager.get_device_history_for_deployment("deploy_3")
+    deployment_manager = DeploymentManager(device_service=device_service)
 
-    assert str(e.value) == "Device with id 3001 not found."
-    assert e.value.code == ErrorCodes.EXTERNAL_DEVICE_NOT_FOUND
+    deployment_manager.add_device_to_deployment("deploy_2", device_id)
+    device_service.remove_device(device_id)
+    expected_device_history = [
+        DeviceDeployHistoryInfo(device_id=str(device_id), device_name=device_name)
+    ]
+    device_history = deployment_manager.get_device_history_for_deployment("deploy_2")
+
+    assert device_history == expected_device_history

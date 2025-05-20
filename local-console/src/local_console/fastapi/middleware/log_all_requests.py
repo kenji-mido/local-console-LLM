@@ -15,28 +15,39 @@
 # SPDX-License-Identifier: Apache-2.0
 import logging
 from typing import Callable
+from uuid import uuid4
 
 from fastapi import Request
 from fastapi import Response
+from starlette.datastructures import URL
 from starlette.middleware.base import BaseHTTPMiddleware
 
-
 logger = logging.getLogger(__name__)
+
+
+def get_relative_url(url: URL) -> str:
+    return str(url.path + ("?" + url.query if url.query else ""))
 
 
 class LogAllRequestMiddleware(BaseHTTPMiddleware):
     async def dispatch(
         self, request: Request, call_next: Callable[[Request], Response]
     ) -> Response:
-        logger.info(f"Request started: {request.method} {request.url}")
+        request_id = str(uuid4())[:8]
+        relative_url = get_relative_url(request.url)
+        logger.info(
+            f"Start: {request.method} {relative_url} | Id: {request_id} | {request.base_url}"
+        )
 
         try:
             response = await call_next(request)
 
             logger.info(
-                f"Request completed: {request.method} {request.url} - Status: {response.status_code}"
+                f"Done: {request.method} {relative_url} | Id: {request_id} | Status: {response.status_code}"
             )
             return response
         except Exception as e:
-            logger.info(f"Request failed: {request.method} {request.url}", exc_info=e)
+            logger.info(
+                f"Fail: {request.method} {relative_url} | Id: {request_id}", exc_info=e
+            )
             raise e

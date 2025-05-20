@@ -17,26 +17,39 @@
  */
 
 import { Injectable } from '@angular/core';
+import { EnvService } from '../common/environment.service';
 import { HttpApiClient } from '../common/http/http';
-import { environment } from '../../../environments/environment';
+import { FileInformation } from './file-input/file-input.component';
 
 @Injectable({
   providedIn: 'root',
 })
 export class FilesService {
-  private filesPathV2 = `${environment.apiV2Url}/files`;
   private modelIdToName: Record<string, string> = {};
 
-  constructor(private http: HttpApiClient) {}
+  constructor(
+    private http: HttpApiClient,
+    private envService: EnvService,
+  ) {}
 
-  async createFiles(file: File, type_code: string): Promise<string | null> {
+  get filesPathV2() {
+    return `${this.envService.getApiUrl()}/files`;
+  }
+
+  async createFiles(
+    file: FileInformation,
+    type_code: string,
+  ): Promise<string | null> {
+    const blob = new Blob([file.data]);
+    const fileObj = new File([blob], file.path);
+
     const formData = new FormData();
-    formData.append('file', file);
+    formData.append('file', fileObj);
     formData.append('type_code', type_code);
 
     const result = await this.http.post(`${this.filesPathV2}`, formData, true);
     if (result && result.result === 'SUCCESS' && result.file_info) {
-      this.modelIdToName[result.file_info.file_id] = file.name;
+      this.modelIdToName[result.file_info.file_id] = file.basename;
       return result.file_info.file_id;
     } else {
       console.error('File upload failed:', result);

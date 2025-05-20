@@ -17,31 +17,25 @@ from unittest.mock import patch
 
 import hypothesis.strategies as st
 from hypothesis import given
+from hypothesis import settings
 from local_console.commands.qr import app
 from typer.testing import CliRunner
 
-from tests.mocks.mock_configs import config_without_io
+from tests.mocks.config import set_configuration
 from tests.strategies.configs import generate_valid_ip
-from tests.strategies.configs import generate_valid_port_number
 from tests.strategies.samplers.configs import GlobalConfigurationSampler
 
 runner = CliRunner()
 
 
+@settings(deadline=300)
 @given(st.booleans())
 def test_qr_with_defaults(tls_enabled: bool) -> None:
 
     simple_gconf = GlobalConfigurationSampler(num_of_devices=1).sample()
     device_conf = simple_gconf.devices[0]
-    device_conf.webserver.host = "http_server"
+    set_configuration(simple_gconf)
     with (
-        config_without_io(simple_gconf),
-        patch(
-            "local_console.commands.qr.config_obj.get_active_device_config",
-            return_value=device_conf,
-        ) as mock_device_config,
-        patch("local_console.commands.qr.is_localhost", return_value=False),
-        patch("local_console.commands.qr.get_mqtt_ip", return_value="1.2.3.4"),
         patch(
             "local_console.core.camera.qr.qr.qr_string", return_value=""
         ) as mock_qr_string,
@@ -64,32 +58,26 @@ def test_qr_with_defaults(tls_enabled: bool) -> None:
             "",
             "",
         )
-        mock_device_config.assert_called()
 
 
+@settings(deadline=None)
 @given(
     generate_valid_ip(),
-    generate_valid_port_number(),
     st.booleans(),
     generate_valid_ip(),
 )
 def test_qr_with_overrides(
     host_override: str,
-    port_override: int,
     tls_enable_override: bool,
     ntp_override: str,
 ) -> None:
+    port_override = None
     simple_gconf = GlobalConfigurationSampler(num_of_devices=1).sample()
     device_conf = simple_gconf.devices[0]
-    device_conf.webserver.host = "http_server"
+    set_configuration(simple_gconf)
     with (
-        config_without_io(simple_gconf),
-        patch(
-            "local_console.commands.qr.config_obj.get_active_device_config",
-            return_value=device_conf,
-        ) as mock_device_config,
-        patch("local_console.commands.qr.is_localhost", return_value=False),
-        patch("local_console.commands.qr.get_mqtt_ip", return_value="1.2.3.4"),
+        patch("qrcode.main.QRCode"),
+        patch("io.StringIO"),
         patch(
             "local_console.core.camera.qr.qr.qr_string", return_value=""
         ) as mock_qr_string,
@@ -108,7 +96,7 @@ def test_qr_with_overrides(
 
         mock_qr_string.assert_called_once_with(
             host_override,
-            port_override,
+            device_conf.mqtt.port,
             tls_enable_override,
             ntp_override,
             "",
@@ -118,9 +106,9 @@ def test_qr_with_overrides(
             "",
             "",
         )
-        mock_device_config.assert_called()
 
 
+@settings(deadline=300)
 @given(generate_valid_ip())
 def test_qr_for_local_host(local_host_alias: str) -> None:
     """
@@ -130,15 +118,10 @@ def test_qr_for_local_host(local_host_alias: str) -> None:
     """
     simple_gconf = GlobalConfigurationSampler(num_of_devices=1).sample()
     device_conf = simple_gconf.devices[0]
-    device_conf.webserver.host = "http_server"
+    device_conf.mqtt.host = "1.2.3.4"
+    set_configuration(simple_gconf)
     with (
-        config_without_io(simple_gconf),
-        patch(
-            "local_console.commands.qr.config_obj.get_active_device_config",
-            return_value=device_conf,
-        ) as mock_device_config,
         patch("local_console.commands.qr.is_localhost", return_value=True),
-        patch("local_console.commands.qr.get_mqtt_ip", return_value="1.2.3.4"),
         patch(
             "local_console.core.camera.qr.qr.qr_string", return_value=""
         ) as mock_qr_string,
@@ -158,4 +141,3 @@ def test_qr_for_local_host(local_host_alias: str) -> None:
             "",
             "",
         )
-        mock_device_config.assert_called()

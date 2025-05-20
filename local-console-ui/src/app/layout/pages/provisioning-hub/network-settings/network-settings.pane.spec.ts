@@ -16,16 +16,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { TestBed, ComponentFixture } from '@angular/core/testing';
-import { ReactiveFormsModule, FormsModule } from '@angular/forms';
-import { NetworkSettingsPane } from './network-settings.pane';
-import { QrService } from '../../../../core/qr/qr.service';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
-import { FeaturesService } from '../../../../core/common/features.service';
-import { LocalDevice } from '@app/core/device/device';
-import { Subject } from 'rxjs';
-import { DeviceService } from '@app/core/device/device.service';
-import { Device } from '@samplers/device';
+import { NICService } from '@app/core/nic/nic.service';
+import { NICS } from '@samplers/nics';
+import { QrService } from '../../../../core/qr/qr.service';
+import { NetworkSettingsPane } from './network-settings.pane';
 
 // Mock QR Service
 class MockQrService {
@@ -38,21 +35,15 @@ class MockQrService {
   });
 }
 
-class MockFeaturesService {
-  getFeatures = jest.fn().mockReturnValue({
-    device_registration: {
-      device_groups: false,
-      mqtt_port: true,
-      device_name: true,
-    },
-  });
+class MockNICService {
+  getAvailableNICs = jest.fn().mockResolvedValue(NICS.sampleList());
 }
 
 describe('NetworkSettingsPane', () => {
   let component: NetworkSettingsPane;
   let fixture: ComponentFixture<NetworkSettingsPane>;
   let qrService: MockQrService;
-  let featuresService: MockFeaturesService;
+  let nicService: MockNICService;
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
@@ -64,16 +55,14 @@ describe('NetworkSettingsPane', () => {
       ],
       providers: [
         { provide: QrService, useClass: MockQrService },
-        { provide: FeaturesService, useClass: MockFeaturesService },
+        { provide: NICService, useClass: MockNICService },
       ],
     }).compileComponents();
 
     fixture = TestBed.createComponent(NetworkSettingsPane);
     component = fixture.componentInstance;
     qrService = TestBed.inject(QrService) as unknown as MockQrService;
-    featuresService = TestBed.inject(
-      FeaturesService,
-    ) as unknown as MockFeaturesService;
+    nicService = TestBed.inject(NICService) as unknown as MockNICService;
     fixture.detectChanges();
   });
 
@@ -136,27 +125,6 @@ describe('NetworkSettingsPane', () => {
     expect(component.qrcodeFormGroup.controls['dns'].value).toEqual(null);
   });
 
-  it('should not send mqtt_port and mqtt_host if not enabled in environment', async () => {
-    featuresService.getFeatures.mockReturnValue({
-      device_groups: false,
-      device_registration: {
-        mqtt_port: false,
-      },
-    });
-
-    let value = component.qrcodeFormGroup.value;
-    value.mqtt_port = 1883;
-    value.mqtt_host = 'example.com';
-
-    await component.generateQRCode();
-    expect(qrService.generateQrCode).toHaveBeenCalledWith(
-      expect.not.objectContaining({
-        mqtt_port: expect.anything(),
-        mqtt_host: expect.anything(),
-      }),
-    );
-  });
-
   it('should update port', async () => {
     const port = 12345;
     component.mqttPort = port;
@@ -167,5 +135,13 @@ describe('NetworkSettingsPane', () => {
         mqtt_port: port,
       }),
     );
+  });
+
+  it('should load NICs on creation', () => {
+    expect(nicService.getAvailableNICs).toHaveBeenCalledTimes(1);
+
+    expect(component.availableNics.loading()).toBeFalsy();
+    expect(component.availableNics.error()).toBeFalsy();
+    expect(component.availableNics.data()).toHaveLength(3);
   });
 });

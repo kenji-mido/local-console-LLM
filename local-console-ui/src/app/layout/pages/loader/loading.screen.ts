@@ -19,10 +19,9 @@
 import { HttpClient } from '@angular/common/http';
 import { Component, OnDestroy, OnInit } from '@angular/core';
 import { MatProgressSpinner } from '@angular/material/progress-spinner';
-import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { Router } from '@angular/router';
+import { EnvService } from '@app/core/common/environment.service';
 import { ROUTER_LINKS } from '@app/core/config/routes';
-import { environment } from '../../../../environments/environment';
 import { firstValueFrom } from 'rxjs';
 
 @Component({
@@ -38,11 +37,16 @@ export class LoadingScreen implements OnInit, OnDestroy {
   constructor(
     private http: HttpClient,
     private router: Router,
+    private envService: EnvService,
   ) {}
+
+  get healthUrl() {
+    return `${this.envService.getApiUrl()}/health`;
+  }
 
   ngOnInit(): void {
     this.interval = window.setInterval(async () => {
-      await firstValueFrom(this.http.get(environment.apiV2Url + '/health'));
+      await firstValueFrom(this.http.get(this.healthUrl));
       this.router.navigateByUrl(ROUTER_LINKS.PROVISIONING_HUB);
     }, 500);
   }

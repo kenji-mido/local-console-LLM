@@ -16,57 +16,72 @@
  SPDX-License-Identifier: Apache-2.0
 -->
 
-<!-- TODO: revisit itemSize. Arbitrary number. -->
-<app-segments
-  data-testid="hub-mode-selector"
-  [(ngModel)]="displayMode"
-  [options]="['Label', 'Json']"
-  [disabled]="disabled"
-  class="selector"
-/>
-@if (displayMode === "Label") {
-  <div class="field-box p-1 col hs-10">
-    @if (rawInference) {
-      <cdk-virtual-scroll-viewport [itemSize]="100" class="viewport">
-        <div class="format">
-          <div>
-            @for (inference of inferenceItems; track inference.class_id) {
-              <div class="element-spacing">
-                @if (isClassificationInference(rawInference)) {
-                  <div class="row">
-                    <div
-                      class="square"
-                      [appRgbBackground]="inference.color"
-                    ></div>
-                    <div>{{ inference.label }}</div>
-                  </div>
-                  <div class="row align-center pb-1 row">
-                    <div class="line row w-9">
-                      <div
-                        class="line-complete"
-                        [ngStyle]="{ width: inference.score + '%' }"
-                      ></div>
-                    </div>
-                    <div class="w-3">{{ inference.score }}%</div>
-                  </div>
-                } @else {
-                  <div class="row align-center pb-1">
-                    <div
-                      class="square"
-                      [appRgbBackground]="inference.color"
-                    ></div>
-                    <div>{{ inference.label }}</div>
+<div class="stack">
+  <div class="row gap-1 align-center">
+    <span class="text-24">Inference</span>
+    <app-infotip tip="Check the inferences coming from the device" />
+    <app-segments
+      data-testid="hub-mode-selector"
+      [(value)]="displayMode"
+      [options]="displayOptions"
+      [disabled]="disabled"
+      class="selector"
+    />
+  </div>
+</div>
+@if (error) {
+  <div class="field-box p-1 grow overflow height-cap">
+    <span class="text-16 error">Failed to Process Data.</span>
+  </div>
+} @else {
+  @if (displayMode === "Label") {
+    <div class="field-box p-1 grow overflow height-cap">
+      @if (rawInference) {
+        @if (isErrorInference(rawInference)) {
+          <div class="error">{{ inferenceItems[0].label }}</div>
+        } @else {
+          <cdk-virtual-scroll-viewport [itemSize]="100" class="viewport">
+            <div class="format">
+              <div>
+                @for (inference of inferenceItems; track inference.class_id) {
+                  <div class="element-spacing">
+                    @if (isClassificationInference(rawInference)) {
+                      <div class="row">
+                        <div
+                          class="square"
+                          [appRgbBackground]="inference.color"
+                        ></div>
+                        <div>{{ inference.label }}</div>
+                      </div>
+                      <div class="row align-center pb-1 row">
+                        <div class="line row w-9">
+                          <div
+                            class="line-complete"
+                            [ngStyle]="{ width: inference.score + '%' }"
+                          ></div>
+                        </div>
+                        <div class="w-3">{{ inference.score }}%</div>
+                      </div>
+                    } @else if (isDetectionInference(rawInference)) {
+                      <div class="row align-center pb-1">
+                        <div
+                          class="square"
+                          [appRgbBackground]="inference.color"
+                        ></div>
+                        <div>{{ inference.label }}</div>
+                      </div>
+                    }
                   </div>
                 }
               </div>
-            }
-          </div>
-        </div>
-      </cdk-virtual-scroll-viewport>
-    }
-  </div>
-} @else {
-  <div class="field-box p-0 col hs-10">
-    <app-json [object]="rawInference"></app-json>
-  </div>
+            </div>
+          </cdk-virtual-scroll-viewport>
+        }
+      }
+    </div>
+  } @else {
+    <div class="field-box p-0 grow overflow height-cap">
+      <app-json [object]="rawInference"></app-json>
+    </div>
+  }
 }

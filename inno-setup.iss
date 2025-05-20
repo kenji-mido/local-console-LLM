@@ -117,7 +117,7 @@ var
   Answer: Integer;
 begin
   Result := True;
-  while IsAppRunning('LocalConsole-win-x64.exe') do
+  while IsAppRunning('LocalConsole.exe') do
   begin
     Answer := MsgBox('Local Console is currently running. Please close it in order to continue.', mbError, MB_OKCANCEL);
     if Answer = IDCANCEL then

@@ -13,14 +13,55 @@
 # limitations under the License.
 #
 # SPDX-License-Identifier: Apache-2.0
+from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
 from unittest.mock import MagicMock
+from unittest.mock import Mock
 
 import trio
+from local_console.core.camera.machine import Camera
+from local_console.core.camera.states.v1.common import ConnectedCameraStateV1
 from local_console.core.device_services import DeviceServices
+from local_console.core.schemas.edge_cloud_if_v1 import DeviceConfiguration
+from local_console.servers.webserver import AsyncWebserver
+from local_console.servers.webserver import FileInbox
+
+from tests.mocks.http import mocked_http_server
+from tests.strategies.samplers.configs import DeviceConnectionSampler
 
 
-def mocked_device_services() -> DeviceServices:
-    nursery = MagicMock(spec=trio.Nursery)
+def mocked_device_services(
+    nursery: trio.Nursery = MagicMock(spec=trio.Nursery),
+) -> DeviceServices:
     channel = MagicMock(spec=trio.MemorySendChannel)
     token = MagicMock(spec=trio.lowlevel.TrioToken)
-    return DeviceServices(nursery, channel, token)
+    webserver = MagicMock(spec=AsyncWebserver)
+    return DeviceServices(nursery, channel, webserver, token)
+
+
+@asynccontextmanager
+async def cs_init_context(
+    mqtt_host: str = "localhost",
+    mqtt_port: int = 1883,
+    device_config: DeviceConfiguration | None = None,
+) -> AsyncGenerator[Camera, None]:
+    config = DeviceConnectionSampler().sample()
+
+    config.mqtt.host = mqtt_host
+    config.mqtt.port = mqtt_port
+
+    with mocked_http_server() as webserver:
+        camera = Camera(
+            config,
+            MagicMock(spec=trio.MemorySendChannel),
+            webserver,
+            MagicMock(spec=FileInbox),
+            MagicMock(spec=trio.lowlevel.TrioToken),
+            Mock(),
+        )
+
+        camera._state = ConnectedCameraStateV1(camera._common_properties)
+        if device_config:
+            camera._state._refresh_from_report(device_config)
+
+        yield camera

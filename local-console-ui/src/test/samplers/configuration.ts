@@ -21,8 +21,7 @@ import { Configuration, OperationMode } from '@app/core/device/configuration';
 export namespace Configurations {
   export function sample(type: OperationMode = 'classification') {
     return <Configuration>{
-      image_dir_path: 'config/images/path',
-      inference_dir_path: 'config/inferences/long/very/long/super/long/path',
+      device_dir_path: 'config/inferences/long/very/long/super/long/path',
       size: 10,
       unit: 'Mb',
       vapp_type: type,

@@ -5,3 +5,12 @@ include =
 omit =
     local-console/src/local_console/assets/*
 branch = True
+data_file = .coverage
+
+[report]
+exclude_lines =
+    pragma: no cover
+    if TYPE_CHECKING:
+
+[html]
+directory = reports/unit/coverage

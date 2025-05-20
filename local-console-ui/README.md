@@ -36,6 +36,12 @@ From the root directory, with your Python virtual environment (`lcenv`) activate
 (lcenv)$ local-console -v serve
 ```
 
+In case you want to spawn the backend in a clean state by using configuration files and directories at a temporary location, you may run:
+
+```sh
+LCDIR=$(mktemp -d); LC_DEFAULT_DIRS_PATH=$LCDIR local-console --config-dir $LCDIR -v serve
+```
+
 Alternatively, if you prefer to use a mock server:
 
 ```sh

@@ -17,44 +17,20 @@ import enum
 import logging
 import shutil
 from pathlib import Path
-from tempfile import TemporaryDirectory
 from typing import Callable
 from typing import Optional
 
-import trio
-from local_console.clients.agent import Agent
 from local_console.core.camera.enums import FirmwareExtension
-from local_console.core.camera.enums import MQTTTopics
 from local_console.core.camera.enums import OTAUpdateModule
 from local_console.core.camera.enums import OTAUpdateStatus
-from local_console.core.camera.state import CameraState
-from local_console.core.commands.ota_deploy import configuration_spec
-from local_console.core.config import config_obj
+from local_console.core.camera.schemas import PropertiesReport
 from local_console.core.error.base import UserException
 from local_console.core.error.code import ErrorCodes
-from local_console.core.schemas.edge_cloud_if_v1 import DeviceConfiguration
-from local_console.core.schemas.schemas import OnWireProtocol
-from local_console.servers.webserver import AsyncWebserver
-from local_console.utils.local_network import get_webserver_ip
 from pydantic import BaseModel
 from pydantic import field_validator
 from pydantic import ValidationInfo
 
 logger = logging.getLogger(__name__)
-
-
-class TransientStatus:
-    """
-    A simple holder of values that is updated dynamically during
-    a firmware update operation. This present form can be used
-    for unit tests, and in the GUI it is subclassed by a type that
-    provides automatic event chaining for displaying the current
-    status on the screen for the user to get feedback.
-    """
-
-    update_status: str = ""
-    progress_download: int = 0
-    progress_update: int = 0
 
 
 class FirmwareValidationStatus(enum.Enum):
@@ -107,6 +83,14 @@ class FirmwareHeader(BaseModel):
         )
 
 
+class FirmwareInfo(BaseModel):
+    path: Path
+    hash: str
+    version: str
+    is_valid: bool
+    type: OTAUpdateModule
+
+
 def remove_header(tmp: Path, firmware: Path) -> Path:
     without_header_file = tmp / f"{firmware.stem}.no_header{firmware.suffix}"
 
@@ -118,34 +102,29 @@ def remove_header(tmp: Path, firmware: Path) -> Path:
 
 
 def process_firmware_file(
-    tmp: Path, state: CameraState
+    tmp: Path, firmware_info: FirmwareInfo
 ) -> tuple[Path, FirmwareHeader | None]:
-    if (
-        not state.firmware_file.value
-        or not state.firmware_file.value.is_file()
-        or not state.firmware_file.value.exists()
-    ):
-        return (Path(), None)
-    firmware: Path = state.firmware_file.value
-    with firmware.open("rb") as file:
+    if not firmware_info.path.is_file() or not firmware_info.path.exists():
+        return Path(), None
+    with firmware_info.path.open("rb") as file:
         try:
             first_32_header_chars = file.read(32).decode("utf-8")
             header = FirmwareHeader.parse(first_32_header_chars)
             if header:
-                tmp_firmware = remove_header(tmp, firmware)
+                tmp_firmware = remove_header(tmp, firmware_info.path)
                 return (tmp_firmware, header)
         except UnicodeDecodeError:
             pass
-    tmp_firmware = tmp / firmware.name
-    shutil.copy(state.firmware_file.value, tmp_firmware)
-    return (tmp_firmware, None)
+    tmp_firmware = tmp / firmware_info.path.name
+    shutil.copy(firmware_info.path, tmp_firmware)
+    return tmp_firmware, None
 
 
 def validate_firmware_file(
     file_path: Path,
     file_type: OTAUpdateModule,
     version: str,
-    current_cfg: Optional[DeviceConfiguration],
+    current_cfg: PropertiesReport,
     header: FirmwareHeader | None = None,
 ) -> FirmwareValidationStatus:
 
@@ -154,10 +133,6 @@ def validate_firmware_file(
             ErrorCodes.EXTERNAL_FIRMWARE_FILE_NOT_EXISTS,
             "Firmware file does not exist!",
         )
-
-    if current_cfg is None:
-        logger.debug("DeviceConfiguration is None.")
-        return FirmwareValidationStatus.INVALID
 
     if not version or len(version) > 31:
         logger.debug(f"Firmware version {version} is invalid")
@@ -170,7 +145,7 @@ def validate_firmware_file(
                 "Invalid Application Firmware!",
             )
 
-        if current_cfg.Version.ApFwVersion == version:
+        if current_cfg.cam_fw_version == version:
             logger.debug(
                 "Received firmware is the same as the one currently installed in the device."
             )
@@ -186,7 +161,7 @@ def validate_firmware_file(
                 "Invalid Sensor Firmware!",
             )
 
-        if current_cfg.Version.SensorFwVersion == version:
+        if current_cfg.sensor_fw_version == version:
             logger.debug(
                 "Received firmware is the same as the one currently installed in the device."
             )
@@ -215,111 +190,3 @@ def progress_update_checkpoint(
         return True
 
     return False
-
-
-def get_ota_update_status(state: CameraState) -> str | None:
-    if state.device_config.value:
-        device_config: DeviceConfiguration = state.device_config.value
-        return device_config.OTA.UpdateStatus
-    return None
-
-
-async def update_firmware_task(
-    state: CameraState,
-    error_notify: Callable,
-    use_configured_port: bool = False,
-) -> None:
-    assert state.firmware_file.value
-    assert state.firmware_file_type.value
-    assert state.firmware_file_version.value
-
-    with TemporaryDirectory(prefix="lc_update_") as temporary_dir:
-        tmp_dir = Path(temporary_dir)
-        tmp_firmware, firmware_header = process_firmware_file(tmp_dir, state)
-        if firmware_header:
-            state.firmware_file_version.value = firmware_header.firmware_version
-
-        validation_status: FirmwareValidationStatus = FirmwareValidationStatus.INVALID
-        try:
-            validation_status = validate_firmware_file(
-                state.firmware_file.value,
-                state.firmware_file_type.value,
-                state.firmware_file_version.value,
-                state.device_config.value,
-                firmware_header,
-            )
-        except UserException as e:
-            error_notify(str(e))
-            return
-        if validation_status == FirmwareValidationStatus.INVALID:
-            error_notify("Firmware validation failed.")
-            return
-        elif validation_status == FirmwareValidationStatus.SAME_FIRMWARE:
-            logger.debug("No action needed. Firmware update operation is finished.")
-            error_notify("Already same Firmware version is available")
-            return
-
-        config = config_obj.get_config()
-        assert state.mqtt_port.value
-        config_device = config_obj.get_device_config(state.mqtt_port.value)
-        schema = OnWireProtocol.from_iot_spec(config.evp.iot_platform)
-        ephemeral_agent = Agent(
-            config_device.mqtt.host, config_device.mqtt.port, schema
-        )
-        webserver_port = config_device.webserver.port if use_configured_port else 0
-        ip_addr = get_webserver_ip(config_device)
-
-        logger.debug("Firmware update operation will start.")
-        timeout_secs = 60 * 4
-        with trio.move_on_after(timeout_secs) as timeout_scope:
-            async with (
-                ephemeral_agent.mqtt_scope(
-                    [MQTTTopics.ATTRIBUTES_REQ.value, MQTTTopics.ATTRIBUTES.value]
-                ),
-                AsyncWebserver(tmp_dir, webserver_port, None, True) as serve,
-            ):
-                # Fill config spec
-                update_spec = configuration_spec(
-                    state.firmware_file_type.value,
-                    tmp_firmware,
-                    tmp_dir,
-                    serve.port,
-                    ip_addr,
-                )
-                # Use version specified by the user
-                update_spec.OTA.DesiredVersion = state.firmware_file_version.value
-
-                payload = update_spec.model_dump_json()
-                logger.debug(f"Update spec is: {payload}")
-
-                original_update_status = get_ota_update_status(state)
-                is_changed = False
-
-                logger.debug(f"Status before OTA is: {original_update_status}")
-
-                await ephemeral_agent.configure(
-                    "backdoor-EA_Main", "placeholder", payload
-                )
-                while True:
-                    """
-                    This loop assumes that `state` is updated by a main
-                    loop that reacts to reports from the camera, such as
-                    `MQTTMixin.mqtt_setup`.
-                    """
-                    await state.ota_event()
-                    timeout_scope.deadline += timeout_secs
-
-                    update_status = get_ota_update_status(state)
-                    is_changed = is_changed or original_update_status != update_status
-                    logger.debug(f"OTA status is {update_status}")
-                    if progress_update_checkpoint(
-                        update_status, is_changed, error_notify
-                    ):
-                        logger.debug("Finished updating!")
-                        break
-
-        if timeout_scope.cancelled_caught:
-            error_notify("Firmware update timed out!")
-            logger.warning("Timeout while updating firmware.")
-
-        logger.debug("Firmware update operation is finished.")

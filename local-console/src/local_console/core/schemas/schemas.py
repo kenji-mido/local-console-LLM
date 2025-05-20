@@ -15,15 +15,20 @@
 # SPDX-License-Identifier: Apache-2.0
 import json
 import logging
+from pathlib import Path
 from typing import Annotated
+from typing import Any
+from typing import NewType
 from typing import Optional
-from typing import Self
 
+from local_console.core.camera.enums import ApplicationType
+from local_console.core.camera.enums import UnitScale
 from local_console.core.camera.qr.schema import QRInfo
 from local_console.utils.enums import StrEnum
 from pydantic import BaseModel
+from pydantic import ConfigDict
 from pydantic import Field
-from pydantic import model_validator
+from pydantic import field_validator
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +36,9 @@ logger = logging.getLogger(__name__)
 IPAddress = Field(pattern=r"^[\w\d_][\w.-]*$")
 
 IPPortNumber = Field(ge=0, le=65535)
+
+DeviceID = NewType("DeviceID", Annotated[int, Field(gt=0)])
+# FIXME: Doing `DeviceID(str)` does not cast it to integer
 
 
 class Libraries(BaseModel):
@@ -67,10 +75,8 @@ class DeploymentManifest(BaseModel):
     deployment: Deployment
 
     def render_for_evp1(self) -> str:
-        # The actual manifest, which is the value of the "deployment" key, is stringified. See:
-        # https://github.com/midokura/wedge-agent/blob/fa3d4840c37978938084cbc70612fdb8ea8dbf9f/src/libwedge-agent/manifest.c#L1151
-        # Also, the fields differ and EVP1 has two mandatory fields in the instanceSpecs:
-        # https://github.com/midokura/wedge-agent/blob/fa3d4840c37978938084cbc70612fdb8ea8dbf9f/src/libwedge-agent/manifest.c#L842
+        # The actual manifest, which is the value of the "deployment" key, is stringified.
+        # Also, the fields differ and EVP1 has two mandatory fields in the instanceSpecs.
         body = self.deployment
         difference_hack = body.model_dump()
         for instance in difference_hack["instanceSpecs"].values():
@@ -79,8 +85,7 @@ class DeploymentManifest(BaseModel):
         return json.dumps({"deployment": as_json})
 
     def render_for_evp2(self) -> str:
-        # A direct JSON serialization, see:
-        # https://github.com/midokura/wedge-agent/blob/fa3d4840c37978938084cbc70612fdb8ea8dbf9f/src/libwedge-agent/manifest.c#L1168
+        # A direct JSON serialization
         return json.dumps(self.model_dump())
 
 
@@ -90,31 +95,49 @@ class DesiredDeviceConfig(BaseModel):
 
 
 class OnWireProtocol(StrEnum):
-    # Values coming from
-    # https://github.com/midokura/evp-onwire-schema/blob/26441528ca76895e1c7e9569ba73092db71c5bc1/schema/systeminfo.schema.json#L42
-    # https://github.com/midokura/evp-onwire-schema/blob/1164987a620f34e142869f3979ca63b186c0a061/schema/systeminfo/systeminfo.schema.json#L19
     EVP1 = "EVP1"
-    EVP2 = "EVP2-TB"
-    # EVP2 on C8Y not implemented at this time
+    EVP2 = "EVP2"
 
+    @classmethod
+    def _missing_(cls, value: object) -> Any:
+        # Normalize the value in the case of EVP2-TB and EVP2-C8Y
+        if isinstance(value, str) and value.startswith("EVP2"):
+            return cls.EVP2
+        return None  # Let the default error be raised if no match is found
+
+    @property
     def for_agent_environ(self) -> str:
         if self == self.EVP1:
             return "evp1"
 
         return "tb"
 
+
+class DeviceType(StrEnum):
+    RPi = "Raspberry Pi"
+    T3P_SZP = "SZP123S-001"
+    T3P_CSV = "CSV26"
+    T3P_AIH = "AIH-IVRW2"
+    UNKNOWN = "Unknown"
+
     @classmethod
-    def from_iot_spec(cls, value: str) -> "OnWireProtocol":
-        if value.lower() == "tb":
-            return cls.EVP2
-        elif value.lower() == "evp1":
-            return cls.EVP1
-        raise ValueError(f"On-wire schema version unavailable for spec '{value}'")
+    def from_value(cls, value: str) -> "DeviceType":
+        manufacture_id = value[4:8]
+        model_id = value[8:12]
+        if manufacture_id in ["8001", "0001"] and model_id != "0006":
+            return cls.T3P_SZP
+        elif manufacture_id in ["8007", "0001"]:
+            return cls.T3P_AIH
+        elif manufacture_id == "8005":
+            return cls.T3P_CSV
+        return cls.UNKNOWN
 
 
 class DeviceListItem(BaseModel):
     name: str
     port: Annotated[int, IPPortNumber]
+    id: DeviceID
+    onwire_schema: OnWireProtocol
 
 
 class MQTTParams(BaseModel, validate_assignment=True):
@@ -132,28 +155,36 @@ DeviceName = Field(pattern=r"^[A-Za-z0-9\-_.]+$", min_length=1, max_length=255)
 
 
 class Persist(BaseModel):
-    module_file: str | None = None
-    ai_model_file: str | None = None
-    image_dir_path: str | None = None
-    inference_dir_path: str | None = None
-    size: str | None = None
-    unit: str | None = None
-    vapp_type: str | None = None
+    module_file: Path | None = None
+    ai_model_file: Path | None = None
+    device_dir_path: Path | None = None
+    size: Optional[Annotated[int, Field(gt=0)]] = None
+    unit: UnitScale | None = None
+    vapp_type: ApplicationType | None = ApplicationType.IMAGE
     vapp_schema_file: str | None = None
     vapp_config_file: str | None = None
     vapp_labels_file: str | None = None
+    auto_deletion: bool = False
+
+    model_config = ConfigDict(validate_assignment=True)
+
+    @field_validator("unit", mode="before")
+    @classmethod
+    def unit_scale_validator(cls, v: str) -> UnitScale | None:
+        if not v:
+            return None
+        return UnitScale.from_value(v)
 
 
 class DeviceConnection(BaseModel):
     mqtt: MQTTParams
-    webserver: WebserverParams
     name: str = DeviceName
+    id: DeviceID
+    onwire_schema: OnWireProtocol
     persist: Persist = Persist()
     qr: QRInfo | None = None
 
-
-class EVPParams(BaseModel):
-    iot_platform: str = Field(pattern=r"^[a-zA-Z][\w]*$")
+    model_config = ConfigDict(validate_assignment=True)
 
 
 class ModelDeploymentConfig(BaseModel):
@@ -167,21 +198,11 @@ class DeploymentConfig(BaseModel):
 
 class LocalConsoleConfig(BaseModel):
     deployment: DeploymentConfig = DeploymentConfig()
+    webserver: WebserverParams
 
 
 class GlobalConfiguration(BaseModel):
-    evp: EVPParams
     devices: list[DeviceConnection]
-    active_device: int = IPPortNumber
-    config: LocalConsoleConfig = LocalConsoleConfig()
+    config: LocalConsoleConfig
 
-    class Config:
-        validate_assignment = True
-
-    @model_validator(mode="after")
-    def verify_active_device_in_devices(self) -> Self:
-        if self.active_device not in [device.mqtt.port for device in self.devices]:
-            message = f"{self.active_device} is an invalid active device. It must be the MQTT port of one of the configured devices."
-            logger.error(message)
-            raise ValueError(message)
-        return self
+    model_config = ConfigDict(validate_assignment=True)

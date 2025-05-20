@@ -18,9 +18,11 @@
 
 import { CommonModule } from '@angular/common';
 import { Component, Input, SimpleChanges } from '@angular/core';
-import { CardComponent } from '../card/card.component';
-import { DeviceV2 } from '@app/core/device/device';
-import { SysAppModuleStateV2, isSysModuleState } from '@app/core/module/sysapp';
+import { LocalDevice } from '@app/core/device/device';
+import {
+  SysAppModuleConfigV2,
+  isSysModuleConfig,
+} from '@app/core/module/sysapp';
 
 interface DeviceInfoTabItems {
   sensor: string | undefined;
@@ -29,7 +31,6 @@ interface DeviceInfoTabItems {
   sensor_chip_fw_loader: string | undefined;
   processing_state: string | undefined;
   device_id: string | undefined;
-  internal_id: string | undefined;
 }
 
 @Component({
@@ -37,7 +38,7 @@ interface DeviceInfoTabItems {
   templateUrl: './device-info.component.html',
   styleUrls: ['./device-info.component.scss'],
   standalone: true,
-  imports: [CommonModule, CardComponent],
+  imports: [CommonModule],
 })
 export class DeviceInfo {
   device_info: DeviceInfoTabItems = {
@@ -47,20 +48,19 @@ export class DeviceInfo {
     sensor_chip_fw_loader: undefined,
     processing_state: undefined,
     device_id: undefined,
-    internal_id: undefined,
   };
 
-  @Input() device: DeviceV2 | null = null;
+  @Input() device: LocalDevice | null = null;
 
   ngOnChanges(changes: SimpleChanges) {
     this.onDeviceInfoReceived(changes['device'].currentValue);
   }
-  onDeviceInfoReceived(device: DeviceV2 | null) {
+  onDeviceInfoReceived(device: LocalDevice | null) {
     this.device = device;
     if (
       device === null ||
       device.modules === null ||
-      !isSysModuleState(device.modules?.[0].property.state!)
+      !isSysModuleConfig(device.modules?.[0].property.configuration!)
     ) {
       this.device_info = {
         sensor: undefined,
@@ -69,22 +69,20 @@ export class DeviceInfo {
         sensor_chip_fw_loader: undefined,
         processing_state: undefined,
         device_id: undefined,
-        internal_id: undefined,
       };
       return;
     }
-    const device_state: SysAppModuleStateV2 =
-      device.modules?.[0].property.state!;
+    const device_config: SysAppModuleConfigV2 =
+      device.modules?.[0].property.configuration!;
     this.device_info = {
-      sensor: device_state.device_info?.sensors?.[0].name,
-      main_chip: device_state.device_info?.processors?.[0].firmware_version,
+      sensor: device_config.device_info?.sensors?.[0].name,
+      main_chip: device_config.device_info?.processors?.[0].firmware_version,
       sensor_chip_fw_main:
-        device_state.device_info?.sensors?.[0].firmware_version,
+        device_config.device_info?.sensors?.[0].firmware_version,
       sensor_chip_fw_loader:
-        device_state.device_info?.sensors?.[0].loader_version,
-      processing_state: device_state.device_state?.process_state,
+        device_config.device_info?.sensors?.[0].loader_version,
+      processing_state: device_config.device_state?.process_state,
       device_id: device.device_id,
-      internal_id: device.internal_device_id,
     };
   }
 }

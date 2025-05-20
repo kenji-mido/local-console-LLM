@@ -13,17 +13,32 @@
 # limitations under the License.
 #
 # SPDX-License-Identifier: Apache-2.0
-from local_console.core.files.inference import Inference
+from local_console.core.files.inference import InferenceOut
+from local_console.fastapi.routes.images.dto import FileDTO
 from pydantic import BaseModel
+from pydantic import ConfigDict
 
 
 class InferenceElementDTO(BaseModel):
     id: str
     model_id: str
     model_version_id: str = ""
-    inference_result: Inference
+    inference_result: InferenceOut
+
+    model_config = ConfigDict(protected_namespaces=())
 
 
 class InferenceListDTO(BaseModel):
     data: list[InferenceElementDTO]
+    continuation_token: str | None
+
+
+class InferenceImagePairDTO(BaseModel):
+    id: str
+    inference: InferenceElementDTO
+    image: FileDTO
+
+
+class InferenceWithImageListDTO(BaseModel):
+    data: list[InferenceImagePairDTO]
     continuation_token: str | None

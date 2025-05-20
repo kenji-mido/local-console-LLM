@@ -48,8 +48,7 @@ async def server_main() -> int:
     retcode: int = 1
 
     config = Config()
-    config.bind = [f"localhost:{LISTEN_PORT}"]
-    config.accesslog = logging.getLogger("hypercorn.access")
+    config.bind = [f"0.0.0.0:{LISTEN_PORT}"]
 
     try:
         if is_port_open(LISTEN_PORT):

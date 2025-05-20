@@ -15,14 +15,19 @@
 
  SPDX-License-Identifier: Apache-2.0
 -->
-
-<div class="hub-page full-page">
-  <div class="page-header">
-    <div class="page-header-title">
-      <span>Manage Devices</span>
-    </div>
+<div class="hub fullwidth fullheight col gap-3">
+  <!--
+    TODO: Use `hub fullheight fullwidth`.
+    Device details depend on hub-page attributes.
+  -->
+  <div class="row gap-1 align-center">
+    <img
+      class="page-title-icon"
+      src="images/{{ theme }}/device-management.svg"
+    />
+    <span class="text-28 bold">Devices</span>
   </div>
-  <div class="page-body">
+  <div class="col gap-3 fullwidth grow overflow-hidden">
     <div cdkDropList class="device-management-container">
       <cdk-virtual-scroll-viewport
         [tvsItemSize]="itemSize"
@@ -38,23 +43,28 @@
           <ng-container matColumnDef="status">
             <th mat-header-cell *matHeaderCellDef>Status</th>
             <td mat-cell *matCellDef="let element">
-              <app-icon-text
-                [iconUrl]="element.connection_state | deviceStatusSvg"
-                [text]="element.connection_state || DeviceStatus.Unknown"
-              ></app-icon-text>
+              <app-device-status-badge
+                [deviceStatus]="element.connection_state"
+              ></app-device-status-badge>
             </td>
           </ng-container>
           <ng-container matColumnDef="port">
             <th mat-header-cell *matHeaderCellDef>Port</th>
             <td mat-cell *matCellDef="let element">
-              <span>{{element.port}}</span>
+              <span>{{element.device_id}}</span>
+            </td>
+          </ng-container>
+          <ng-container matColumnDef="type">
+            <th mat-header-cell *matHeaderCellDef>Type</th>
+            <td mat-cell *matCellDef="let element">
+              <span>{{element.device_type}}</span>
             </td>
           </ng-container>
           <ng-container matColumnDef="appFw">
             <th mat-header-cell *matHeaderCellDef>Main Chip FW Ver.</th>
             <td mat-cell *matCellDef="let element">
               <span
-                >{{element.modules?.[0].property.state.device_info.processors?.[0].firmware_version}}</span
+                >{{element.modules?.[0].property.configuration.device_info.processors?.[0].firmware_version}}</span
               >
             </td>
           </ng-container>
@@ -62,7 +72,7 @@
             <th mat-header-cell *matHeaderCellDef>Sensor Chip FW Ver.</th>
             <td mat-cell *matCellDef="let element">
               <span
-                >{{element.modules?.[0].property.state.device_info.sensors?.[0].firmware_version}}</span
+                >{{element.modules?.[0].property.configuration.device_info.sensors?.[0].firmware_version}}</span
               >
             </td>
           </ng-container>
@@ -76,7 +86,7 @@
                 />
               </button>
               <ng-template #menu>
-                <div class="menu" cdkMenu>
+                <div class="menu text-16" cdkMenu>
                   <button
                     class="menu-item"
                     (click)="onDelete(element)"
@@ -108,7 +118,10 @@
         </table>
       </cdk-virtual-scroll-viewport>
       <div class="device-details" [style.min-height.px]="infoSize">
-        <div class="device-details-header">
+        <div
+          class="device-details-header text-16 bold"
+          id="device_details_header_id"
+        >
           <div class="device-details-title">
             {{ selectedDevice === null ? "Select a Device" :
             selectedDevice.device_name }}
@@ -125,7 +138,7 @@
         </div>
         <div class="device-tab-selection">
           <button
-            class="button"
+            class="button text-16"
             data-testid="device_tab"
             (click)="selectDevice()"
             [ngClass]="{'selected-tab': selectedSection === Tab.Device}"
@@ -133,7 +146,7 @@
             Device
           </button>
           <button
-            class="button"
+            class="button text-16"
             data-testid="network_tab"
             (click)="selectNetwork()"
             [ngClass]="{'selected-tab': selectedSection === Tab.Network}"
@@ -141,7 +154,7 @@
             Network
           </button>
           <button
-            class="button"
+            class="button text-16"
             data-testid="aimodel_tab"
             (click)="selectModel()"
             [ngClass]="{'selected-tab': selectedSection === Tab.Model}"

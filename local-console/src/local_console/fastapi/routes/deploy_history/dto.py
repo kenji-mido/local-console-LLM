@@ -25,6 +25,9 @@ class DeviceDeployHistoryInfo(BaseModel):
     device_id: str
     device_name: str
 
+    def __hash__(self) -> int:
+        return hash((self.device_id, self.device_name))
+
 
 class DeployHistory(BaseModel):
     """

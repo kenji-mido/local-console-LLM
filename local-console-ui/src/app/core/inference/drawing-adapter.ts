@@ -16,6 +16,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { getColorLuminance, getColorString } from '../drawing/color';
 import {
   BoxDrawingElement,
   DrawingElement,
@@ -31,9 +32,9 @@ export function getDrawingElementsForClassification(
   return classification.perception.classification_list.map((hit) => {
     const drawingElement = <LabelDrawingElement>{
       type: 'label',
-      bgColor: colorBytesToHexString(...hit.color),
+      bgColor: getColorString(hit.color),
       text: `${Math.round(hit.score)}%: ${hit.label}`,
-      txtColor: colorLuminance(...hit.color) >= 0.5 ? 'black' : 'white',
+      txtColor: Math.round(getColorLuminance(hit.color)) ? 'black' : 'white',
       position: position.clone(),
       fixed: true,
     };
@@ -47,14 +48,14 @@ export function getDrawingElementsForDetection(
 ): DrawingElement[] {
   return detection.perception.object_detection_list.flatMap((hit) => {
     const bb = hit.bounding_box;
-    const bgColor = colorBytesToHexString(...hit.color);
+    const bgColor = getColorString(hit.color);
     const min = new Point2D(bb.left, bb.top);
     const max = new Point2D(bb.right, bb.bottom);
     const label = <LabelDrawingElement>{
       type: 'label',
       bgColor: bgColor,
       text: `${Math.round(hit.score)}%: ${hit.label}`,
-      txtColor: colorLuminance(...hit.color) >= 0.5 ? 'black' : 'white',
+      txtColor: Math.round(getColorLuminance(hit.color)) ? 'black' : 'white',
       position: min.clone(),
       fixed: false,
     };
@@ -70,10 +71,15 @@ export function getDrawingElementsForDetection(
 }
 
 export function colorBytesToHexString(R: number, G: number, B: number) {
-  return `#${R.toString(16)}${G.toString(16)}${B.toString(16)}`;
+  return '#' + [R, G, B].map((n) => numberToPaddedHex(n, 2)).join('');
 }
 
 export function colorLuminance(R: number, G: number, B: number) {
   // Standard perceived luminance function
   return 0.299 * R + 0.587 * G + 0.114 * B;
+}
+
+export function numberToPaddedHex(n: number, pad: number) {
+  const hex = n.toString(16);
+  return '0'.repeat(Math.max(pad - hex.length, 0)) + hex;
 }

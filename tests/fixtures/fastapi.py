@@ -16,11 +16,15 @@
 from collections.abc import AsyncGenerator
 from collections.abc import Generator
 from unittest.mock import MagicMock
+from unittest.mock import patch
 
 import pytest
 import trio
 from fastapi.testclient import TestClient
+from httpx import ASGITransport
 from httpx import AsyncClient
+from httpx_ws.transport import ASGIWebSocketTransport
+from local_console.core.camera.machine import Camera
 from local_console.core.deploy.tasks.task_executors import TrioBackgroundTasks
 from local_console.core.deploy_config import DeployConfigManager
 from local_console.core.device_services import DeviceServices
@@ -28,10 +32,11 @@ from local_console.core.edge_apps import EdgeAppsManager
 from local_console.core.files.files import FilesManager
 from local_console.core.firmwares import FirmwareManager
 from local_console.core.models import ModelManager
+from local_console.core.schemas.schemas import GlobalConfiguration
 from local_console.fastapi.main import generate_server
 from local_console.fastapi.main import lifespan
 
-from tests.fixtures.agent import mocked_agent_fixture
+from tests.fixtures.agent import mocked_agent
 from tests.mocks.mock_paho_mqtt import MockMqttAgent
 
 
@@ -39,7 +44,10 @@ from tests.mocks.mock_paho_mqtt import MockMqttAgent
 def fa_client() -> Generator[TestClient, None, None]:
     app = generate_server()
     app.state.device_service = DeviceServices(
-        nursery=MagicMock(), channel=MagicMock(), token=MagicMock()
+        nursery=MagicMock(),
+        channel=MagicMock(),
+        webserver=MagicMock(),
+        token=MagicMock(),
     )
     file_manager = MagicMock(spec=FilesManager)
     app.state.file_manager = file_manager
@@ -53,12 +61,13 @@ def fa_client() -> Generator[TestClient, None, None]:
         app.state.firmware_manager,
     )
     app.state.deploy_background_task = TrioBackgroundTasks()
-    yield TestClient(app)
+    yield TestClient(app=app)
 
 
 @pytest.fixture
 async def fa_client_with_agent(
     mocked_agent_fixture: MockMqttAgent,
+    single_device_config: GlobalConfiguration,
 ) -> AsyncGenerator[AsyncClient, None, None]:
     agent = mocked_agent_fixture
     app = generate_server()
@@ -70,4 +79,37 @@ async def fa_client_with_agent(
                 await trio.sleep(0.05)
         if not agent.has_been_called():
             raise AssertionError("Could not start mqtt server")
-        yield AsyncClient(app=app, base_url="http://local.console")
+        yield AsyncClient(transport=ASGITransport(app), base_url="http://local.console")
+
+
+@pytest.fixture
+async def fa_client_async(
+    nursery,
+    single_device_config: GlobalConfiguration,
+) -> AsyncGenerator[AsyncClient, None]:
+    app = generate_server()
+    app.state.device_service = DeviceServices(
+        nursery=nursery, channel=MagicMock(), webserver=MagicMock(), token=MagicMock()
+    )
+    yield AsyncClient(transport=ASGITransport(app), base_url="http://local.console")
+
+
+@pytest.fixture
+async def fa_client_full_init(
+    single_device_config: GlobalConfiguration,
+) -> AsyncGenerator[tuple[AsyncClient, Camera], None]:
+    dev_id = single_device_config.devices[0].mqtt.port
+    with (
+        patch("local_console.fastapi.main.running_background_task"),
+        patch("local_console.fastapi.main.stop_background_task"),
+        mocked_agent() as agent,
+    ):
+        app = generate_server()
+        async with lifespan(app):
+            camera = app.state.device_service.get_camera(dev_id)
+            client = AsyncClient(
+                transport=ASGIWebSocketTransport(app), base_url="http://test"
+            )
+            yield client, camera
+
+        agent.stop_receiving_messages()

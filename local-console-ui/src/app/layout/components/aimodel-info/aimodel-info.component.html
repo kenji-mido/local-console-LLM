@@ -15,44 +15,48 @@
 
  SPDX-License-Identifier: Apache-2.0
 -->
-<table class="device-info-table">
-  <tr>
-    <th *ngFor="let num_model of num_models">
-      <span> Model {{ num_model }}</span>
-      <hr />
-    </th>
-  </tr>
-  <tr>
-    <td *ngFor="let aimodel_info of aimodels_info">
-      <table>
-        <tr>
-          <td>Model ID</td>
-          <td>
-            :
-            <span class="attribute-style" data-testid="model-id">
-              {{ aimodel_info.model_id }}</span
-            >
-          </td>
-        </tr>
-        <tr>
-          <td>Version</td>
-          <td>
-            :
-            <span class="attribute-style" data-testid="model-version">
-              {{ aimodel_info.version }}</span
-            >
-          </td>
-        </tr>
-        <tr>
-          <td>Converter Version</td>
-          <td>
-            :
-            <span class="attribute-style" data-testid="converter-version">
-              {{ aimodel_info.conv_version }}</span
-            >
-          </td>
-        </tr>
-      </table>
-    </td>
-  </tr>
-</table>
+<div style="display: flex; align-items: flex-start; margin: 0 -40px">
+  <table class="device-info-table space-between-col text-14">
+    <tr class="text-16 bold">
+      <th *ngFor="let num_model of num_models" style="width: 25%">
+        <div class="header">
+          <span> Model {{ num_model }}</span>
+          <div class="horizontal-line"></div>
+        </div>
+      </th>
+    </tr>
+    <tr>
+      <td *ngFor="let aimodel_info of aimodels_info">
+        <table>
+          <tr>
+            <td>Model ID</td>
+            <td>
+              :
+              <span class="attribute-style" data-testid="model-id">
+                {{ aimodel_info.model_id }}</span
+              >
+            </td>
+          </tr>
+          <tr>
+            <td>Version</td>
+            <td>
+              :
+              <span class="attribute-style" data-testid="model-version">
+                {{ aimodel_info.version }}</span
+              >
+            </td>
+          </tr>
+          <tr>
+            <td>Converter Version</td>
+            <td>
+              :
+              <span class="attribute-style" data-testid="converter-version">
+                {{ aimodel_info.conv_version }}</span
+              >
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</div>

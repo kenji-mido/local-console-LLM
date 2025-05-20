@@ -16,42 +16,53 @@
  SPDX-License-Identifier: Apache-2.0
 -->
 
-<div class="qr-header">
-  <mat-icon (click)="fullScreen()">
-    <img src="images/{{ theme }}/qrcode_fullscreen.svg" />
-  </mat-icon>
-  <mat-icon (click)="zoomIn()">
-    <img src="images/{{ theme }}/qrcode_zoom_in.svg" />
-  </mat-icon>
-  <mat-icon (click)="zoomOut()">
-    <img src="images/{{ theme }}/qrcode_zoom_out.svg" />
-  </mat-icon>
-  <mat-icon (click)="saveQrImage()">
+<div class="qr-header hs-2 row align-center gap-4 pr-5">
+  <div (click)="saveQrImage()">
     <img src="images/{{ theme }}/qrcode_save.svg" />
-  </mat-icon>
-  <mat-icon (click)="printQr()">
+  </div>
+  <div (click)="zoomIn()">
+    <img src="images/{{ theme }}/qrcode_zoom_out.svg" />
+  </div>
+  <div (click)="zoomOut()">
+    <img src="images/{{ theme }}/qrcode_zoom_in.svg" />
+  </div>
+  <div (click)="printQr()">
     <img src="images/{{ theme }}/qrcode_print.svg" />
-  </mat-icon>
-  <mat-icon data-testid="qr-close" (click)="closeQr()">
+  </div>
+  <div (click)="enterFullScreen()">
+    <img src="images/{{ theme }}/qrcode_fullscreen.svg" />
+  </div>
+  <div data-testid="qr-close" (click)="closeQr()">
     <img src="images/{{ theme }}/qrcode_close.svg" />
-  </mat-icon>
-</div>
-<div [ngClass]="qrBodyClass" *ngIf="qrImage" #qrImageDiv>
-  <div class="qr-info">
-    <h1>Service QR Code</h1>
-    <h3>
-      Start provisioning by scanning Service QR Code using your Edge Device.
-    </h3>
-    <h3 *ngIf="qrExpiredDate">*Expiration: {{ qrExpiredDate }}</h3>
-  </div>
-  <div class="qr-code">
-    <img [src]="qrImage" />
   </div>
 </div>
-<div [ngClass]="qrBodyClass" *ngIf="!qrImage" #qrImageDiv>
-  <div class="qr-error">
-    <h1>Service QR Code ERROR</h1>
-    <h3>Cannot Get QR Code</h3>
-    <h3>Please check your parameters or networks!</h3>
-  </div>
+<div #qrWrapper class="stack center align-center grow">
+  @if (qrImage) {
+    <div
+      class="row gap-5 center align-center"
+      [class]="'qr-body-' + qrImageLevel"
+      [class.fullscreen]="fullScreen"
+    >
+      <div class="qr-info">
+        <h1>Service QR Code</h1>
+        <h3>
+          Start provisioning by scanning Service QR Code using your Edge Device.
+        </h3>
+        @if (qrExpiredDate) {
+          <h3>*Expiration: {{ qrExpiredDate | lcDateTime }}</h3>
+        }
+      </div>
+      <div class="qr-code">
+        <img [src]="qrImage" />
+      </div>
+    </div>
+  } @else {
+    <div>
+      <div class="qr-error">
+        <h1>Service QR Code ERROR</h1>
+        <h3>Cannot Get QR Code</h3>
+        <h3>Please check your parameters or networks!</h3>
+      </div>
+    </div>
+  }
 </div>

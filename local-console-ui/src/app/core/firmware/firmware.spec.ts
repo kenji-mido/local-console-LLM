@@ -17,10 +17,10 @@
  */
 
 import { TestBed } from '@angular/core/testing';
+import { EnvService } from '../common/environment.service';
 import { HttpApiClient } from '../common/http/http';
-import { environment } from '../../../environments/environment';
-import { FirmwareService } from './firmware.service';
 import { FirmwareV2 } from './firmware';
+import { FirmwareService } from './firmware.service';
 
 class MockHttpApiClient {
   post = jest.fn();
@@ -57,7 +57,8 @@ describe('FirmwareService', () => {
       file_id: 'fw_id',
       version: 'version',
     };
-    const apiUrl = `${environment.apiV2Url}/firmwares`;
+    const envService = new EnvService();
+    const apiUrl = `${envService.getApiUrl()}/firmwares`;
 
     it('should return file_id on successful firmware creation', async () => {
       const mockResponse = {

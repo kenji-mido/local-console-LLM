@@ -14,19 +14,29 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 from collections.abc import Generator
-from contextlib import contextmanager
 
-from local_console.core.device_services import DeviceServices
-from local_console.core.schemas.schemas import DeviceConnection
+import pytest
+from local_console.core.schemas.schemas import GlobalConfiguration
+
+from tests.mocks.config import set_configuration
+from tests.strategies.samplers.configs import DeviceConnectionSampler
+from tests.strategies.samplers.configs import GlobalConfigurationSampler
 
 
-@contextmanager
-def stored_devices(
-    devices: list[DeviceConnection], device_services: DeviceServices | None = None
-) -> Generator[None, None, None]:
-    from local_console.core.config import config_obj
+@pytest.fixture
+def single_device_config() -> Generator[GlobalConfiguration, None, None]:
+    """
+    Sets a single-device sample configuration for a test.
+    This is intended to work alongside conftest.py::reset_global_config.
 
-    config_obj.config.devices = devices
-    if device_services:
-        device_services.init_devices(devices)
-    yield
+    This fixture is also invoked by other fixtures under `tests.fixtures.*`
+    In order for that to work, `single_device_config` must be imported from
+    the test suite module that uses one of those fixtures, even if this
+    fixture is not instantiated directly by that test module.
+    """
+    device_gen = DeviceConnectionSampler(name="dev")
+    simple_conf = GlobalConfigurationSampler(
+        num_of_devices=1, devices=device_gen
+    ).sample()
+    set_configuration(simple_conf)
+    yield simple_conf

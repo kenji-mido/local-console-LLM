@@ -17,21 +17,25 @@
  */
 
 import { Injectable } from '@angular/core';
+import { EnvService } from '../common/environment.service';
 import { HttpApiClient } from '../common/http/http';
-import { environment } from '../../../environments/environment';
 import { FilesService } from '../file/files.service';
 
 @Injectable({
   providedIn: 'root',
 })
 export class ModelService {
-  private pathV2 = `${environment.apiV2Url}/models`;
   private modelIdToFileId: Record<string, string> = {};
 
   constructor(
     private http: HttpApiClient,
     private fileService: FilesService,
+    private envService: EnvService,
   ) {}
+
+  get pathV2() {
+    return `${this.envService.getApiUrl()}/models`;
+  }
 
   async createModel(model_id: string, file_id: string): Promise<string | null> {
     try {

@@ -27,18 +27,17 @@ import {
   OnDestroy,
   Output,
 } from '@angular/core';
-import {
-  Box,
-  BoxLike,
-  RawDrawing,
-  Point2D,
-  Drawing,
-  ROIBoxDrawingElement,
-} from './drawing';
-import { Surface } from './surface';
-import { Scene } from './scene';
 import { Controls } from './controls';
+import { BoxLike, Drawing, RawDrawing, ROIBoxDrawingElement } from './drawing';
 import { preprocessDrawing } from './drawing-preprocessor';
+import { Scene } from './scene';
+import { Surface } from './surface';
+
+export enum DrawingState {
+  Error = 0,
+  Streaming = 1,
+  Disabled = 2,
+}
 
 @Component({
   selector: 'app-drawing',
@@ -48,7 +47,8 @@ import { preprocessDrawing } from './drawing-preprocessor';
       class="preview-frame border-box round-1 fullwidth fullheight border-box"
       id="surface-parent"
       data-testid="drawing"
-      [class.streaming]="enabled"
+      [class.streaming]="state === DrawingState.Streaming"
+      [class.error]="state === DrawingState.Error"
     >
       <canvas
         class="surface"
@@ -65,6 +65,8 @@ import { preprocessDrawing } from './drawing-preprocessor';
   styleUrl: './drawing-surface.component.scss',
 })
 export class DrawingSurfaceComponent implements AfterViewInit, OnDestroy {
+  DrawingState = DrawingState;
+
   private __drawing?: Drawing;
   surface?: Surface;
   scene?: Scene;
@@ -78,7 +80,8 @@ export class DrawingSurfaceComponent implements AfterViewInit, OnDestroy {
     this.controls.mode = newMode;
   }
 
-  @Input() enabled = false;
+  @Input() state = DrawingState.Disabled;
+
   @Input() set drawing(d: RawDrawing | undefined) {
     this.setDrawing(d);
   }
@@ -96,33 +99,40 @@ export class DrawingSurfaceComponent implements AfterViewInit, OnDestroy {
     this.surface = new Surface(canvas, parent);
     this.scene = new Scene(this.surface);
     this.controls = new Controls(this.surface, this.scene);
-    this.mainLoop();
+    this.mainLoop(this.state, this.__drawing, this.scene, this.controls);
   }
 
-  mainLoop() {
-    requestAnimationFrame(() => {
-      if (this.enabled && this.__drawing && this.scene && this.controls) {
-        let drawThis = this.__drawing;
-        if (this.controls.roiBox) {
-          const roiBox = <ROIBoxDrawingElement>{
-            type: 'roiBox',
-            box: this.controls.roiBox,
-          };
-          drawThis = <Drawing>{
-            ...this.__drawing,
-            elements: [...this.__drawing.elements, roiBox],
-          };
-        }
-        this.scene.render(drawThis);
-      } else {
-        this.reset();
+  mainLoop(
+    state: DrawingState,
+    drawing?: Drawing,
+    scene?: Scene,
+    controls?: Controls,
+  ) {
+    if (state === DrawingState.Streaming && drawing && scene && controls) {
+      let drawThis = drawing;
+      if (controls.roiBox) {
+        const roiBox = <ROIBoxDrawingElement>{
+          type: 'roiBox',
+          box: controls.roiBox,
+        };
+        drawThis = <Drawing>{
+          ...this.__drawing,
+          elements: [...drawing.elements, roiBox],
+        };
       }
-      this.mainLoop();
+      scene.render(drawThis);
+    } else {
+      this.reset();
+    }
+    requestAnimationFrame(() => {
+      this.mainLoop(this.state, this.__drawing, this.scene, this.controls);
     });
   }
 
   reset() {
-    this.scene?.clear();
+    if (!this.scene?.pristine) {
+      this.scene?.clear();
+    }
     this.mode = 'render';
   }
 

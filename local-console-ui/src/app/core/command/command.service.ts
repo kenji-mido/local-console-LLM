@@ -17,7 +17,7 @@
  */
 
 import { Injectable } from '@angular/core';
-import { environment } from '../../../environments/environment';
+import { EnvService } from '../common/environment.service';
 import { HttpApiClient } from '../common/http/http';
 import { ExecuteCommandPayloadV2, ExecuteCommandResponseV2 } from './command';
 
@@ -25,17 +25,21 @@ import { ExecuteCommandPayloadV2, ExecuteCommandResponseV2 } from './command';
   providedIn: 'root',
 })
 export class CommandService {
-  private devicePathV2 = `${environment.apiV2Url}/devices`;
+  constructor(
+    private http: HttpApiClient,
+    private envService: EnvService,
+  ) {}
 
-  constructor(private http: HttpApiClient) {}
+  get devicePathV2() {
+    return `${this.envService.getApiUrl()}/devices`;
+  }
 
-  async executeCommandV2(
+  async executeSysAppCommand<T>(
     device_id: string,
-    module_id: string,
-    payload: ExecuteCommandPayloadV2,
+    payload: ExecuteCommandPayloadV2<T>,
   ) {
     const moduleResp = await this.http.post<ExecuteCommandResponseV2>(
-      `${this.devicePathV2}/${device_id}/modules/${module_id}/command`,
+      `${this.devicePathV2}/${device_id}/command`,
       payload,
       false,
     );

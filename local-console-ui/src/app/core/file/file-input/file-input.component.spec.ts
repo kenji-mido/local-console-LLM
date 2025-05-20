@@ -17,12 +17,10 @@
  */
 
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { FileInputComponent } from './file-input.component';
-import { IconTextComponent } from '../icon-text/icon-text.component';
 import { FormsModule } from '@angular/forms';
 import { MatInputModule } from '@angular/material/input';
-import { ElementRef } from '@angular/core';
-import { By } from '@angular/platform-browser';
+import { IconTextComponent } from '../icon-text/icon-text.component';
+import { FileInputComponent } from './file-input.component';
 
 describe('FileInputComponent', () => {
   let component: FileInputComponent;
@@ -52,17 +50,19 @@ describe('FileInputComponent', () => {
     component.reset();
     expect(component.filename).toBe('Not selected');
   });
+  it('should not emit fileSelected when user cancels selection in Electron', async () => {
+    (window as any).appBridge = {
+      isElectron: true,
+      // simulate user cancel
+      selectFile: jest.fn().mockResolvedValue({
+        path: null,
+        basename: null,
+        data: null,
+      }),
+    };
 
-  it('should reset the input element value when reset() is called', () => {
-    // Mock the nativeElement of fileInput
-    component.fileInput = {
-      nativeElement: {
-        value: 'some value',
-      },
-    } as ElementRef;
+    await component.openFilePicker();
 
-    component.reset();
-
-    expect(component.fileInput.nativeElement.value).toBeNull();
+    expect(jest.spyOn(component.fileSelected, 'emit')).not.toHaveBeenCalled();
   });
 });

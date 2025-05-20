@@ -18,11 +18,11 @@
 
 import {
   BoxDrawingElement,
-  LabelDrawingElement,
-  Point2D,
-  Drawing,
-  NativeImageDrawingElement,
   BoxLike,
+  Drawing,
+  LabelDrawingElement,
+  NativeImageDrawingElement,
+  Point2D,
   ROIBoxDrawingElement,
 } from './drawing';
 import { Surface } from './surface';
@@ -33,6 +33,7 @@ export const ROI_WIDTH = 3;
 
 export class Scene {
   private __currentDrawing?: Drawing;
+  pristine = true;
   get drawing() {
     return this.__currentDrawing;
   }
@@ -46,17 +47,19 @@ export class Scene {
       this.surface.canvas.clientWidth,
       this.surface.canvas.clientHeight,
     );
+    this.pristine = true;
   }
 
   render(drawing: Drawing) {
     this.__currentDrawing = drawing;
-    // Pre-wipe
-    this.clear();
-
     // If image, draw at bottom
     const image = <NativeImageDrawingElement>(
       drawing.elements.find((element) => element.type === 'nativeImage')
     );
+
+    // Pre-wipe
+    this.clear();
+
     if (image) {
       this.drawImage(image.img, image.offset, image.size);
     }
@@ -86,6 +89,7 @@ export class Scene {
     if (roiBox) {
       this.drawROIBox(roiBox.box);
     }
+    this.pristine = false;
   }
 
   private drawROIBox(roiBox: BoxLike) {

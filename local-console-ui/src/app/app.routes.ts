@@ -18,11 +18,11 @@
 
 import { Routes } from '@angular/router';
 import { ROUTER_LINKS } from './core/config/routes';
-import { ProvisioningScreen } from './layout/pages/provisioning-hub/provisioning.screen';
-import { DeploymentHubScreen } from './layout/pages/deployment-hub/deployment-hub.screen';
 import { DataHubScreen } from './layout/pages/data-hub/data-hub.screen';
+import { DeploymentHubScreen } from './layout/pages/deployment-hub/deployment-hub.screen';
 import { DeviceManagementScreen } from './layout/pages/device-management/device-management.screen';
 import { LoadingScreen } from './layout/pages/loader/loading.screen';
+import { ProvisioningScreen } from './layout/pages/provisioning-hub/provisioning.screen';
 
 export const routes: Routes = [
   { path: '', redirectTo: ROUTER_LINKS.LOADER, pathMatch: 'full' },

@@ -25,6 +25,9 @@ from string import Template
 from tempfile import TemporaryDirectory
 
 import trio
+from local_console.core.error.base import InternalException
+from local_console.core.error.code import ErrorCodes
+from local_console.utils.local_network import is_port_open
 from trio import run_process
 
 logger = logging.getLogger(__name__)
@@ -49,6 +52,10 @@ async def spawn_broker(
             "Could not find mosquitto in the PATH. Please add it and try again"
         )
 
+    if is_port_open(port):
+        message = f"TCP port {port} configured for a registered device, is bound to a foreign process. Please stop the foreign process."
+        raise InternalException(code=ErrorCodes.INTERNAL_MQTT, message=message)
+
     with TemporaryDirectory() as tmp_dir:
         config_file = Path(tmp_dir) / "broker.toml"
         populate_broker_conf(port, config_file)
@@ -65,27 +72,32 @@ async def spawn_broker(
         # This is to check the broker start up.
         # A (minor) enhancement would be to poll the broker.
         pattern = re.compile(r"mosquitto version (\d+\.\d+\.\d+) running")
-        while True:
-            data = await broker_proc.stdout.receive_some()
-            if data:
-                data = data.decode("utf-8")
-                logger.debug(f"Received data from mosquitto: {data}")
-                for line in data.splitlines():
-                    logger.debug(line)
+        try:
+            while True:
+                data = await broker_proc.stdout.receive_some()
+                if data:
+                    data = data.decode("utf-8")
+                    logger.debug(f"Received data from mosquitto: {data}")
+                    for line in data.splitlines():
+                        logger.debug(line)
 
-                if "error" in data.lower():
-                    line = next(
-                        line for line in data.splitlines() if "error" in line.lower()
-                    )
-                    raise BrokerException(
-                        f"{line} (On port {port}).\nPlease check and restart Local Console."
-                    )
-                elif pattern.search(data):
-                    break
+                    if "error" in data.lower():
+                        line = next(
+                            line
+                            for line in data.splitlines()
+                            if "error" in line.lower()
+                        )
+                        raise BrokerException(
+                            f"{line} (On port {port}).\nPlease check and restart Local Console."
+                        )
+                    elif pattern.search(data):
+                        break
 
-        nursery.start_soon(get_broker_logs, broker_proc.stdout)
-        yield broker_proc
-        broker_proc.kill()
+            nursery.start_soon(get_broker_logs, broker_proc.stdout)
+            yield broker_proc
+        finally:
+            broker_proc.kill()
+            await broker_proc.wait()
 
 
 def populate_broker_conf(port: int, config_file: Path) -> None:

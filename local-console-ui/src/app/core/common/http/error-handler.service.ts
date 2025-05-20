@@ -16,13 +16,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { HttpErrorResponse } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 import { Router } from '@angular/router';
-import { ROUTER_LINKS } from '../../config/routes';
-import { UserPromptDialogData } from '../../../layout/dialogs/user-prompt/user-prompt.dialog';
-import { HttpErrorResponse } from '@angular/common/http';
-import { environment } from '../../../../environments/environment';
 import { DialogService } from '../../../layout/dialogs/dialog.service';
+import { UserPromptDialogData } from '../../../layout/dialogs/user-prompt/user-prompt.dialog';
+import { ROUTER_LINKS } from '../../config/routes';
+import { EnvService } from '../environment.service';
 
 const API_ERR_TITLE = 'Processing failed.';
 const API_WARNING_TITLE =
@@ -43,6 +43,7 @@ export class HttpErrorHandler {
   constructor(
     private router: Router,
     private dialog: DialogService,
+    private envService: EnvService,
   ) {}
 
   handleError(e: HttpErrorResponse, showAlert = true): never {
@@ -128,9 +129,9 @@ export class HttpErrorHandler {
     )
       sessionStorage.setItem('redirectPath', location.pathname);
     if (projectId) {
-      window.location.href = `${environment.apiUrl}/login?project_id=${projectId}`;
+      window.location.href = `${this.envService.getApiUrl()}/login?project_id=${projectId}`;
     } else {
-      window.location.href = `${environment.apiUrl}/login`;
+      window.location.href = `${this.envService.getApiUrl()}/login`;
     }
   }
 }

@@ -16,9 +16,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { Component, Input, Pipe, PipeTransform } from '@angular/core';
-import { DeviceVisualizerComponent } from '../device-visualizer/device-visualizer.component';
 import { CommonModule } from '@angular/common';
+import { Component, Input } from '@angular/core';
+import { DeviceVisualizerComponent } from '../device-visualizer/device-visualizer.component';
 
 @Component({
   selector: 'app-roi-display',
@@ -44,7 +44,7 @@ import { CommonModule } from '@angular/common';
     }
   `,
   template: `
-    <div class="stack gap-0 roi-box">
+    <div class="stack gap-0 roi-box text-14">
       <div class="row p-2 bg-edgeaipf-gray">
         <span class="w-6">Name</span>
         <span class="w-6">Value</span>
@@ -69,7 +69,7 @@ import { CommonModule } from '@angular/common';
         </div>
       }
     </div>
-    <div class="row gap-0">
+    <div class="row gap-2">
       <button
         class="weak-hub-btn button"
         [disabled]="visualizer.surfaceMode === 'capture'"

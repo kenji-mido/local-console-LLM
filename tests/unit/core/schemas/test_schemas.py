@@ -13,24 +13,74 @@
 # limitations under the License.
 #
 # SPDX-License-Identifier: Apache-2.0
+from pathlib import Path
+
 import pytest
-from local_console.core.schemas.schemas import GlobalConfiguration
+from local_console.core.camera.enums import UnitScale
+from local_console.core.enums import DEFAULT_PERSIST_SETTINGS
+from local_console.core.schemas.schemas import Persist
 
-from tests.strategies.samplers.configs import DeviceConnectionSampler
-from tests.strategies.samplers.configs import EVPParamsSampler
 
-
-def test_active_device_verification():
-    evp = EVPParamsSampler().sample()
-    device = DeviceConnectionSampler().sample()
-    with pytest.raises(ValueError):
-        GlobalConfiguration(
-            evp=evp, devices=[device], active_device=device.mqtt.port + 1
-        )
-
-    config = GlobalConfiguration(
-        evp=evp, devices=[device], active_device=device.mqtt.port
-    )
-
-    with pytest.raises(ValueError):
-        config.active_device = device.mqtt.port + 1
+@pytest.mark.parametrize(
+    "input,expected",
+    [
+        ["{}", Persist()],
+        [
+            """
+{
+        "module_file": null,
+        "ai_model_file": null,
+        "device_dir_path": null,
+        "size": 100,
+        "unit": "MB",
+        "vapp_type": "image",
+        "vapp_schema_file": null,
+        "vapp_config_file": null,
+        "vapp_labels_file": null
+      }
+""",
+            DEFAULT_PERSIST_SETTINGS,
+        ],
+        [
+            """
+{
+    "module_file": "module_file",
+    "ai_model_file": "ai_model_file",
+    "device_dir_path": "device_dir_path",
+    "size": 123,
+    "unit": "GB",
+    "vapp_type": "image",
+    "vapp_schema_file": "vapp_schema_file",
+    "vapp_config_file": "vapp_config_file",
+    "vapp_labels_file": "vapp_labels_file"
+}""",
+            Persist(
+                module_file="module_file",
+                ai_model_file="ai_model_file",
+                device_dir_path=Path("device_dir_path"),
+                size=123,
+                unit=UnitScale.GB,
+                vapp_type="image",
+                vapp_schema_file="vapp_schema_file",
+                vapp_config_file="vapp_config_file",
+                vapp_labels_file="vapp_labels_file",
+            ),
+        ],
+        # Backward compatible
+        [
+            """
+{
+    "size":123,
+    "unit":"kb"
+}
+""",
+            Persist(size=123, unit=UnitScale.KB),
+        ],
+        ['{"size":54,"unit":"Mb"}', Persist(size=54, unit=UnitScale.MB)],
+    ],
+)
+def test_load_persist(input: str, expected: Persist) -> None:
+    loaded = Persist.model_validate_json(input)
+    print(loaded)
+    print(expected)
+    assert loaded == expected

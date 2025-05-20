@@ -13,38 +13,17 @@
 # limitations under the License.
 #
 # SPDX-License-Identifier: Apache-2.0
-from contextlib import asynccontextmanager
+from collections.abc import AsyncGenerator
+from unittest.mock import patch
 
 import pytest
-import trio
-from local_console.core.camera.state import CameraState
-from local_console.core.schemas.edge_cloud_if_v1 import DeviceConfiguration
-from local_console.core.schemas.schemas import OnWireProtocol
-from local_console.utils.tracking import TrackingVariable
+from local_console.core.camera.machine import Camera
+
+from tests.mocks.devices import cs_init_context
 
 
 @pytest.fixture
-async def cs_init():
-    send_channel, _ = trio.open_memory_channel(0)
-    camera_state = CameraState(send_channel, trio.lowlevel.current_trio_token())
-    camera_state.mqtt_port.value = 1883
-
-    yield camera_state
-
-
-@asynccontextmanager
-async def cs_init_context(
-    mqtt_host: str = "localhost",
-    mqtt_port: int = 1883,
-    device_config: DeviceConfiguration | None = None,
-):
-    # For using within Hypothesis-driven tests
-    send_channel, _ = trio.open_memory_channel(0)
-    camera_state = CameraState(send_channel, trio.lowlevel.current_trio_token())
-    camera_state.mqtt_host = TrackingVariable(mqtt_host)
-    camera_state.mqtt_port = TrackingVariable(mqtt_port)
-    camera_state._onwire_schema = OnWireProtocol.EVP1
-    if device_config:
-        camera_state.device_config = TrackingVariable(device_config)
-
-    yield camera_state
+async def camera() -> AsyncGenerator[Camera, None]:
+    with patch("local_console.core.camera.machine.StorageSizeWatcher"):
+        async with cs_init_context() as camera:
+            yield camera

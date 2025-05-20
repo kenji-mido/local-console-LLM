@@ -15,11 +15,10 @@
 # SPDX-License-Identifier: Apache-2.0
 from base64 import b64encode
 from pathlib import Path
-from pathlib import PurePosixPath
 
 from cryptography.hazmat.primitives import hashes
 from local_console.core.camera.enums import OTAUpdateModule
-from local_console.core.schemas.edge_cloud_if_v1 import DnnModelVersion
+from local_console.core.enums import AiModelExtension
 from local_console.core.schemas.edge_cloud_if_v1 import DnnOta
 from local_console.core.schemas.edge_cloud_if_v1 import DnnOtaBody
 
@@ -30,9 +29,26 @@ def get_package_hash(package_file: Path) -> str:
     return b64encode(digest.finalize()).decode()
 
 
+def reverse_bytes_4(value: bytes) -> bytes:
+    assert len(value) % 4 == 0
+    return b"".join([value[i * 4 : i * 4 + 4][::-1] for i in range(0, len(value) // 4)])
+
+
+def get_package_version_pkg(package_file: Path) -> bytes:
+    return package_file.read_bytes()[0x30:0x40]
+
+
+def get_package_version_rpk(package_file: Path) -> bytes:
+    return reverse_bytes_4(get_package_version_pkg(package_file))
+
+
 def get_package_version(package_file: Path) -> str:
-    ver_bytes = package_file.read_bytes()[0x30:0x40]
-    return ver_bytes.decode()
+    package_version = (
+        get_package_version_rpk(package_file)
+        if AiModelExtension.RPK.as_suffix == package_file.suffix
+        else get_package_version_pkg(package_file)
+    )
+    return package_version.decode()
 
 
 def get_network_id(package_file: Path) -> str:
@@ -43,9 +59,7 @@ def get_network_id(package_file: Path) -> str:
 def configuration_spec(
     ota_type: OTAUpdateModule,
     package_file: Path,
-    webserver_root: Path,
-    webserver_port: int,
-    webserver_host: str,
+    url: str,
 ) -> DnnOta:
     file_hash = get_package_hash(package_file)
     # version for ApFw and SensorFw are specified by the user
@@ -54,8 +68,6 @@ def configuration_spec(
         if ota_type == OTAUpdateModule.DNNMODEL
         else ""
     )
-    rel_path = PurePosixPath(package_file.relative_to(webserver_root))
-    url = f"http://{webserver_host}:{webserver_port}/{rel_path}"
     return DnnOta(
         OTA=DnnOtaBody(
             UpdateModule=ota_type,
@@ -66,12 +78,11 @@ def configuration_spec(
     )
 
 
-def get_network_ids(dnn_model_version: DnnModelVersion) -> list[str]:
+def get_network_ids(dnn_model_version: list[str]) -> list[str]:
     return [desired_version[6 : 6 + 6] for desired_version in dnn_model_version]
 
 
 def get_apfw_version_string(fw_binary: bytes) -> str:
-    # See: https://github.com/SonySemiconductorSolutions/EdgeAIPF.smartcamera.type3.mirror/blob/aa66e6ec772a9bd3577061d1767870b906751e94/src/imx_app/adapter/app_desc_nx_adp.c#L19
     # Note that the following only holds if the binary is UNENCRYPTED
     offset = fw_binary.index(b"PROJECT_NAME")
     if offset < 0:

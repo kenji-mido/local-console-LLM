@@ -2,3 +2,5 @@ pytest==7.4.4
 pytest-cov==4.1.0
 hypothesis==6.88.3
 pytest-trio==0.8.0
+httpx-ws@git+https://github.com/lulingar/httpx-ws@f572239e6c1a266b35942bf055b330331a434b4a
+pytest-html==4.1.1

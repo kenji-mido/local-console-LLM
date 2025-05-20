@@ -20,10 +20,12 @@ from unittest.mock import patch
 import pytest
 from fastapi import status
 from fastapi.testclient import TestClient
+from httpx import AsyncClient
+from local_console.core.device_services import DeviceServices
+from local_console.core.schemas.schemas import DeviceID
 from local_console.fastapi.routes.commons import EmptySuccess
 from local_console.fastapi.routes.devices.controller import DevicesController
 from local_console.fastapi.routes.devices.dependencies import devices_controller
-from local_console.fastapi.routes.devices.dto import ConfigurationUpdateInDTO
 from local_console.fastapi.routes.devices.dto import DeviceListDTO
 from local_console.fastapi.routes.devices.dto import DevicePostDTO
 from local_console.fastapi.routes.devices.dto import PropertyInfo
@@ -31,11 +33,12 @@ from local_console.fastapi.routes.devices.dto import RPCRequestDTO
 from local_console.fastapi.routes.devices.dto import RPCResponseDTO
 from local_console.fastapi.routes.devices.router import create_device
 from local_console.fastapi.routes.devices.router import delete_device
+from local_console.fastapi.routes.devices.router import device_module_rpc
 from local_console.fastapi.routes.devices.router import device_rpc
 from local_console.fastapi.routes.devices.router import get_devices
 
-from tests.fixtures.configs import stored_devices
-from tests.fixtures.fastapi import fa_client
+from tests.fixtures.devices import stored_devices
+from tests.mocks.mock_paho_mqtt import MockMqttAgent
 from tests.strategies.samplers.configs import DeviceConnectionSampler
 
 
@@ -50,11 +53,13 @@ async def test_list_calls_controller() -> None:
 
     result = await get_devices(
         limit=length,
-        continuation_token=continuation_token,
+        starting_after=continuation_token,
         controller=devices_controller,
     )
 
-    devices_controller.list_devices.assert_called_once_with(length, continuation_token)
+    devices_controller.list_devices.assert_called_once_with(
+        length=length, continuation_token=continuation_token, connection_state=None
+    )
     assert result is expected
 
 
@@ -79,6 +84,7 @@ async def test_rpc_calls_controller() -> None:
     request = RPCRequestDTO(
         command_name="direct_get_image",
         parameters={"sensor_name": "IMX500", "crop_h_offset": 0},
+        extra=None,
     )
     device_id: int = 1
 
@@ -88,14 +94,39 @@ async def test_rpc_calls_controller() -> None:
         device_id=device_id, rpc_args=request, controller=devices_controller
     )
 
-    devices_controller.rpc.assert_awaited_once_with(device_id, request)
+    devices_controller.rpc.assert_awaited_once_with(device_id, "$system", request)
+    assert result is expected
+
+
+@pytest.mark.trio
+async def test_module_rpc_calls_controller() -> None:
+    devices_controller = AsyncMock()
+    expected = RPCResponseDTO(command_response={"image": "base64Image"})
+    request = RPCRequestDTO(
+        command_name="direct_get_image",
+        parameters={"sensor_name": "IMX500", "crop_h_offset": 0},
+        extra=None,
+    )
+    device_id: int = 1
+
+    devices_controller.rpc.return_value = expected
+
+    module_id = "my-module"
+    result = await device_module_rpc(
+        device_id=device_id,
+        rpc_args=request,
+        controller=devices_controller,
+        module_id=module_id,
+    )
+
+    devices_controller.rpc.assert_awaited_once_with(device_id, module_id, request)
     assert result is expected
 
 
 @pytest.mark.trio
 async def test_create_calls_controller() -> None:
     devices_controller = AsyncMock()
-    input = DevicePostDTO(device_name="device", mqtt_port=1883)
+    input = DevicePostDTO(device_name="device", id=DeviceID(1883))
     expected = EmptySuccess()
 
     devices_controller.create.return_value = expected
@@ -106,15 +137,18 @@ async def test_create_calls_controller() -> None:
     assert result is expected
 
 
-@patch(
-    "local_console.fastapi.routes.devices.controller.lock_until_started", AsyncMock()
-)
-def test_crud_test(fa_client: TestClient) -> None:
+@pytest.mark.trio
+async def test_crud_test(
+    fa_client_with_agent: AsyncClient, mocked_agent_fixture: MockMqttAgent
+) -> None:
     expected_devices = DeviceConnectionSampler().list_of_samples()
+    device_service: DeviceServices = (
+        fa_client_with_agent._transport.app.state.device_service
+    )
     expected_len = len(expected_devices)
     max_port = max([dev.mqtt.port for dev in expected_devices]) + 1
-    with stored_devices(expected_devices, fa_client.app.state.device_service):
-        response = fa_client.get("/devices?limit=500")
+    async with stored_devices(expected_devices, device_service):
+        response = await fa_client_with_agent.get("/devices?limit=500")
         assert response.status_code == 200
 
         assert len(response.json()["devices"]) == expected_len
@@ -126,53 +160,61 @@ def test_crud_test(fa_client: TestClient) -> None:
             assert device["description"] == device["device_name"]
             assert device["internal_device_id"] == device["device_id"]
             assert device["inactivity_timeout"] == 0
-            assert device["device_groups"] == []
 
-        response = fa_client.post(
+        response = await fa_client_with_agent.post(
             "/devices",
-            json={"device_name": f"new_device_{max_port}", "mqtt_port": max_port},
+            json={"device_name": f"new_device_{max_port}", "id": max_port},
         )
 
         assert response.status_code == 200
         assert response.json()["result"] == "SUCCESS"
 
-        response = fa_client.delete(f"/devices/{max_port}")
+        response = await fa_client_with_agent.delete(f"/devices/{max_port}")
         assert response.status_code == 200
         assert response.json()["result"] == "SUCCESS"
 
-        response = fa_client.get("/devices?limit=500")
+        response = await fa_client_with_agent.get("/devices?limit=500")
         assert response.status_code == 200
 
         assert len(response.json()["devices"]) == expected_len
+        mocked_agent_fixture.stop_receiving_messages()
 
 
-def test_delete_last_device(fa_client: TestClient):
+@pytest.mark.trio
+async def test_delete_last_device(
+    fa_client_with_agent: AsyncClient, mocked_agent_fixture: MockMqttAgent
+) -> None:
+    expected_devices = DeviceConnectionSampler().list_of_samples()
+    device_service: DeviceServices = (
+        fa_client_with_agent._transport.app.state.device_service
+    )
     expected_devices = DeviceConnectionSampler().list_of_samples(1)
     device = expected_devices[0]
-    with stored_devices(expected_devices, fa_client.app.state.device_service):
-        response = fa_client.delete(f"/devices/{device.mqtt.port}")
+    async with stored_devices(expected_devices, device_service):
+        response = await fa_client_with_agent.delete(f"/devices/{device.mqtt.port}")
         assert response.status_code == status.HTTP_416_REQUESTED_RANGE_NOT_SATISFIABLE
         assert response.json()["result"] == "ERROR"
         assert response.json()["message"] == "You need at least one device to work with"
         assert response.json()["code"] == "120001"
+        mocked_agent_fixture.stop_receiving_messages()
 
 
 def test_get_image(fa_client: TestClient) -> None:
     mock_controller = AsyncMock(spec=DevicesController)
     fa_client.app.dependency_overrides[devices_controller] = lambda: mock_controller
     image = "test_get_image_result"
-    mocked_response = RPCResponseDTO(command_response={"Image": image})
+    mocked_response = RPCResponseDTO(command_response={"image": image})
     mock_controller.rpc.return_value = mocked_response
     response = fa_client.post(
-        "/devices/1883/modules/$system/command",
+        "/devices/1883/command",
         json={
             "command_name": "direct_get_image",
             "parameters": {
                 "sensor_name": "IMX500",
                 "crop_h_offset": 0,
                 "crop_v_offset": 0,
-                "crop_h_size": 4056,
-                "crop_v_size": 3040,
+                "crop_h_size": 2028,
+                "crop_v_size": 1520,
             },
         },
     )
@@ -180,23 +222,29 @@ def test_get_image(fa_client: TestClient) -> None:
     assert response.status_code == 200
     rpc_response = response.json()
     assert rpc_response["result"] == "SUCCESS"
-    assert rpc_response["command_response"]["Image"] == image
+    assert rpc_response["command_response"]["image"] == image
 
 
-def test_get_image_not_found(fa_client: TestClient) -> None:
+@pytest.mark.trio
+async def test_get_image_not_found(
+    fa_client_async: AsyncClient, mocked_agent_fixture: MockMqttAgent
+) -> None:
     expected_devices = DeviceConnectionSampler().list_of_samples(length=1)
     expected_devices[0].mqtt.port = 1883
-    with stored_devices(expected_devices):
-        response = fa_client.post(
-            "/devices/1884/modules/$system/command",
+
+    device_service: DeviceServices = fa_client_async._transport.app.state.device_service
+    async with stored_devices(expected_devices, device_service):
+
+        response = await fa_client_async.post(
+            "/devices/1884/command",
             json={
                 "command_name": "direct_get_image",
                 "parameters": {
                     "sensor_name": "IMX500",
                     "crop_h_offset": 0,
                     "crop_v_offset": 0,
-                    "crop_h_size": 4056,
-                    "crop_v_size": 3040,
+                    "crop_h_size": 2028,
+                    "crop_v_size": 1520,
                 },
             },
         )
@@ -204,6 +252,7 @@ def test_get_image_not_found(fa_client: TestClient) -> None:
         rpc_response = response.json()
         assert rpc_response["result"] == "ERROR"
         assert rpc_response["message"] == "Could not find device 1884"
+        mocked_agent_fixture.stop_receiving_messages()
 
 
 @patch("local_console.fastapi.routes.devices.controller.DevicesController.configure")
@@ -213,65 +262,83 @@ def test_update_module_configuration(mocked_method: AsyncMock, fa_client: TestCl
     property_name = "property_name_1"
     key = "key_1"
     value = "value_1"
-    property = {
-        "property": {"configuration": {property_name: {key: value}}},
-    }
-    ConfigurationUpdateInDTO.model_validate(property)
-    response = fa_client.patch(
-        f"/devices/{device_id}/modules/{module_id}",
-        json=property,
-    )
 
-    expected_result = {"result": "SUCCESS", "property": property["property"]}
+    configuration = {property_name: {key: value}}
+    payload = {"configuration": configuration}
+    response = fa_client.patch(
+        f"/devices/{device_id}/modules/{module_id}/property",
+        json=payload,
+    )
 
     assert response.status_code == 200
-    assert response.json() == expected_result
+    assert response.json() == {"result": "SUCCESS", **payload}
 
-    expected_arguments = PropertyInfo.model_validate(
-        {"configuration": {property_name: {key: value}}}
-    )
     mocked_method.assert_awaited_once_with(
-        device_id=device_id, module_id=module_id, property_info=expected_arguments
+        device_id=device_id,
+        module_id=module_id,
+        property_info=PropertyInfo(configuration=configuration),
     )
 
 
-def test_device_renaming(fa_client: TestClient) -> None:
+@pytest.mark.trio
+async def test_device_renaming(
+    fa_client_with_agent: AsyncClient, mocked_agent_fixture: MockMqttAgent
+) -> None:
+    device_service: DeviceServices = (
+        fa_client_with_agent._transport.app.state.device_service
+    )
     expected_devices = DeviceConnectionSampler().list_of_samples(length=1)
     port = expected_devices[0].mqtt.port
-    with stored_devices(expected_devices, fa_client.app.state.device_service):
+    async with stored_devices(expected_devices, device_service):
         new_name = "shambala"
-        response = fa_client.patch(
+        response = await fa_client_with_agent.patch(
             f"/devices/{port}?new_name={new_name}",
         )
         assert response.status_code == status.HTTP_200_OK
 
-        response = fa_client.get(
+        response = await fa_client_with_agent.get(
             "/devices",
         )
         assert response.status_code == status.HTTP_200_OK
         assert response.json()["devices"][0]["device_name"] == new_name
 
 
-def test_get_device(fa_client: TestClient):
+@pytest.mark.trio
+async def test_get_device(
+    fa_client_with_agent: AsyncClient, mocked_agent_fixture: MockMqttAgent
+) -> None:
+    expected_devices = DeviceConnectionSampler().list_of_samples()
+    device_service: DeviceServices = (
+        fa_client_with_agent._transport.app.state.device_service
+    )
     expected_devices = DeviceConnectionSampler().list_of_samples(length=1)
-    device = expected_devices[0]
+    expected_device = expected_devices[0]
 
-    with stored_devices(expected_devices, fa_client.app.state.device_service):
-        response = fa_client.get(f"/devices/{device.mqtt.port}")
+    async with stored_devices(expected_devices, device_service):
+        response = await fa_client_with_agent.get(
+            f"/devices/{expected_device.mqtt.port}"
+        )
         device = response.json()
-        assert device["device_name"] == device["device_name"]
-        assert device["device_id"] == str(device["port"])
-        assert device["description"] == device["device_name"]
-        assert device["internal_device_id"] == device["device_id"]
+        assert device["device_name"] == expected_device.name
+        assert device["device_id"] == str(expected_device.mqtt.port)
+        assert device["description"] == expected_device.name
+        assert device["internal_device_id"] == str(expected_device.mqtt.port)
         assert device["inactivity_timeout"] == 0
-        assert device["device_groups"] == []
+        mocked_agent_fixture.stop_receiving_messages()
 
 
-def test_get_device_missing_device(fa_client: TestClient):
+@pytest.mark.trio
+async def test_get_device_missing_device(
+    fa_client_with_agent: AsyncClient,
+) -> None:
+    expected_devices = DeviceConnectionSampler().list_of_samples()
+    device_service: DeviceServices = (
+        fa_client_with_agent._transport.app.state.device_service
+    )
     expected_devices = DeviceConnectionSampler().list_of_samples(length=1)
-    with stored_devices(expected_devices, fa_client.app.state.device_service):
-        impossible_device_id = -1000
-        response = fa_client.get(f"/devices/{impossible_device_id}")
+    async with stored_devices(expected_devices, device_service):
+        impossible_device_id = 100000
+        response = await fa_client_with_agent.get(f"/devices/{impossible_device_id}")
         assert response.status_code == 404
         rpc_response = response.json()
         assert (
@@ -314,21 +381,60 @@ def test_get_device_missing_device(fa_client: TestClient):
 def test_update_module_configuration_sample_apps(
     mocked_method: AsyncMock, fa_client: TestClient, device_id, module_id, ppl_parameter
 ):
-    properties = {"property": {"configuration": ppl_parameter}}
-
-    ConfigurationUpdateInDTO.model_validate(properties)
+    payload = {"configuration": ppl_parameter}
 
     response = fa_client.patch(
-        f"/devices/{device_id}/modules/{module_id}",
-        json=properties,
+        f"/devices/{device_id}/modules/{module_id}/property",
+        json=payload,
+    )
+    assert response.status_code == 200
+    assert response.json() == {"result": "SUCCESS", **payload}
+
+    mocked_method.assert_awaited_once_with(
+        device_id=device_id,
+        module_id=module_id,
+        property_info=PropertyInfo(configuration=ppl_parameter),
     )
 
-    expected_result = {"result": "SUCCESS", "property": properties["property"]}
+
+@patch("local_console.fastapi.routes.devices.controller.DevicesController.configure")
+def test_update_device_configuration(mocked_method: AsyncMock, fa_client: TestClient):
+    device_id = 42
+    property_name = "property_name_1"
+    key = "key_1"
+    value = "value_1"
+
+    configuration = {property_name: {key: value}}
+    payload = {"configuration": configuration}
+    response = fa_client.patch(
+        f"/devices/{device_id}/property",
+        json=payload,
+    )
 
     assert response.status_code == 200
-    assert response.json() == expected_result
+    assert response.json() == {"result": "SUCCESS", **payload}
 
-    expected_arguments = PropertyInfo.model_validate(properties["property"])
     mocked_method.assert_awaited_once_with(
-        device_id=device_id, module_id=module_id, property_info=expected_arguments
+        device_id=device_id,
+        module_id="$system",
+        property_info=PropertyInfo(configuration=configuration),
     )
+
+
+@pytest.mark.trio
+async def test_get_module_id_property(
+    fa_client_with_agent: AsyncClient,
+):
+    payload = {"node": {"property1": "value1"}, "another_module": {}}
+
+    device_service: DeviceServices = (
+        fa_client_with_agent._transport.app.state.device_service
+    )
+    camera = device_service.get_camera(1883)
+    camera._common_properties.reported.edge_app = payload
+
+    response = await fa_client_with_agent.get(
+        "/devices/1883/modules/node/property",
+    )
+    assert response.status_code == 200
+    assert response.json() == {"state": {"edge_app": payload["node"]}}

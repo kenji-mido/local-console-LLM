@@ -16,13 +16,22 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { FileInformation } from '@app/core/file/file-input/file-input.component';
+import { FolderInformation } from '@app/core/file/folder-path-input/folder-picker.component';
+
 export {};
 // These are implemented at ../electron/setupBridge.js
 declare global {
   interface Window {
     appBridge?: {
       isElectron: boolean;
-      selectFolder: () => Promise<string>;
+      selectFolder: (operationId) => Promise<FolderInformation>;
+      selectFile: (
+        filterName,
+        acceptedExtensions,
+        operationId,
+      ) => Promise<FileInformation>;
+      readFile: (path) => Promise<FileInformation>;
     };
   }
 }

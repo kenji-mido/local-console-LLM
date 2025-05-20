@@ -16,50 +16,55 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { CommonModule, formatDate } from '@angular/common';
+import { CommonModule } from '@angular/common';
 import {
   Component,
   Inject,
   LOCALE_ID,
   OnDestroy,
+  TemplateRef,
   ViewChild,
 } from '@angular/core';
-import { FileInputComponent } from '@app/core/file/file-input/file-input.component';
-import { CardComponent } from '../../components/card/card.component';
-import { ButtonComponent } from '../../components/button/button.component';
-import { ToggleComponent } from '../../components/toggle/toggle.component';
-import { TextInputComponent } from '../../components/text-input/text-input.component';
 import {
   FormControl,
   FormGroup,
   ReactiveFormsModule,
   Validators,
 } from '@angular/forms';
-import { IconTextComponent } from '@app/core/file/icon-text/icon-text.component';
-import { MatDialog } from '@angular/material/dialog';
-import { DeviceSelectionPopupComponent } from './device-selector/device-selection-popup.component';
-import { DeployConfirmPopupComponent } from './deploy-confirm/deploy-confirm-popup.component';
-import { FilesService } from '@app/core/file/files.service';
-import { EdgeAppService } from '@app/core/edge_app/edge_app.service';
 import {
   DeployConfigApplyIn,
   DeployConfigsIn,
 } from '@app/core/deployment/deployment';
+import { EdgeAppService } from '@app/core/edge_app/edge_app.service';
+import {
+  FileInformationEvented,
+  FileInputComponent,
+} from '@app/core/file/file-input/file-input.component';
+import { FilesService } from '@app/core/file/files.service';
+import { IconTextComponent } from '@app/core/file/icon-text/icon-text.component';
+import { TextInputComponent } from '../../components/text-input/text-input.component';
+import { ToggleComponent } from '../../components/toggle/toggle.component';
 
 import { DeploymentService } from '@app/core/deployment/deployment.service';
 import { ModelService } from '@app/core/model/model.service';
 import { DeploymentListComponent } from '@app/layout/components/deployment-list/deployment-list.component';
 
-import { FirmwareService } from '@app/core/firmware/firmware.service';
-import { FirmwareV2, FirmwareType } from '@app/core/firmware/firmware';
-import { DialogService } from '@app/layout/dialogs/dialog.service';
 import { HttpErrorResponse } from '@angular/common/http';
-import { DeviceStatusSvgPipe } from '@app/core/device/device.pipes';
+import { LcDateTimePipe } from '@app/core/common/date';
+import { Configuration } from '@app/core/device/configuration';
+import {
+  DeviceArchetype,
+  DeviceStatus,
+  LocalDevice,
+} from '@app/core/device/device';
+import { DevicePipesModule } from '@app/core/device/device.pipes';
 import { DeviceService } from '@app/core/device/device.service';
-import { DeviceStatus, DeviceV2 } from '@app/core/device/device';
-import { lastValueFrom } from 'rxjs';
-import { LocalDevice } from '@app/core/device/device';
 import { InfotipDirective } from '@app/core/feedback/infotip.component';
+import { FirmwareV2 } from '@app/core/firmware/firmware';
+import { FirmwareService } from '@app/core/firmware/firmware.service';
+import { DialogService } from '@app/layout/dialogs/dialog.service';
+import { action } from '@app/layout/dialogs/user-prompt/action';
+import { DeviceStatusBadgeComponent } from '../../../core/device/device-status/device-status-badge.component';
 @Component({
   selector: 'app-deployment-hub',
   templateUrl: './deployment-hub.screen.html',
@@ -67,16 +72,16 @@ import { InfotipDirective } from '@app/core/feedback/infotip.component';
   standalone: true,
   imports: [
     FileInputComponent,
-    CardComponent,
-    ButtonComponent,
     ToggleComponent,
     CommonModule,
     TextInputComponent,
     ReactiveFormsModule,
     IconTextComponent,
     DeploymentListComponent,
-    DeviceStatusSvgPipe,
     InfotipDirective,
+    LcDateTimePipe,
+    DeviceStatusBadgeComponent,
+    DevicePipesModule,
   ],
 })
 export class DeploymentHubScreen implements OnDestroy {
@@ -84,9 +89,16 @@ export class DeploymentHubScreen implements OnDestroy {
   @ViewChild('appFile') appFile!: FileInputComponent;
   @ViewChild('mainChipFile') mainChipFile!: FileInputComponent;
   @ViewChild('sensorChipFile') sensorChipFile!: FileInputComponent;
+  @ViewChild('firmwareDeploymentConfirmation')
+  firmwareDeploymentConfirmation!: TemplateRef<any>;
 
+  DeviceArchetype = DeviceArchetype;
   theme = 'light';
   selectedDevice?: LocalDevice;
+  selectedDeviceConfiguration: Configuration = {
+    ai_model_file: null,
+    module_file: null,
+  };
   firmwareOptions: boolean = false;
   bodyForm = new FormGroup({
     camFwControl: new FormControl('', {
@@ -109,7 +121,7 @@ export class DeploymentHubScreen implements OnDestroy {
   sensor_fw_deploy: boolean = false;
 
   refreshIcon = 'images/light/reload_icon.svg';
-  refresh_datetime = '';
+  refresh_datetime = new Date();
 
   intervalMs = 5000;
   intervalHandler?: number;
@@ -117,7 +129,6 @@ export class DeploymentHubScreen implements OnDestroy {
   intervalStatusHandler?: number;
 
   constructor(
-    public dialog: MatDialog,
     private prompts: DialogService,
     private filesService: FilesService,
     private deviceService: DeviceService,
@@ -132,50 +143,56 @@ export class DeploymentHubScreen implements OnDestroy {
   }
 
   isDeployButtonDisabled(): boolean {
-    const camFwVersionValid = this.bodyForm.controls['camFwControl'].valid;
-    const sensorFwVersionValid =
-      this.bodyForm.controls['sensorFwControl'].valid;
+    if (this.selectedDevice?.connection_state !== DeviceStatus.Connected) {
+      return true; // Disabled
+    }
 
-    const fwInfoCorrect: boolean =
-      (camFwVersionValid &&
-        this.cam_fw_deploy &&
-        !sensorFwVersionValid &&
-        !this.sensor_fw_deploy) ||
-      (!camFwVersionValid &&
-        !this.cam_fw_deploy &&
-        sensorFwVersionValid &&
-        this.sensor_fw_deploy) ||
-      (camFwVersionValid &&
-        this.cam_fw_deploy &&
-        sensorFwVersionValid &&
-        this.sensor_fw_deploy);
+    if (this.cam_fw_deploy && !this.bodyForm.controls['camFwControl'].valid) {
+      return true; // Disabled
+    }
 
-    const fwInfoEmpty: boolean =
-      !camFwVersionValid &&
-      !this.cam_fw_deploy &&
-      !sensorFwVersionValid &&
-      !this.sensor_fw_deploy;
+    if (
+      this.sensor_fw_deploy &&
+      !this.bodyForm.controls['sensorFwControl'].valid
+    ) {
+      return true; // Disabled
+    }
 
-    return !(
-      (this.selectedDevice && fwInfoCorrect) ||
-      (this.selectedDevice && (this.app_id || this.model_id) && fwInfoEmpty)
+    // Anything is filled out, and valid
+    if (
+      this.cam_fw_deploy ||
+      this.sensor_fw_deploy ||
+      this.app_id ||
+      this.model_id
+    ) {
+      return false; // Enabled
+    }
+
+    return true; // Disabled
+  }
+
+  async openDeviceSelectionDialog() {
+    this.selectedDevice = await this.deviceService.askForDeviceSelection(
+      this.selectedDevice,
     );
+
+    if (this.selectedDevice) {
+      const config = await this.deviceService.getConfiguration(
+        this.selectedDevice!.device_id,
+      );
+      this.selectedDeviceConfiguration = config;
+      console.debug(this.selectedDeviceConfiguration);
+
+      await this.modelFile.sideloadFile(
+        this.selectedDeviceConfiguration.ai_model_file ?? null,
+      );
+      await this.appFile.sideloadFile(
+        this.selectedDeviceConfiguration.module_file ?? null,
+      );
+    }
   }
 
-  openDeviceSelectionDialog(): void {
-    const dialogRef = this.dialog.open(DeviceSelectionPopupComponent, {
-      panelClass: 'custom-dialog-container',
-      data: { selectedDevice: this.selectedDevice },
-    });
-
-    dialogRef.afterClosed().subscribe((result) => {
-      if (result) {
-        this.selectedDevice = result;
-      }
-    });
-  }
-
-  async onModelSelection(fileHandle: File) {
+  async onModelSelection(fileHandle: FileInformationEvented) {
     let file_id: string | null = null;
     try {
       file_id = await this.filesService.createFiles(
@@ -183,6 +200,7 @@ export class DeploymentHubScreen implements OnDestroy {
         'converted_model',
       );
     } catch (e) {
+      console.warn(e);
       this.modelFile.reset();
       this.model_id = null;
       return;
@@ -192,12 +210,19 @@ export class DeploymentHubScreen implements OnDestroy {
       this.model_id = null;
       return;
     }
-    let model_id = Math.floor(Math.random() * 10 ** 20).toString();
-    this.model_id = await this.modelService.createModel(model_id, file_id);
+    // No apparent reason to make model_id different than the file's hash
+    this.model_id = await this.modelService.createModel(file_id, file_id);
     console.debug('Model created with id', this.model_id);
+
+    if (!fileHandle.sideloaded) {
+      await this.deviceService.patchConfiguration(
+        this.selectedDevice!.device_id,
+        { ai_model_file: fileHandle.path },
+      );
+    }
   }
 
-  async onApplicationSelection(fileHandle: File) {
+  async onApplicationSelection(fileHandle: FileInformationEvented) {
     console.debug('onApplicationSelection');
     try {
       this.app_id = await this.filesService.createFiles(
@@ -215,13 +240,20 @@ export class DeploymentHubScreen implements OnDestroy {
       return;
     }
     this.app_id = await this.edgeAppService.createEdgeApp(
-      fileHandle.name,
+      fileHandle.basename,
       this.app_id,
     );
     console.debug('App created with id', this.app_id);
+
+    if (!fileHandle.sideloaded) {
+      await this.deviceService.patchConfiguration(
+        this.selectedDevice!.device_id,
+        { module_file: fileHandle.path },
+      );
+    }
   }
 
-  async onMainChipFwSelection(fileHandle: File) {
+  async onMainChipFwSelection(fileHandle: FileInformationEvented) {
     console.log('onMainChipFwSelection');
     try {
       this.cam_fw_file_id = await this.filesService.createFiles(
@@ -235,7 +267,7 @@ export class DeploymentHubScreen implements OnDestroy {
     }
   }
 
-  async onSensorChipFwSelection(fileHandle: File) {
+  async onSensorChipFwSelection(fileHandle: FileInformationEvented) {
     console.log('onSensorChipFwSelection');
     try {
       this.sensor_fw_file_id = await this.filesService.createFiles(
@@ -250,11 +282,6 @@ export class DeploymentHubScreen implements OnDestroy {
   }
 
   async onDeploy() {
-    let fwDeployConfirmData = {
-      mainChipFw: '',
-      sensorChipFw: '',
-      selectedDeviceName: this.selectedDevice?.device_name,
-    };
     if (!this.selectedDevice) {
       console.warn('Deploy action aborted: No device port selected.');
       return;
@@ -324,26 +351,26 @@ export class DeploymentHubScreen implements OnDestroy {
       deploy_config.edge_system_sw_package!.push({
         firmware_id: this.cam_fw_id,
       });
-      fwDeployConfirmData.mainChipFw =
-        this.bodyForm.controls['camFwControl'].value;
     }
     if (this.sensor_fw_id !== null) {
       deploy_config.edge_system_sw_package!.push({
         firmware_id: this.sensor_fw_id,
       });
-      fwDeployConfirmData.sensorChipFw =
-        this.bodyForm.controls['sensorFwControl'].value;
     }
     console.debug('deploy_config:', deploy_config);
 
     if (this.cam_fw_deploy || this.sensor_fw_deploy) {
-      const dialogRef = this.dialog.open(DeployConfirmPopupComponent, {
-        panelClass: 'custom-dialog-container',
-        data: fwDeployConfirmData,
+      const resultAction = await this.prompts.prompt({
+        message: this.firmwareDeploymentConfirmation,
+        title: 'Confirm Deployment',
+        showCancelButton: false,
+        actionButtons: [
+          action.weak('cancel', 'Cancel'),
+          action.normal('deploy', 'Deploy'),
+        ],
       });
 
-      const deploy_confirmation = await lastValueFrom(dialogRef.afterClosed());
-      if (!deploy_confirmation) {
+      if (resultAction?.id !== 'deploy') {
         return;
       }
     }
@@ -354,7 +381,7 @@ export class DeploymentHubScreen implements OnDestroy {
       return;
     }
     let apply_deploy_config: DeployConfigApplyIn = {
-      device_ids: [this.selectedDevice.port.toString()],
+      device_ids: [this.selectedDevice.device_id],
       description: 'placeholder',
     };
     try {
@@ -380,18 +407,15 @@ export class DeploymentHubScreen implements OnDestroy {
   }
 
   async refresh() {
-    this.refresh_datetime = formatDate(
-      new Date(),
-      'yy.MM.dd HH:mm:ss',
-      this.locale,
-    );
+    this.refresh_datetime = new Date();
     await this.deploymentService.loadDeployments();
   }
 
   async refreshDeviceStatus() {
     if (this.selectedDevice) {
-      let device_info: DeviceV2 = await this.deviceService.getDeviceV2(
+      let device_info: LocalDevice = await this.deviceService.getDevice(
         this.selectedDevice.device_id,
+        true,
       );
       this.selectedDevice.connection_state = device_info.connection_state;
     }

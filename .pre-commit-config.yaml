@@ -27,10 +27,9 @@ repos:
       - id: check-json
       - id: pretty-format-json
         args: [--autofix, --no-sort-keys]
-      - id: check-added-large-files
       - id: debug-statements
   - repo: https://github.com/hadialqattan/pycln
-    rev: v2.4.0
+    rev: v2.5.0
     hooks:
       - id: pycln
         args: [--all]
@@ -80,3 +79,11 @@ repos:
     rev: v1.27.3
     hooks:
       - id: typos
+  - repo: local
+    hooks:
+      - id: prettier-pre-commit
+        name: prettier-pre-commit
+        language: script
+        entry: local-console-ui/scripts/pre-commit.sh
+        pass_filenames: true
+        files: ^local-console-ui/.*\.(ts|js|html|scss|css)$

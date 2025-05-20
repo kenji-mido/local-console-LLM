@@ -34,18 +34,19 @@ from local_console.core.models import Model
 from local_console.core.models import PostModelsIn
 from local_console.fastapi.routes.firmwares import FirmwareInfoDTO
 from local_console.fastapi.routes.firmwares import FirmwareManifestDTO
-from local_console.utils.validation import AOT_XTENSA_HEADER
-from local_console.utils.validation import IMX500_MODEL_HEADER
-
-from tests.strategies.samplers.strings import timestamp
+from local_console.fastapi.routes.interfaces.dto import NetworkInterface
+from local_console.fastapi.routes.interfaces.dto import NetworkStatus
+from local_console.utils.timing import as_timestamp
+from local_console.utils.validation.aot import AOT_HEADER
+from local_console.utils.validation.imx500 import IMX500_MODEL_PKG_HEADER
 
 
 def model_content(body: bytes = b"Content of the body") -> bytes:
-    return bytes(IMX500_MODEL_HEADER) + body
+    return bytes(IMX500_MODEL_PKG_HEADER) + body
 
 
 def app_content(body: bytes = b"Content of the body") -> bytes:
-    return bytes(AOT_XTENSA_HEADER) + body
+    return bytes(AOT_HEADER) + body
 
 
 class FileInfoSampler:
@@ -295,7 +296,7 @@ class DeployConfigSampler:
 class InferenceDetailSampler:
     def __init__(
         self,
-        t: str = timestamp(),
+        t: str = as_timestamp(),
         o: str = "aGVsbG8=",
     ) -> None:
         self.t = t
@@ -330,7 +331,7 @@ class InferenceSampler:
 class InferenceWithSourceSampler:
     def __init__(
         self,
-        path: Path = Path(f"/base/path/{timestamp()}.txt"),
+        path: Path = Path(f"/base/path/{as_timestamp()}.txt"),
         inference: InferenceSampler = InferenceSampler(),
     ) -> None:
         self.path = path
@@ -339,4 +340,23 @@ class InferenceWithSourceSampler:
     def sample(self) -> InferenceWithSource:
         return InferenceWithSourceSampler(
             path=self.path, inference=self.inference.sample()
+        )
+
+
+class NetworkInterfaceSampler:
+    def __init__(
+        self,
+        name: str = "name",
+        ip: str = "ip",
+        status: NetworkStatus = NetworkStatus.UP,
+    ) -> None:
+        self.name = name
+        self.ip = ip
+        self.status = status
+
+    def sample(self) -> NetworkInterface:
+        return NetworkInterface(
+            name=self.name,
+            ip=self.ip,
+            status=self.status.value,
         )

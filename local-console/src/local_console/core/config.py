@@ -15,21 +15,26 @@
 # SPDX-License-Identifier: Apache-2.0
 import json
 import logging
-from pathlib import Path
-from typing import Optional
+from abc import ABC
+from abc import abstractmethod
+from typing import Any
 
 from local_console.core.enums import config_paths
+from local_console.core.enums import DEFAULT_PERSIST_SETTINGS
 from local_console.core.error.base import UserException
 from local_console.core.error.code import ErrorCodes
 from local_console.core.files.exceptions import FileNotFound
 from local_console.core.schemas.schemas import DeploymentManifest
 from local_console.core.schemas.schemas import DeviceConnection
+from local_console.core.schemas.schemas import DeviceID
 from local_console.core.schemas.schemas import DeviceListItem
-from local_console.core.schemas.schemas import EVPParams
 from local_console.core.schemas.schemas import GlobalConfiguration
+from local_console.core.schemas.schemas import LocalConsoleConfig
 from local_console.core.schemas.schemas import MQTTParams
+from local_console.core.schemas.schemas import OnWireProtocol
 from local_console.core.schemas.schemas import Persist
 from local_console.core.schemas.schemas import WebserverParams
+from local_console.utils.singleton import Singleton
 from pydantic import ValidationError
 
 logger = logging.getLogger(__name__)
@@ -41,61 +46,84 @@ class ConfigError(Exception):
     """
 
 
-def optional_path(path: Optional[str]) -> Optional[Path]:
-    return Path(path) if path else None
+class ConfigPersistency(ABC):
+    """
+    Abstract class for implementations of configuration persistency,
+    which should provide a method to read from & write to persistent
+    storage.
+    """
+
+    @abstractmethod
+    def read_config(self) -> GlobalConfiguration: ...
+
+    @abstractmethod
+    def save_config(self, conf: GlobalConfiguration) -> None: ...
 
 
-class Config:
-    def __init__(self) -> None:
-        self._config = self.get_default_config()
+class OnDisk(ConfigPersistency):
 
-    @property
-    def config(self) -> GlobalConfiguration:
-        return self._config
-
-    @staticmethod
-    def get_default_config() -> GlobalConfiguration:
-        return GlobalConfiguration(
-            evp=EVPParams(iot_platform="EVP1"),
-            devices=[Config._create_device_config("Default", 1883)],
-            active_device=1883,
-        )
-
-    def read_config(self) -> bool:
-        """
-        Reads the configuration from disk.
-
-        If the file is not found, it returns False.
-        """
-        if not config_paths.config_path.is_file():
-            logger.warning("Config file not found")
-            return False
-
+    def read_config(self) -> GlobalConfiguration:
         try:
-            with open(config_paths.config_path) as f:
-                self._config = GlobalConfiguration(**json.load(f))
-            return True
+            with config_paths.config_path.open() as f:
+                return GlobalConfiguration(**json.load(f))
+        except OSError as e:
+            logger.warning("Config file not found")
+            raise e
         except Exception as e:
             raise ConfigError(f"Config file not well formed: {e}")
 
-    def save_config(self) -> None:
+    def save_config(self, conf: GlobalConfiguration) -> None:
         logger.info("Storing configuration")
         config_path = config_paths.config_path
         try:
             config_path.parent.mkdir(parents=True, exist_ok=True)
             with open(config_path, "w") as f:
-                f.write(self._config.model_dump_json(indent=2))
+                f.write(conf.model_dump_json(indent=2))
         except Exception as e:
             raise ConfigError(
                 f"Error while generating folder {config_path.parent} or storing configuration: {e}"
             )
 
+
+class Config(metaclass=Singleton):
+
+    persistency_class: type[ConfigPersistency] = OnDisk
+
+    def __init__(self, initial: GlobalConfiguration | None = None) -> None:
+        self._config: GlobalConfiguration = (
+            initial if initial else Config.get_default_config()
+        )
+        self._persistency_obj = Config.persistency_class()
+
+    @property
+    def data(self) -> GlobalConfiguration:
+        return self._config
+
+    @data.setter
+    def data(self, new_data: GlobalConfiguration) -> None:
+        self._config = new_data
+
+    @staticmethod
+    def get_default_config() -> GlobalConfiguration:
+        return GlobalConfiguration(
+            devices=[Config._create_device_config("Default", DeviceID(1883))],
+            config=LocalConsoleConfig(
+                webserver=WebserverParams(host="0.0.0.0", port=0)
+            ),
+        )
+
+    def read_config(self) -> None:
+        self._config = self._persistency_obj.read_config()
+
+    def save_config(self) -> None:
+        self._persistency_obj.save_config(self._config)
+
     def get_config(self) -> GlobalConfiguration:
         return self._config
 
-    def get_device_config(self, key: int) -> DeviceConnection:
+    def get_device_config(self, key: DeviceID) -> DeviceConnection:
         for device_config in self._config.devices:
-            if device_config.mqtt.port == key:
+            if device_config.id == key:
                 return device_config
         raise FileNotFound(
             filename=str(key), message=f"Device for port {key} not found"
@@ -109,37 +137,41 @@ class Config:
             filename=str(name), message=f"Device named '{name}' not found"
         )
 
-    def update_ip_address(self, key: int, new_ip: str) -> None:
+    def get_persistent_attr(self, key: DeviceID, attr: str) -> Any:
+        assert (
+            attr in Persist.model_fields.keys()
+        ), f"Attribute '{attr}' is not a persistent one."
+
         for device_config in self._config.devices:
-            if device_config.mqtt.port == key:
-                device_config.mqtt.host = new_ip
+            if device_config.id == key:
+                return getattr(device_config.persist, attr)
+        raise FileNotFound(
+            filename=str(key), message=f"Device for port {key} not found"
+        )
+
+    def update_persistent_attr(self, key: DeviceID, attr: str, value: Any) -> None:
+        assert (
+            attr in Persist.model_fields.keys()
+        ), f"Attribute '{attr}' is not a persistent one."
+
+        for device_config in self._config.devices:
+            if device_config.id == key:
+                setattr(device_config.persist, attr, value)
+                self.save_config()
                 return
         raise FileNotFound(
             filename=str(key), message=f"Device for port {key} not found"
         )
 
-    def get_active_device_config(self) -> DeviceConnection:
-        if len(self._config.devices) == 1:
-            active_device = self._config.devices[0]
-        else:
-            gather = [
-                device
-                for device in self._config.devices
-                if device.mqtt.port == self._config.active_device
-            ]
-            assert len(gather) == 1
-            active_device = gather[0]
+    def get_first_device_config(self) -> DeviceConnection:
+        return self._config.devices[0]
 
-        return active_device
-
-    def rename_entry(self, port: int, new_name: str) -> None:
-        # First, validate by building an associated device record.
-        self._create_device_config(new_name, port)
+    def rename_entry(self, key: DeviceID, new_name: str) -> None:
+        # First, validate by building an associated device record (port number is irrelevant)
+        self._create_device_config(new_name, key)
 
         # If not exceptions raised, then do rename.
-        entry: DeviceConnection = next(
-            d for d in self._config.devices if d.mqtt.port == port
-        )
+        entry: DeviceConnection = next(d for d in self._config.devices if d.id == key)
         entry.name = new_name
         self.save_config()
 
@@ -157,22 +189,20 @@ class Config:
                 f"Missing field in the deployment manifest: {missing_field}"
             )
 
-    def construct_device_record(self, name: str, port: int) -> DeviceConnection:
-        record_lookup = (dev for dev in self.config.devices if dev.mqtt.port == port)
+    def construct_device_record(self, name: str, key: DeviceID) -> DeviceConnection:
+        record_lookup = (dev for dev in self.data.devices if dev.id == key)
         conn = next(record_lookup, None)
         if conn is None:
-            conn = self._create_device_config(name, port)
+            conn = self._create_device_config(name, key)
 
         return conn
 
     def commit_device_record(self, device_conn: DeviceConnection) -> None:
-        record_lookup = (
-            dev for dev in self.config.devices if dev.mqtt.port == device_conn.mqtt.port
-        )
+        record_lookup = (dev for dev in self.data.devices if dev.id == device_conn.id)
         if next(record_lookup, None) is None:
             self._config.devices.append(device_conn)
 
-    def remove_device(self, key: int) -> None:
+    def remove_device(self, key: DeviceID) -> None:
         if len(self._config.devices) <= 1:
             # Duplicated from device services. Ensures no other ways to modify configuration breaks the invariant.
             raise UserException(
@@ -181,16 +211,8 @@ class Config:
             )
 
         devices_after_remove = [
-            connection
-            for connection in self._config.devices
-            if connection.mqtt.port != key
+            connection for connection in self._config.devices if connection.id != key
         ]
-
-        if key == self._config.active_device:
-            logger.debug(
-                "Setting arbitrary device as active after removing current active device"
-            )
-            self._config.active_device = devices_after_remove[0].mqtt.port
 
         self._config.devices = devices_after_remove
 
@@ -199,28 +221,41 @@ class Config:
 
     def get_device_list_items(self) -> list[DeviceListItem]:
         return [
-            DeviceListItem(name=device.name, port=device.mqtt.port)
+            DeviceListItem(
+                name=device.name,
+                port=device.mqtt.port,
+                id=device.id,
+                onwire_schema=device.onwire_schema,
+            )
             for device in self._config.devices
         ]
 
     @staticmethod
-    def _create_device_config(name: str, port: int) -> DeviceConnection:
+    def _create_device_config(name: str, device_id: DeviceID) -> DeviceConnection:
         try:
             return DeviceConnection(
                 mqtt=MQTTParams(
                     host="localhost",
-                    port=port,
+                    port=int(device_id),
                     device_id=None,
                 ),
-                webserver=WebserverParams(
-                    host="localhost",
-                    port=0,
-                ),
                 name=name,
-                persist=Persist(),
+                id=device_id,
+                onwire_schema=OnWireProtocol.EVP1,
+                persist=DEFAULT_PERSIST_SETTINGS.model_copy(),
             )
         except ValidationError as e:
             raise _render_validation_error(e)
+
+    def reset(self) -> None:
+        """
+        Allows the reuse of existing `Config` instances (e.g., global variables) without
+        needing to create new ones.
+
+        Example:
+            config_obj = Config()
+        """
+        self.data = Config.get_default_config()
 
 
 def _render_validation_error(error_obj: ValidationError) -> UserException:
@@ -248,13 +283,3 @@ def _render_validation_error(error_obj: ValidationError) -> UserException:
             ErrorCodes.EXTERNAL_DEVICE_CREATION_VALIDATION,
             msg,
         )
-
-
-# TODO:FIXME: do not use global variable
-config_obj = Config()
-
-# alias for backward compatibility
-
-
-def get_config() -> GlobalConfiguration:
-    return config_obj.get_config()

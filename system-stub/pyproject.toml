@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools >= 64", "setuptools-scm >= 8"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "system-stub"
+description = "RPi System App stub"
+license = "Apache-2.0"
+version = "0.0.0"
+authors = [
+  {name = "Console Experience team", email = "engineering@midokura.com"}
+]
+classifiers = [
+  "Natural Language :: English",
+  "Operating System :: OS Independent",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+  "Topic :: Scientific/Engineering :: Image Recognition",
+  "Programming Language :: Python :: 3.11",
+]
+requires-python = ">=3.11"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[project.scripts]
+system-stub = "system_stub.__main__:main"

@@ -18,9 +18,13 @@
 
 import { CommonModule } from '@angular/common';
 import { Component, Input, SimpleChanges } from '@angular/core';
-import { CardComponent } from '../card/card.component';
-import { DeviceV2 } from '@app/core/device/device';
-import { SysAppModuleStateV2, isSysModuleState } from '@app/core/module/sysapp';
+import { LocalDevice } from '@app/core/device/device';
+import {
+  SysAppModuleConfigV2,
+  SysAppModuleStateV2,
+  isSysModuleConfig,
+  isSysModuleState,
+} from '@app/core/module/sysapp';
 import { ToggleComponent } from '../../components/toggle/toggle.component';
 
 interface NetworkInfoTabItems {
@@ -54,7 +58,7 @@ export function replaceAsterisks(
   templateUrl: './network-info.component.html',
   styleUrls: ['./network-info.component.scss'],
   standalone: true,
-  imports: [CommonModule, CardComponent, ToggleComponent],
+  imports: [CommonModule, ToggleComponent],
 })
 export class NetworkInfo {
   network_info: NetworkInfoTabItems = {
@@ -74,16 +78,17 @@ export class NetworkInfo {
     passPhrase: undefined,
   };
 
-  @Input() device: DeviceV2 | null = null;
+  @Input() device: LocalDevice | null = null;
 
   ngOnChanges(changes: SimpleChanges) {
     this.onDeviceInfoReceived(changes['device'].currentValue);
   }
-  onDeviceInfoReceived(device: DeviceV2 | null) {
+  onDeviceInfoReceived(device: LocalDevice | null) {
     if (
       device === null ||
       device.modules === null ||
-      !isSysModuleState(device.modules?.[0].property.state!)
+      !isSysModuleState(device.modules?.[0].property.state!) ||
+      !isSysModuleConfig(device?.modules?.[0].property.configuration!)
     ) {
       this.network_info = {
         broker: undefined,
@@ -105,21 +110,24 @@ export class NetworkInfo {
     }
     const deviceState: SysAppModuleStateV2 =
       device.modules?.[0].property.state!;
+    const deviceConfig: SysAppModuleConfigV2 =
+      device.modules?.[0].property.configuration!;
     this.network_info = {
       broker: deviceState.PRIVATE_endpoint_settings?.endpoint_url,
       port: deviceState.PRIVATE_endpoint_settings?.endpoint_port,
-      ntpServer: deviceState.network_settings?.ntp_url,
+      ntpServer: deviceConfig.network_settings?.ntp_url,
       static:
-        deviceState.periodic_setting?.ip_addr_setting?.toLowerCase() !== 'dhcp',
-      ipAddress: deviceState.network_settings?.ip_address,
-      subnetMask: deviceState.network_settings?.subnet_mask,
-      gateway: deviceState.network_settings?.gateway_address,
-      DNS: deviceState.network_settings?.dns_address,
-      proxyUrl: deviceState.network_settings?.proxy_url,
-      proxyPort: deviceState.network_settings?.proxy_port,
-      proxyUsername: deviceState.network_settings?.proxy_user_name,
+        deviceConfig.periodic_setting?.ip_addr_setting?.toLowerCase() !==
+        'dhcp',
+      ipAddress: deviceConfig.network_settings?.ip_address,
+      subnetMask: deviceConfig.network_settings?.subnet_mask,
+      gateway: deviceConfig.network_settings?.gateway_address,
+      DNS: deviceConfig.network_settings?.dns_address,
+      proxyUrl: deviceConfig.network_settings?.proxy_url,
+      proxyPort: deviceConfig.network_settings?.proxy_port,
+      proxyUsername: deviceConfig.network_settings?.proxy_user_name,
       proxyPassword: replaceAsterisks(
-        deviceState.network_settings?.proxy_password,
+        deviceConfig.network_settings?.proxy_password,
       ),
       ssid: deviceState.wireless_setting?.sta_mode_setting?.ssid,
       passPhrase: replaceAsterisks(

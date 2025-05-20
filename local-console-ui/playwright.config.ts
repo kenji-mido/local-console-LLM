@@ -17,9 +17,9 @@
  */
 
 import { PlaywrightTestConfig } from '@playwright/test';
+import path from 'path';
 import { register } from 'tsconfig-paths';
-
-const tsConfig = require('./tsconfig.json');
+import tsConfig from './tsconfig.json';
 
 register({
   baseUrl: tsConfig.compilerOptions.baseUrl,
@@ -31,12 +31,15 @@ const config: PlaywrightTestConfig = {
     // Use an environment variable, with a fallback to localhost
     baseURL: process.env['CONSOLE_BASE_URL'] || 'http://localhost:4200',
   },
-  testDir: './ui-tests',
-  outputDir: './ui-tests/report',
+  testIgnore: [path.resolve(__dirname, 'dist')],
+  testDir: path.resolve(__dirname, 'ui-tests'),
   projects: [{ name: 'chromium', use: { browserName: 'chromium' } }],
-  reporter: [
-    ['html', { open: 'never', outputFolder: './ui-tests/report' }],
-    ['list'],
-  ],
+  reporter: [['html', { open: 'never' }], ['list']],
+  workers: 1,
+  globalSetup: require.resolve('./ui-tests/global-setup'),
+  // test timeout
+  timeout: 500_000,
+  // expect timeout
+  expect: { timeout: 60_000 },
 };
 export default config;

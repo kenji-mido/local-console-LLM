@@ -16,29 +16,26 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { TestBed } from '@angular/core/testing';
+import { provideHttpClient } from '@angular/common/http';
 import {
   HttpTestingController,
   provideHttpClientTesting,
 } from '@angular/common/http/testing';
-import { DeviceService } from './device.service';
-import { HttpApiClient } from '../common/http/http';
-import { CommandService } from '../command/command.service';
-import { environment } from '../../../environments/environment';
+import { TestBed } from '@angular/core/testing';
 import { Device, DeviceList } from '@samplers/device';
-import { provideHttpClient } from '@angular/common/http';
-import { DeviceFrame, DeviceV2, SENSOR_SIZE } from './device';
 import { firstValueFrom } from 'rxjs';
-import { SMALLEST_VALID_PNG } from '@samplers/qr';
-import { Point2D } from '../drawing/drawing';
-import { TIME_BETWEEN_FRAMES } from './device-visualizer/device-visualizer.component';
+import { CommandService } from '../command/command.service';
+import { EnvService } from '../common/environment.service';
+import { HttpApiClient } from '../common/http/http';
+import { DeviceService } from './device.service';
 
 export class MockCommandService {
-  executeCommandV2 = jest.fn();
+  executeSysAppCommand = jest.fn();
 }
 
 describe('DeviceService', () => {
   let service: DeviceService;
+  let envService: EnvService;
   let httpMock: HttpTestingController;
   let commandService: MockCommandService;
 
@@ -53,6 +50,7 @@ describe('DeviceService', () => {
       ],
     });
     service = TestBed.inject(DeviceService);
+    envService = TestBed.inject(EnvService);
     httpMock = TestBed.inject(HttpTestingController);
     commandService = TestBed.inject(
       CommandService,
@@ -74,7 +72,7 @@ describe('DeviceService', () => {
       });
 
       const req = httpMock.expectOne(
-        `${environment.apiV2Url}/devices?limit=500`,
+        `${envService.getApiUrl()}/devices?limit=500`,
       );
       expect(req.request.method).toBe('GET');
       req.flush(mockDevices);
@@ -91,7 +89,7 @@ describe('DeviceService', () => {
       });
 
       const req = httpMock.expectOne(
-        `${environment.apiV2Url}/devices?device_ids=1,2`,
+        `${envService.getApiUrl()}/devices?device_ids=1,2`,
       );
       expect(req.request.method).toBe('GET');
       req.flush(mockDevices);
@@ -102,20 +100,23 @@ describe('DeviceService', () => {
 
   describe('deleteDevice', () => {
     it('should delete a device', async () => {
-      const device = Device.sampleLocal(Device.sample(), 12345);
-      const list = DeviceList.sampleLocal();
+      const device = Device.sample({
+        device_name: 'device_12345',
+        device_id: '12345',
+      });
+      const list = DeviceList.sample();
 
       service.deleteDevice(device);
 
       const deleteRequest = httpMock.expectOne(
-        `${environment.apiV2Url}/devices/12345`,
+        `${envService.getApiUrl()}/devices/12345`,
       );
       expect(deleteRequest.request.method).toBe('DELETE');
       deleteRequest.flush(null);
       await new Promise(process.nextTick);
 
       const getRequest = httpMock.expectOne(
-        `${environment.apiV2Url}/devices?limit=500`,
+        `${envService.getApiUrl()}/devices?limit=500`,
       );
       expect(getRequest.request.method).toBe('GET');
       getRequest.flush(list);
@@ -123,76 +124,6 @@ describe('DeviceService', () => {
       await expect(firstValueFrom(service.devices$)).resolves.toEqual(
         list.devices,
       );
-    });
-  });
-
-  describe('getDeviceNextImage', () => {
-    it('should return a data uri image if device is reachable', async () => {
-      const device = Device.sampleLocal();
-
-      commandService.executeCommandV2.mockResolvedValue({
-        result: 'SUCCESS',
-        command_response: {
-          image: SMALLEST_VALID_PNG,
-        },
-      });
-
-      const img = await service.getDeviceNextImage(device);
-
-      expect(img).toContain(SMALLEST_VALID_PNG);
-      expect(commandService.executeCommandV2).toHaveBeenCalledWith(
-        device.port.toString(),
-        '$system',
-        expect.objectContaining({ command_name: 'direct_get_image' }),
-      );
-    });
-
-    it('should return an error if command results in error', async () => {
-      const device = Device.sampleLocal();
-
-      commandService.executeCommandV2.mockResolvedValue({ result: 'ERROR' });
-
-      expect(service.getDeviceNextImage(device)).rejects.toThrow();
-    });
-  });
-
-  describe('deviceSelected$', () => {
-    it('should emit the correct device when setSelectedDevice is called with a valid device', (done) => {
-      const sampleDevice = Device.sample();
-
-      service.deviceSelected$.subscribe((device) => {
-        expect(device).toEqual(sampleDevice);
-        done();
-      });
-
-      service.setSelectedDevice(sampleDevice);
-    });
-
-    it('should not emit when setSelectedDevice is called with null', () => {
-      const mockFn = jest.fn();
-      service.deviceSelected$.subscribe(mockFn);
-
-      service.setSelectedDevice(<DeviceV2>(<unknown>null));
-
-      expect(mockFn).not.toHaveBeenCalled();
-    });
-
-    it('should emit only the last device to new subscribers after multiple calls to setSelectedDevice', (done) => {
-      const firstDevice = Device.sample();
-      const secondDevice = Device.sample();
-
-      service.setSelectedDevice(firstDevice);
-      service.setSelectedDevice(secondDevice);
-
-      service.deviceSelected$.subscribe((device) => {
-        expect(device).toEqual(secondDevice);
-
-        // Test a new subscription again
-        const newMockFn = jest.fn();
-        service.deviceSelected$.subscribe(newMockFn);
-        expect(newMockFn).toHaveBeenCalledWith(secondDevice);
-        done();
-      });
     });
   });
 
@@ -208,7 +139,7 @@ describe('DeviceService', () => {
       service.loadDevices();
 
       const req = httpMock.expectOne(
-        `${environment.apiV2Url}/devices?limit=500`,
+        `${envService.getApiUrl()}/devices?limit=500`,
       );
       expect(req.request.method).toBe('GET');
       req.flush(mockDevices);
@@ -222,7 +153,7 @@ describe('DeviceService', () => {
       const deferred = service.loadDevices();
 
       const req = httpMock.expectOne(
-        `${environment.apiV2Url}/devices?limit=500`,
+        `${envService.getApiUrl()}/devices?limit=500`,
       );
       expect(req.request.method).toBe('GET');
       req.flush('retrieval error', { status: 500, statusText: 'Server Error' });
@@ -233,21 +164,21 @@ describe('DeviceService', () => {
 
   describe('createDevice', () => {
     it('should post to /devices on creation', async () => {
-      const list = DeviceList.sampleLocal();
+      const list = DeviceList.sample();
       const device_name = 'My device';
       const mqtt_port = 12345;
 
       expect(service.createDevice(device_name, mqtt_port)).resolves.toBeFalsy();
 
-      const req = httpMock.expectOne(`${environment.apiV2Url}/devices`);
+      const req = httpMock.expectOne(`${envService.getApiUrl()}/devices`);
       expect(req.request.method).toBe('POST');
       expect(req.request.body).toHaveProperty('device_name', device_name);
-      expect(req.request.body).toHaveProperty('mqtt_port', mqtt_port);
+      expect(req.request.body).toHaveProperty('id', mqtt_port);
       req.flush('');
       await new Promise(process.nextTick);
 
       const getRequest = httpMock.expectOne(
-        `${environment.apiV2Url}/devices?limit=500`,
+        `${envService.getApiUrl()}/devices?limit=500`,
       );
       expect(getRequest.request.method).toBe('GET');
       getRequest.flush(list);
@@ -255,73 +186,6 @@ describe('DeviceService', () => {
       await expect(firstValueFrom(service.devices$)).resolves.toEqual(
         list.devices,
       );
-    });
-  });
-
-  describe('getDeviceStream', () => {
-    it('should push device image to the stream when getPreviewImageV2 is successful', (done) => {
-      // Mock the internal HTTP call within getDeviceNextImage
-      const device = Device.sampleLocal();
-      commandService.executeCommandV2.mockReturnValue({
-        result: 'SUCCESS',
-        command_response: {
-          image: SMALLEST_VALID_PNG,
-        },
-      });
-
-      const { stream, stopStream } = service.getDeviceStream(
-        device,
-        new Point2D(0, 0),
-        SENSOR_SIZE,
-        TIME_BETWEEN_FRAMES,
-      );
-
-      stream.subscribe((frame) => {
-        expect((frame as DeviceFrame).image).toContain(SMALLEST_VALID_PNG);
-        stopStream();
-        done();
-      });
-    });
-
-    it('should push an error to the stream when getPreviewImageV2 fails', (done) => {
-      // Mock the internal HTTP call to simulate failure
-      const device = Device.sampleLocal();
-      commandService.executeCommandV2.mockResolvedValue({ result: 'ERROR' });
-
-      const { stream, stopStream } = service.getDeviceStream(
-        device,
-        new Point2D(0, 0),
-        SENSOR_SIZE,
-        TIME_BETWEEN_FRAMES,
-      );
-
-      stream.subscribe((frame) => {
-        expect(frame).toBeInstanceOf(Error);
-        stopStream();
-        done();
-      });
-    });
-
-    it('should stop calling getPreviewImageV2 after stopStream is called', async () => {
-      const device = Device.sampleLocal();
-      commandService.executeCommandV2.mockReturnValue({
-        result: 'SUCCESS',
-        command_response: {
-          image: SMALLEST_VALID_PNG,
-        },
-      });
-
-      const { stream, stopStream } = service.getDeviceStream(
-        device,
-        new Point2D(0, 0),
-        SENSOR_SIZE,
-        TIME_BETWEEN_FRAMES,
-      );
-
-      stopStream();
-
-      // Should only be called once before stopStream
-      expect(commandService.executeCommandV2).toHaveBeenCalledTimes(1);
     });
   });
 });

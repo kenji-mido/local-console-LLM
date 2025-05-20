@@ -15,7 +15,7 @@
 # SPDX-License-Identifier: Apache-2.0
 import logging
 
-from local_console.core.camera.state import CameraState
+from local_console.core.camera.machine import Camera
 from local_console.core.deploy.tasks.app_task import AppDeployHistoryInfo
 from local_console.core.deploy.tasks.app_task import AppTask
 from local_console.core.deploy.tasks.base_task import DeployHistoryInfo
@@ -42,11 +42,11 @@ class ConfigDeployHistoryInfo(DeployHistoryInfo):
 
 class ConfigTask(Task):
     def __init__(
-        self, state: CameraState, config: DeployConfig, params: DeploymentConfig
+        self, camera: Camera, config: DeployConfig, params: DeploymentConfig
     ) -> None:
-        self._camera_state = state
+        self._camera = camera
         self._config = config
-        self._tasks = self._calc_all_tasks(state, config, params)
+        self._tasks = self._calc_all_tasks(camera, config, params)
 
     def get_state(self) -> TaskState:
         if not self._tasks:
@@ -70,15 +70,15 @@ class ConfigTask(Task):
         return TaskState(status=Status.RUNNING, started_at=early_start)
 
     def _calc_all_tasks(
-        self, state: CameraState, config: DeployConfig, params: DeploymentConfig
+        self, camera: Camera, config: DeployConfig, params: DeploymentConfig
     ) -> list[Task]:
         tasks: list[Task] = []
         for firmware in config.firmwares:
-            tasks.append(FirmwareTask(state, firmware))
-        for app in config.edge_apps:
-            tasks.append(AppTask(state, app))
+            tasks.append(FirmwareTask(camera, firmware))
         for model in config.models:
-            tasks.append(ModelTask(state, model, params=params.model))
+            tasks.append(ModelTask(camera, model, params=params.model))
+        for app in config.edge_apps:
+            tasks.append(AppTask(camera, app))
         return tasks
 
     async def run(self) -> None:
@@ -103,8 +103,7 @@ class ConfigTask(Task):
                 await task.stop()
 
     def id(self) -> str:
-        assert self._camera_state.mqtt_port.value, "Id of the camera is needed"
-        return f"config_task_for_device_{self._camera_state.mqtt_port.value}"
+        return f"config_task_for_device_{self._camera.id}"
 
     def _get_info(self, task_type: type[Task]) -> list[DeployHistoryInfo]:
         return [

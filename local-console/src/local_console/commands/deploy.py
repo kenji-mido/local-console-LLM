@@ -15,23 +15,20 @@
 # SPDX-License-Identifier: Apache-2.0
 import json
 import logging
-import sys
-from functools import partial
 from pathlib import Path
 from typing import Annotated
-from typing import Any
-from typing import Callable
 from typing import Optional
+from unittest.mock import patch
 
 import trio
 import typer
-from local_console.clients.agent import Agent
-from local_console.core.camera.enums import DeployStage
-from local_console.core.camera.enums import MQTTTopics
-from local_console.core.commands.deploy import DeployFSM
-from local_console.core.commands.deploy import get_empty_deployment
-from local_console.core.commands.deploy import manifest_setup_epilog
-from local_console.core.config import config_obj
+from local_console.commands.utils import dummy_report_fn
+from local_console.commands.utils import find_device_config
+from local_console.core.camera.machine import Camera
+from local_console.core.camera.states.v2.ready import ReadyCameraV2
+from local_console.core.commands.deploy import DeploymentSpec
+from local_console.core.commands.deploy import DeployStage
+from local_console.core.config import Config
 from local_console.core.enums import config_paths
 from local_console.core.enums import ModuleExtension
 from local_console.core.enums import Target
@@ -39,9 +36,8 @@ from local_console.core.schemas.schemas import DeploymentManifest
 from local_console.core.schemas.schemas import DeviceConnection
 from local_console.core.schemas.schemas import OnWireProtocol
 from local_console.plugin import PluginBase
-from local_console.servers.webserver import SyncWebserver
-from local_console.utils.local_network import get_my_ip_by_routing
-from local_console.utils.local_network import is_localhost
+from local_console.servers.webserver import AsyncWebserver
+from local_console.servers.webserver import FileInbox
 
 logger = logging.getLogger(__name__)
 
@@ -80,96 +76,52 @@ def deploy(
             help="Optional argument to specify which AoT compilation to deploy. If not defined it will deploy the plain WASM"
         ),
     ] = None,
-    force_webserver: Annotated[
-        bool,
+    device: Annotated[
+        Optional[str],
         typer.Option(
-            "-f",
-            "--force-webserver",
-            help=(
-                "If passed, the command will deploy the webserver locally, even if the "
-                "configured webserver host does not resolve to localhost"
-            ),
+            "--device",
+            "-d",
+            help="The name of the device to which the application will be deployed.",
         ),
-    ] = False,
+    ] = None,
+    port: Annotated[
+        Optional[int],
+        typer.Option(
+            help="An alternative to --device, using the port to identify the device instead of its name. Ignored if the --device option is specified."
+        ),
+    ] = None,
 ) -> None:
-    config = config_obj.get_config()
-    config_device = config_obj.get_active_device_config()
-    schema = OnWireProtocol.from_iot_spec(config.evp.iot_platform)
-    agent = Agent(config_device.mqtt.host, config_device.mqtt.port, schema)
-    local_ip = get_my_ip_by_routing()
-
-    port = 0
-    host_override: Optional[str] = None
-
-    deploy_webserver = force_webserver
-    device_config = config_obj.get_active_device_config()
-    configured_host = device_config.webserver.host
-    if is_localhost(configured_host) or configured_host == local_ip:
-        deploy_webserver = True
-    else:
-        host_override = configured_host
-        port = device_config.webserver.port
-
-    deploy_fsm = DeployFSM.instantiate(
-        schema,
-        agent.deploy,
-        None,
-        deploy_webserver,
-        port,
-        timeout,
-    )
+    config_device = find_device_config(device, port)
 
     if empty:
-        deployment_manifest = get_empty_deployment()
+        spec = DeploymentSpec.new_empty()
     else:
         bin_fp = Path.cwd() / config_paths.bin
         if not bin_fp.is_dir():
             raise Exception(f"'bin' folder does not exist at {bin_fp.parent}")
 
-        deployment_manifest = multiple_module_manifest_setup(
+        spec = user_provided_manifest_setup(
             bin_fp,
-            deploy_fsm.webserver,
             target,
             signed,
-            config_device,
-            port,
-            host_override,
-        )
-        Path(config_paths.deployment_json).write_text(
-            json.dumps(deployment_manifest.model_dump(), indent=2)
         )
 
     try:
-        success = False
-        deploy_fsm.set_manifest(deployment_manifest)
-        deployment_fn = partial(
-            exec_deployment,
-            agent,
-            deploy_fsm,
-        )
-        success = trio.run(deployment_fn)
-
+        trio.run(deploy_task, spec, config_device, timeout)
     except Exception as e:
         logger.exception("Deployment error", exc_info=e)
-    except KeyboardInterrupt:
-        logger.info("Cancelled by the user")
-    finally:
-        sys.exit(0 if success else 1)
+        raise typer.Exit(code=1)
 
 
 class DeployCommand(PluginBase):
     implementer = app
 
 
-def multiple_module_manifest_setup(
+def user_provided_manifest_setup(
     files_dir: Path,
-    webserver: SyncWebserver,
     target_arch: Optional[Target],
     use_signed: bool,
-    target: DeviceConnection,
-    port_override: Optional[int] = None,
-    host_override: Optional[str] = None,
-) -> DeploymentManifest:
+) -> DeploymentSpec:
     """
     Fill all fields in of a preliminary deployment manifest that
     comes with a set of modules specified, having their file paths
@@ -177,18 +129,71 @@ def multiple_module_manifest_setup(
 
     All module files must be located in `files_dir`
     """
-    assert files_dir.is_dir()
-    webserver.set_directory(files_dir)
-    manifest = config_obj.get_deployment()
-    mod_identifiers = list(manifest.deployment.modules.keys())
-    for ident in mod_identifiers:
-        manifest.deployment.modules[ident].downloadUrl = str(
-            project_binary_lookup(files_dir, ident, target_arch, use_signed)
+    from_user = Config().get_deployment()
+    pre = DeploymentSpec(modules={}, pre_deployment=from_user.deployment)
+    for ident in pre.pre_deployment.modules.keys():
+        pre.modules[ident] = project_binary_lookup(
+            files_dir, ident, target_arch, use_signed
         )
 
-    return manifest_setup_epilog(
-        files_dir, manifest, webserver, target, port_override, host_override
-    )
+    return pre
+
+
+async def deploy_task(
+    spec: DeploymentSpec,
+    config: DeviceConnection,
+    timeout_secs: int = 30,
+) -> None:
+    """
+    This command assumes the device to be in its 'ready' state
+    """
+    from local_console.core.camera.states.v1.ready import ReadyCameraV1
+    from local_console.core.camera.states.v2.ready import ReadyCameraV2
+
+    schema = config.onwire_schema
+
+    # No need to spawn a broker
+    with patch("local_console.core.camera.states.base.spawn_broker"):
+        try:
+            async with (
+                trio.open_nursery() as nursery,
+                AsyncWebserver() as webserver,
+            ):
+
+                send, _ = trio.open_memory_channel(0)
+                token = trio.lowlevel.current_trio_token()
+                camera = Camera(
+                    config,
+                    send,
+                    webserver,
+                    FileInbox(webserver),
+                    token,
+                    dummy_report_fn,
+                )
+
+                state = (
+                    ReadyCameraV1(camera._common_properties)
+                    if schema == OnWireProtocol.EVP1
+                    else ReadyCameraV2(camera._common_properties)
+                )
+
+                await nursery.start(camera.setup)
+                await camera._transition_to_state(state)
+
+                event = trio.Event()
+
+                assert hasattr(
+                    state, "start_app_deployment"
+                )  # due to the different returned type, mypy doesn't acknowledge the shared method
+                await state.start_app_deployment(
+                    spec, event, print, stage_callback, timeout_secs
+                )
+
+                await event.wait()
+                nursery.cancel_scope.cancel()
+
+        except* KeyboardInterrupt:
+            logger.info("Cancelled by the user")
 
 
 def project_binary_lookup(
@@ -204,13 +209,14 @@ def project_binary_lookup(
     assert files_dir.is_dir()
 
     name_parts: list[str] = [module_base_name]
+
+    if use_signed and target_arch:
+        name_parts.append(ModuleExtension.SIGNED.value)
+
     if target_arch:
         name_parts += [target_arch.value, ModuleExtension.AOT.value]
     else:
         name_parts.append(ModuleExtension.WASM.value)
-
-    if use_signed and target_arch:
-        name_parts.append(ModuleExtension.SIGNED.value)
 
     binary = files_dir / ".".join(name_parts)
     if not binary.is_file():
@@ -224,63 +230,13 @@ def project_binary_lookup(
     return binary
 
 
-async def exec_deployment(
-    agent: Agent,
-    deploy_fsm: DeployFSM,
-    stage_callback: Optional[Callable[[DeployStage], None]] = None,
-) -> bool:
-    assert agent.onwire_schema
-    success = False
-
-    # Ensure device readiness to receive a deployment manifest
-    await agent.initialize_handshake()
-
-    async with (
-        trio.open_nursery() as nursery,
-        agent.mqtt_scope([MQTTTopics.ATTRIBUTES.value]),
-    ):
-
-        # assert agent.nursery
-        deploy_loop = partial(stimuli_loop, agent, deploy_fsm)
-        nursery.start_soon(deploy_loop)
-
-        await deploy_fsm.start(nursery)
-        await deploy_fsm.done.wait()
-        success = not deploy_fsm.errored
-        nursery.cancel_scope.cancel()
-
-    return success
-
-
-async def stimuli_loop(agent: Agent, fsm: DeployFSM) -> None:
-    """
-    Used to stimulate a deployment FSM, calling its update()
-    method with deployment status updates as they come.
-    """
-    assert agent.client is not None
-
-    async with agent.client.messages() as mgen:
-        async for msg in mgen:
-            payload = json.loads(msg.payload)
-            await stimulus_proc(msg.topic, payload, agent.onwire_schema, fsm)
-
-
-async def stimulus_proc(
-    topic: str,
-    payload: dict[str, Any],
-    onwire_schema: Optional[OnWireProtocol],
-    fsm: DeployFSM,
+async def stage_callback(
+    stage: DeployStage, manifest: DeploymentManifest | None
 ) -> None:
-    if (
-        payload
-        and topic == MQTTTopics.ATTRIBUTES.value
-        and "deploymentStatus" in payload
-    ):
-        deploy_status_repr = payload.get("deploymentStatus", {})
-        if onwire_schema == OnWireProtocol.EVP1 or onwire_schema is None:
-            deploy_status = json.loads(deploy_status_repr)
-        else:
-            deploy_status = deploy_status_repr
+    if stage == DeployStage.Done:
+        assert manifest
+        logger.info("Successfully applied manifest.")
 
-        logger.debug("Deploy: %s", deploy_status)
-        await fsm.update(deploy_status)  # type: ignore  # mypy is not seeing the argument???
+        path = Path(config_paths.deployment_json)
+        path.write_text(json.dumps(manifest.model_dump(), indent=2))
+        logger.info(f"Saved deployment manifest to: {path}")

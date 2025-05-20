@@ -15,21 +15,7 @@
  *
  * SPDX-License-Identifier: Apache-2.0
  */
-
-:host {
-  --compound-margin-over-std: 2;
-}
-
-.inference {
-  .image-stream {
-    flex: 1.4;
-  }
-
-  .inference-result {
-    flex: 1;
-    max-width: 350px;
-  }
-}
+@import "../../../stylesheets/dropdown-list.scss";
 
 button {
   cursor: pointer;
@@ -44,75 +30,23 @@ app-icon-text {
   padding: 7px 9px 7px 12px;
 }
 
+// Paddings of Storage section specified in HTML
+.storage app-icon-text {
+  padding: 0;
+}
+
+.warning {
+  background: none;
+}
+
 .selected-tab {
   color: black;
   background-color: #fff;
 }
 
-.format {
-  padding: 0px 8px 0px 8px;
-  gap: 0px 8px 0px 8px;
-  opacity: 0px;
-}
-
-.element-spacing {
-  margin-top: 8px;
-  margin-bottom: 8px;
-  border-bottom: 1px solid #ececec;
-}
-.element-spacing:first-child {
-  margin-top: 0;
-}
-.element-spacing:last-child {
-  border: none;
-}
-
-.subtitle {
-  padding-bottom: 24px;
-}
-
-.text-info {
-  row-gap: 16px;
-  display: grid;
-  grid-template-columns: 30% auto;
-  margin-bottom: 16px;
-}
-
-.text-info-content {
-  display: contents;
-}
-
 .selector {
   padding-top: 16px;
   padding-bottom: 16px;
-}
-
-.start-stop.row {
-  gap: 8px;
-}
-
-.button {
-  margin: 0px;
-  padding: 0px;
-}
-
-.storage {
-  gap: 8px;
-
-  .storage-spinner {
-    gap: 12px;
-  }
-}
-
-::ng-deep app-number-spinner {
-  .spinner-body {
-    &:hover {
-      border: none !important;
-    }
-    .spinner-infix {
-      width: 70px !important;
-    }
-  }
 }
 
 ::ng-deep mat-form-field {

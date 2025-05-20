@@ -14,15 +14,12 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 import logging
-import signal
 from importlib.metadata import version as version_info
 from pathlib import Path
-from types import FrameType
 from typing import Annotated
-from typing import Optional
 
 import typer
-from local_console.core.config import config_obj
+from local_console.core.config import Config
 from local_console.core.enums import config_paths
 from local_console.plugin import populate_commands
 from local_console.utils.logger import configure_logger
@@ -35,15 +32,6 @@ app = typer.Typer(
     context_settings={"help_option_names": ["-h", "--help"]},
 )
 cmds = populate_commands(app)
-
-
-def handle_exit(signal: int, frame: Optional[FrameType]) -> None:
-    logger.warning(f"Handling signal {signal} with frame {frame}")
-    raise SystemExit
-
-
-signal.signal(signal.SIGINT, handle_exit)
-signal.signal(signal.SIGTERM, handle_exit)
 
 
 @app.callback(invoke_without_command=True, context_settings={"obj": cmds})
@@ -78,8 +66,11 @@ def main(
 
     config_paths.home = config_dir
     configure_logger(silent, verbose)
-    if not config_obj.read_config():
-        config_obj.save_config()
+
+    try:
+        Config().read_config()
+    except OSError:
+        Config().save_config()
 
     if version:
         try:
@@ -89,7 +80,6 @@ def main(
 
     loaded_commands = ctx.obj
     for name, command_class in loaded_commands.items():
-        logger.debug(f"Invoking pre-setup callback for command {name}")
         command_class.pre_setup_callback(config_paths)
 
     ctx.obj = config_paths.config_path

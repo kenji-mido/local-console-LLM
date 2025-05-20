@@ -15,6 +15,7 @@ Ensure the following dependencies are installed on your system and added to your
 * Python 3.11 or higher (including pip)
 * [mosquitto](https://mosquitto.org/download)
 * [flatc](https://github.com/google/flatbuffers/releases/tag/v24.3.25)
+* [WABT](https://github.com/WebAssembly/wabt/releases/tag/1.0.36)
 
 Ensure these programs are added to your system's `PATH` environment variable.
 
@@ -68,6 +69,19 @@ Make sure that its installation did not enable a running instance, by doing:
 ```sh
 sudo systemctl disable mosquitto.service
 sudo systemctl stop mosquitto.service
+```
+
+If you've installed mosquitto through the Snap package manager (recommended for Ubuntu services by the official webpage), then you will need to disable the service from the `snap services`
+
+Check with:
+```sh
+sudo snap services mosquitto
+```
+
+And disable if needed:
+```sh
+sudo snap stop mosquitto
+sudo snap disable mosquitto
 ```
 
 This action is only necessary once after installing the software.

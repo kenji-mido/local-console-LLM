@@ -15,13 +15,14 @@
 # SPDX-License-Identifier: Apache-2.0
 from enum import Enum
 from pathlib import Path
+from typing import Self
 
+from local_console.core.error.base import UserException
+from local_console.core.error.code import ErrorCodes
 from local_console.utils.enums import StrEnum
 
 
 class StreamStatus(Enum):
-    # Camera states:
-    # https://github.com/SonySemiconductorSolutions/EdgeAIPF.smartcamera.type3.mirror/blob/vD7.00.F6/src/edge_agent/edge_agent_config_state_private.h#L309-L314
     Inactive = "Inactive"
     Active = "Active"
     Transitioning = (
@@ -41,6 +42,7 @@ class MQTTTopics(Enum):
     ATTRIBUTES = "v1/devices/me/attributes"
     TELEMETRY = "v1/devices/me/telemetry"
     ATTRIBUTES_REQ = "v1/devices/me/attributes/request/+"
+    RPC_REQUESTS = "v1/devices/me/rpc/request/+"
     RPC_RESPONSES = "v1/devices/me/rpc/response/+"
 
     @classmethod
@@ -63,6 +65,10 @@ class MQTTTopics(Enum):
         return self.topic_matches_pattern(topic, self.value)
 
 
+class MQTTSubTopics(Enum):
+    DEPLOY_STATUS = "deploymentStatus"
+
+
 class OTAUpdateStatus(StrEnum):
     DOWNLOADING = "Downloading"
     UPDATING = "Updating"
@@ -74,6 +80,7 @@ class OTAUpdateStatus(StrEnum):
 class ConnectionState(StrEnum):
     CONNECTED = "Connected"
     DISCONNECTED = "Disconnected"
+    CONNECTING = "Connecting"
     # PERIODIC = "Periodic"  # This is for v2
 
 
@@ -105,10 +112,24 @@ class UnitScale(StrEnum):
     MB = "MB"
     GB = "GB"
 
+    @classmethod
+    def from_value(cls, value: str) -> Self:
+        normalized = value.upper()
+        for item in cls:
+            if item.value == normalized:
+                return item
+        raise UserException(
+            ErrorCodes.EXTERNAL_CONFIG_UNITSIZE, f"{value} is not a valid unit"
+        )
+
 
 class ApplicationType(StrEnum):
+    IMAGE = "image"
     CLASSIFICATION = "classification"
     DETECTION = "detection"
+    GENERIC_CLASSIFICATION = "generic_classification"
+    GENERIC_DETECTION = "generic_detection"
+    CUSTOM = "custom"
 
 
 class ApplicationConfiguration:

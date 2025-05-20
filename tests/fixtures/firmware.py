@@ -35,9 +35,9 @@ def generate_get_ota_update_status_mock(sequence: list[OTAUpdateStatus]):
 
 
 @contextmanager
-def mock_get_ota_update_status(sequence: list[OTAUpdateStatus]):
+def mock_get_ota_update_status(filepath: str, sequence: list[OTAUpdateStatus]):
     with patch(
-        "local_console.core.camera.firmware.get_ota_update_status",
+        filepath,
         generate_get_ota_update_status_mock(sequence),
     ):
         yield

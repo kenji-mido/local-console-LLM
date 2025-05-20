@@ -18,15 +18,4 @@
 
 export const environment = {
   apiUrl: 'http://localhost:8000',
-  apiV2Url: 'http://localhost:8000',
-  features: {
-    device_registration: {
-      mqtt_port: true,
-      proxy_settings: false,
-    },
-    device_list: {
-      full: true,
-      local_devices: true,
-    },
-  },
 };

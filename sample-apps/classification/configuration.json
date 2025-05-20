@@ -1,4 +1,12 @@
 {
-  "max_predictions": 2,
-  "dnn_output_classes": 5
+  "custom_settings": {
+    "ai_models": {
+      "classification": {
+        "ai_model_bundle_id": "000000",
+        "parameters": {
+          "max_predictions": 3
+        }
+      }
+    }
+  }
 }

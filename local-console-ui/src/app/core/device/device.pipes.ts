@@ -16,8 +16,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { Pipe, PipeTransform, NgModule } from '@angular/core';
-import { DeviceStatus, DeviceV2, isLocalDevice } from '@app/core/device/device';
+import { NgModule, Pipe, PipeTransform } from '@angular/core';
+import {
+  DeviceStatus,
+  deviceTypeToArchetype,
+  LocalDevice,
+} from '@app/core/device/device';
 
 @Pipe({
   name: 'deviceStatusSvg',
@@ -30,28 +34,29 @@ export class DeviceStatusSvgPipe implements PipeTransform {
   ): string {
     switch (connectionState) {
       case DeviceStatus.Connected:
+      case DeviceStatus.Connecting:
         return `images/${theme}/device_status_connected.svg`;
+      case DeviceStatus.Periodic:
+        return `images/${theme}/device_status_periodic.svg`;
       case DeviceStatus.Disconnected:
-        return `images/${theme}/device_status_disconnected.svg`;
       default:
-        return `images/${theme}/device_status_unknown.svg`;
+        return `images/${theme}/device_status_disconnected.svg`;
     }
   }
 }
 
 @Pipe({
-  name: 'localDevices',
+  name: 'archetype',
   standalone: true,
 })
-export class DeviceListLocalFilterPipe implements PipeTransform {
-  transform(value: DeviceV2[] | null | undefined) {
-    value ||= [];
-    return value.filter(isLocalDevice);
+export class DeviceArchetypePipe implements PipeTransform {
+  transform(device?: LocalDevice) {
+    return deviceTypeToArchetype(device?.device_type);
   }
 }
 
 @NgModule({
-  imports: [DeviceStatusSvgPipe, DeviceListLocalFilterPipe],
-  exports: [DeviceStatusSvgPipe, DeviceListLocalFilterPipe],
+  imports: [DeviceStatusSvgPipe, DeviceArchetypePipe],
+  exports: [DeviceStatusSvgPipe, DeviceArchetypePipe],
 })
 export class DevicePipesModule {}

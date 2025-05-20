@@ -21,11 +21,35 @@ process.once("loaded", () => {
 
   const bridge = {
     isElectron: true,
-    selectFolder: async () => {
-      ipcRenderer.send("select-folder");
+
+    selectFolder: async (operationId) => {
+      ipcRenderer.send("select-folder", operationId);
       return new Promise((resolve) => {
-        ipcRenderer.once("selected-folder", (event, path) => {
+        ipcRenderer.once(`selected-folder-${operationId}`, (event, path) => {
           resolve(path);
+        });
+      });
+    },
+
+    selectFile: async (filterName, acceptedExtensions, operationId) => {
+      ipcRenderer.send(
+        "select-file",
+        filterName,
+        acceptedExtensions,
+        operationId,
+      );
+      return new Promise((resolve) => {
+        ipcRenderer.once(`selected-file-${operationId}`, (event, fileInfo) => {
+          resolve(fileInfo);
+        });
+      });
+    },
+
+    readFile: async (path) => {
+      ipcRenderer.send("read-file", path);
+      return new Promise((resolve) => {
+        ipcRenderer.once("read-file-return", (event, fileInfo) => {
+          resolve(fileInfo);
         });
       });
     },

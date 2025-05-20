@@ -19,7 +19,11 @@
 .device-info-table {
   text-align: left;
   width: 100%;
-  margin-top: 20px;
+  margin-top: 32px;
+}
+
+.space-between-col {
+  border-spacing: 40px 0px;
 }
 
 tr {
@@ -27,13 +31,12 @@ tr {
   height: 30px;
 }
 
-th {
-  width: 30%;
+td {
+  vertical-align: top;
 }
 
-td {
-  width: 30%;
-  vertical-align: top;
+td:first-child {
+  width: 180px;
 }
 
 .separator-align {
@@ -43,4 +46,21 @@ td {
 .attribute-style {
   margin-left: 20px;
   color: #7c7272;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.title {
+  flex: 0 0 auto;
+}
+
+.horizontal-line {
+  flex: 1;
+  height: 2px;
+  background: #b7b7b7;
+  margin-left: 16px;
 }

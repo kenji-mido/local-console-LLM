@@ -14,10 +14,8 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 from datetime import datetime
-from typing import Any
 from unittest.mock import MagicMock
 
-from local_console.clients.command.rpc import RPCArgument
 from local_console.core.deploy.tasks.app_task import AppDeployHistoryInfo
 from local_console.core.deploy.tasks.base_task import Task
 from local_console.core.deploy.tasks.firmware_task import FirmwareDeployHistoryInfo
@@ -25,8 +23,11 @@ from local_console.core.deploy.tasks.firmware_task import FirmwareTask
 from local_console.core.deploy.tasks.model_task import ModelDeployHistoryInfo
 from local_console.core.deploy.tasks.task_executors import TaskEntity
 from local_console.core.deploy_config import DeployConfig
-from local_console.core.schemas.schemas import OnWireProtocol
+from local_console.core.schemas.schemas import Deployment
+from local_console.core.schemas.schemas import InstanceSpec
+from local_console.core.schemas.schemas import Module
 from local_console.fastapi.routes.deploy_history.dto import DeployHistory
+from local_console.utils.timing import now
 
 from tests.strategies.samplers.files import FirmwareSampler
 
@@ -35,7 +36,7 @@ class DeployHistorySampler:
     def __init__(
         self,
         deploy_id: str = "deploy_id",
-        from_datetime: datetime = datetime.now(),
+        from_datetime: datetime = now(),
         deploy_type: str = "ConfigTask",
         deploying_cnt: int = 0,
         success_cnt: int = 1,
@@ -96,23 +97,37 @@ class TaskEntitySampler:
         return TaskEntity(id=self.id, task=self.task)
 
 
-class RPCArgumentSampler:
+class DeploymentSampler:
     def __init__(
         self,
-        onwire_schema: OnWireProtocol = OnWireProtocol.EVP1,
-        instance_id: str = "instance_id",
-        method: str = "method",
-        params: dict[str, Any] = {},
+        id: str = "id",
     ) -> None:
-        self.onwire_schema = onwire_schema
-        self.instance_id = instance_id
-        self.method = method
-        self.params = params
+        self.id = id
 
-    def sample(self) -> RPCArgument:
-        return RPCArgument(
-            onwire_schema=self.onwire_schema,
-            instance_id=self.instance_id,
-            method=self.method,
-            params=self.params,
+    def sample(self, num_modules: int = 0) -> Deployment:
+
+        modules = {
+            f"mod_{i}": Module(
+                entryPoint="main",
+                moduleImpl="wasm",
+                downloadUrl="",
+                hash="",
+            )
+            for i in range(num_modules)
+        }
+        instances = {
+            f"inst_{name}": InstanceSpec(
+                moduleId=name,
+                subscribe={},
+                publish={},
+            )
+            for name in modules.keys()
+        }
+
+        return Deployment(
+            deploymentId=self.id,
+            instanceSpecs=instances,
+            modules=modules,
+            publishTopics={},
+            subscribeTopics={},
         )

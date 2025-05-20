@@ -15,6 +15,7 @@
 # SPDX-License-Identifier: Apache-2.0
 from base64 import b64decode
 from pathlib import Path as PathLib
+from typing import Annotated
 
 from fastapi import APIRouter
 from fastapi import HTTPException
@@ -23,42 +24,86 @@ from fastapi import Query
 from fastapi import status
 from fastapi.responses import JSONResponse
 from local_console.core.camera.flatbuffers import flatbuffer_binary_to_json
-from local_console.core.files.inference import Inference
+from local_console.core.files.inference import InferenceOut
+from local_console.core.schemas.schemas import DeviceID
 from local_console.fastapi.routes.devices.configuration.dependencies import (
     InjectCameraConfigurationController,
 )
+from local_console.fastapi.routes.images.dependencies import InjectImagesController
 from local_console.fastapi.routes.inferenceresults.dependencies import (
     InjectInferencesController,
 )
 from local_console.fastapi.routes.inferenceresults.dto import InferenceListDTO
+from local_console.fastapi.routes.inferenceresults.dto import InferenceWithImageListDTO
 
 
 router = APIRouter(prefix="/inferenceresults", tags=["Inferences"])
 
 
-@router.get("/devices/{device_id}")
+@router.get(
+    "/devices/{device_id}",
+    description="Returns the model information and inference data from a specific device.",
+)
 async def list(
     controller: InjectInferencesController,
-    device_id: int = Path(description="Device ID. Device mqtt port"),
-    limit: int = Query(
-        50,
-        ge=0,
-        le=256,
-        description="Number of the items to fetch information",
-    ),
-    starting_after: str | None = Query(
-        None,
-        description="Retrieves additional data beyond the number of targets specified by the query parameter (limit). Specify the value obtained from the response (continuation_token) to fetch the next data.",
-    ),
+    device_id: DeviceID,
+    limit: Annotated[
+        int,
+        Query(
+            ge=0,
+            le=256,
+            description="Specify the maximum number of objects to return in a single call. This parameter is required. Default: 20",
+        ),
+    ] = 20,
+    starting_after: Annotated[
+        str | None,
+        Query(
+            description="Return objects strictly after the one identified by this value. Use it together with 'continuation_token' from previous calls in order to perform pagination."
+        ),
+    ] = None,
 ) -> InferenceListDTO:
     return controller.list(device_id, limit, starting_after)
 
 
-@router.get("/devices/{device_id}/json")
+@router.get(
+    "/devices/{device_id}/withimage",
+    description="Returns complete entries of (inference, image) data from a specific device.",
+)
+async def list_with_images(
+    controller: InjectInferencesController,
+    img_controller: InjectImagesController,
+    device_id: DeviceID,
+    limit: Annotated[
+        int,
+        Query(
+            ge=0,
+            le=256,
+            description="Specify the maximum number of objects to return in a single call. This parameter is required. Default: 20",
+        ),
+    ] = 20,
+    starting_after: Annotated[
+        str | None,
+        Query(
+            description="Return objects strictly after the one identified by this value. Use it together with 'continuation_token' from previous calls in order to perform pagination."
+        ),
+    ] = None,
+) -> InferenceWithImageListDTO:
+    return controller.list_with_images(device_id, img_controller, limit, starting_after)
+
+
+@router.get(
+    "/devices/{device_id}/json",
+    description="Decodes a flatbuffer containing the result of an inference, and returns it as a stringified JSON.",
+)
 async def flatbuffers_to_json(
     controller: InjectCameraConfigurationController,
-    flatbuffer_payload: str,
-    device_id: int = Path(description="Device ID. Device mqtt port"),
+    flatbuffer_payload: Annotated[
+        str,
+        Query(
+            description="Payload encoded in base 64 that's been previously serialized in any of the supported inference flatbuffer schemas. Currently supporting classification or detection"
+        ),
+    ],
+    device_id: DeviceID,
 ) -> JSONResponse:
     schema_file = controller.get_schema_by_id(device_id)
     if not schema_file:
@@ -92,10 +137,18 @@ async def flatbuffers_to_json(
     return JSONResponse(content=json_content, status_code=status.HTTP_200_OK)
 
 
-@router.get("/devices/{device_id}/{inference_id}")
+@router.get(
+    "/devices/{device_id}/{id}",
+    description="Returns a specific inference result from a specific device.",
+)
 async def get_by_id(
     controller: InjectInferencesController,
-    device_id: int = Path(description="Device ID. Device mqtt port"),
-    inference_id: str = Path(description="Inference ID."),
-) -> Inference:
-    return controller.get(device_id, inference_id)
+    device_id: DeviceID,
+    id: Annotated[
+        str,
+        Path(
+            description="Unique ID identifying a single inference result from a device"
+        ),
+    ],
+) -> InferenceOut:
+    return controller.get(device_id, id)

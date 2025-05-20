@@ -13,10 +13,14 @@
 # limitations under the License.
 #
 # SPDX-License-Identifier: Apache-2.0
+from typing import Annotated
+
 from fastapi import APIRouter
 from fastapi import Path
 from fastapi import Query
 from fastapi.responses import FileResponse
+from fastapi.responses import Response
+from local_console.core.schemas.schemas import DeviceID
 from local_console.fastapi.routes.images.dependencies import InjectImagesController
 from local_console.fastapi.routes.images.dto import FileListDTO
 
@@ -24,33 +28,52 @@ from local_console.fastapi.routes.images.dto import FileListDTO
 router = APIRouter(prefix="/images", tags=["Images"])
 
 
-@router.get("/devices/{device_id}/directories/{sub_directory_name}")
-@router.get("/devices/{device_id}/directories")
+@router.get(
+    "/devices/{device_id}/directories",
+    description="Returns the filenames and paths of the images obtained from the specified device.",
+)
 async def list(
     controller: InjectImagesController,
-    device_id: int = Path(description="Device ID. Device mqtt port"),
-    sub_directory_name: str = Path(
-        default_factory=lambda: "",
-        description="This parameter is primarily included for compatibility with SCS and does not affect the response",
-    ),
-    limit: int = Query(
-        50,
-        ge=0,
-        le=256,
-        description="Number of the items to fetch information",
-    ),
-    starting_after: str | None = Query(
-        None,
-        description="Retrieves additional data beyond the number of targets specified by the query parameter (limit). Specify the value obtained from the response (continuation_token) to fetch the next data.",
-    ),
+    device_id: DeviceID,
+    limit: Annotated[
+        int,
+        Query(
+            ge=0,
+            le=256,
+            description="Specify the maximum number of objects to return in a single call. This parameter is required. Default: 50",
+        ),
+    ] = 50,
+    starting_after: Annotated[
+        str | None,
+        Query(
+            description="Return objects strictly after the one identified by this value. Use it together with 'continuation_token' from previous calls in order to perform pagination."
+        ),
+    ] = None,
 ) -> FileListDTO:
     return controller.list(device_id, limit, starting_after)
 
 
-@router.get("/devices/{device_id}/image/{image_name}")
+@router.get(
+    "/devices/{device_id}/image/{image_name}",
+    description="Returns a specific image from the specified device.",
+)
 async def download(
     controller: InjectImagesController,
-    device_id: int = Path(description="Device ID. Device mqtt port"),
-    image_name: str = Path(description="Name of image to download"),
+    device_id: DeviceID,
+    image_name: Annotated[
+        str,
+        Path(description="Filename of the specific image to be retrieved"),
+    ],
 ) -> FileResponse:
     return controller.download(device_id, image_name)
+
+
+@router.get(
+    "/devices/{device_id}/preview",
+    description="Returns the preview image from the specified device.",
+)
+async def preview(
+    controller: InjectImagesController,
+    device_id: DeviceID,
+) -> Response:
+    return controller.get_preview(device_id)

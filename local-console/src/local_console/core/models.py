@@ -18,6 +18,7 @@ from local_console.core.files.files import FilesManager
 from local_console.core.files.values import FileInfo
 from local_console.core.files.values import FileType
 from pydantic import BaseModel
+from pydantic import ConfigDict
 from pydantic import Field
 
 
@@ -28,6 +29,8 @@ from pydantic import Field
 class PostModelsIn(BaseModel):
     model_id: str = Field(max_length=100)
     model_file_id: str
+
+    model_config = ConfigDict(protected_namespaces=())
 
 
 class Model(BaseModel):

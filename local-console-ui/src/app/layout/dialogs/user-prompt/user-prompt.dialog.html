@@ -16,59 +16,55 @@
  SPDX-License-Identifier: Apache-2.0
 -->
 
-<div class="alert-dialog">
-  <img
-    *ngIf="data.type"
-    src="images/{{ theme }}/status-{{ data.type }}.svg"
-    alt=""
-    class="type-icon"
-  />
-  <div>
-    <h1
-      mat-dialog-title
-      class="alert-dialog-title"
-      data-testid="alert-dialog-title"
-      cdkDrag
-      cdkDragHandle
-      cdkDragRootElement=".cdk-overlay-pane"
-    >
+<div class="col gap-5" data-testid="user-popup">
+  <div class="col align-center gap-3">
+    @if(data.type) {
+    <img
+      src="images/{{ theme }}/status-{{ data.type }}.svg"
+      alt=""
+      class="ws-2 hs-2"
+    />
+    }
+    <div class="text-24 bold fullwidth" data-testid="alert-dialog-title">
       {{ data.title }}
-    </h1>
-    <div mat-dialog-content class="alert-dialog-content">
-      {{ data.message }}
+    </div>
+    <div class="text-16 fullwidth">
+      @if (isTemplate(data.message)) {
+      <ng-container
+        *ngTemplateOutlet="data.message; context: { $implicit: data.context}"
+      ></ng-container>
+      } @else { {{ data.message }} }
+      <ng-content></ng-content>
     </div>
   </div>
+  <div class="row space-around">
+    @if(data.showCancelButton) {
+    <button
+      type="button"
+      class="btn-lg"
+      [class]="data.actionButtons ? ButtonVariant.weak : ButtonVariant.normal"
+      mat-button
+      appDialogClose
+      data-testid="prompt-action-cancel"
+      [attr.aria-label]="data.closeButtonText || 'Cancel'"
+      i18n
+    >
+      {{ data.closeButtonText || 'Cancel' }}
+    </button>
+    } @for(actionButton of data.actionButtons; track actionButton.text) {
+    <button
+      type="button"
+      [attr.data-testid]="'prompt-action-' + actionButton.id"
+      class="btn-lg line gap-1"
+      [class]="actionButton.variant"
+      (click)="actionSubmit(actionButton)"
+      i18n
+    >
+      @if(actionButton.icon) {
+      <img [src]="'images/light/' + actionButton.icon + '.svg'" />
+      }
+      <span>{{ actionButton.text }}</span>
+    </button>
+    }
+  </div>
 </div>
-<ng-content></ng-content>
-<app-dialog-action>
-  <app-button
-    *ngFor="let actionButton of data.actionButtons"
-    right
-    type="submit"
-    [attr.data-testid]="'prompt-action-' + actionButton.id"
-    [variant]="actionButton.variant"
-    (click)="actionSubmit(actionButton)"
-    i18n
-    >{{ actionButton.text }}</app-button
-  >
-  <app-button
-    right
-    type="button"
-    variant="secondary"
-    mat-button
-    appDialogClose
-    data-testid="prompt-action-cancel"
-    aria-label="Cancel"
-    i18n
-    >{{ data.closeButtonText || 'Cancel' }}</app-button
-  >
-</app-dialog-action>
-<button
-  mat-icon-button
-  appDialogClose
-  class="dialog-close"
-  data-testid="prompt-action-close"
-  aria-label="Close"
->
-  <mat-icon>close</mat-icon>
-</button>

@@ -19,7 +19,7 @@ Includes all dependencies anticipated to be accessible from the application. The
 For example, this covers:
 
 * Python dependencies obtained from `requirements.txt`.
-* System dependencies, such as mosquitto, flatc, etc.
+* System dependencies, such as mosquitto, flatc, WABT, etc.
 
 
 ## Adding headers manually

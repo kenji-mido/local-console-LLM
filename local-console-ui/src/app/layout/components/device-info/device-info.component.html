@@ -15,108 +15,109 @@
 
  SPDX-License-Identifier: Apache-2.0
 -->
-<table class="device-info-table">
-  <tr>
-    <th>
-      Hardware
-      <hr />
-    </th>
-    <th>
-      Firmware
-      <hr />
-    </th>
-  </tr>
-  <tr>
-    <td>
-      <table>
-        <tr>
-          <td>Sensor</td>
-          <td>
-            :
-            <span class="attribute-style" data-testid="sensor">
-              {{ device_info.sensor }}</span
-            >
-          </td>
-        </tr>
-      </table>
-    </td>
-    <td>
-      <table>
-        <tr>
-          <td>Main chip</td>
-          <td class="separator-align">
-            :
-            <span class="attribute-style" data-testid="main_chip">
-              {{ device_info.main_chip }}</span
-            >
-          </td>
-        </tr>
-        <tr>
-          <td>Sensor Chip FW (main)</td>
-          <td class="separator-align">
-            :
-            <span class="attribute-style" data-testid="sensor_fw_main">
-              {{ device_info.sensor_chip_fw_main }}</span
-            >
-          </td>
-        </tr>
-        <tr>
-          <td>Sensor Chip FW (loader)</td>
-          <td class="separator-align">
-            :
-            <span class="attribute-style" data-testid="sensor_fw_loader">
-              {{ device_info.sensor_chip_fw_loader }}</span
-            >
-          </td>
-        </tr>
-      </table>
-    </td>
-  </tr>
-  <tr>
-    <th>
-      Status
-      <hr />
-    </th>
-    <th>
-      ID
-      <hr />
-    </th>
-  </tr>
-  <tr>
-    <td>
-      <table>
-        <tr>
-          <td>Processing State</td>
-          <td class="separator-align">
-            :
-            <span class="attribute-style" data-testid="processing_state">
-              {{ device_info.processing_state }}</span
-            >
-          </td>
-        </tr>
-      </table>
-    </td>
-    <td>
-      <table>
-        <tr>
-          <td>Device Id</td>
-          <td class="separator-align">
-            :
-            <span class="attribute-style" data-testid="device_id">
-              {{ device_info.device_id }}</span
-            >
-          </td>
-        </tr>
-        <tr>
-          <td>Internal ID</td>
-          <td class="separator-align">
-            :
-            <span class="attribute-style" data-testid="internal_id">
-              {{ device_info.internal_id }}</span
-            >
-          </td>
-        </tr>
-      </table>
-    </td>
-  </tr>
-</table>
+<div style="display: flex; align-items: flex-start; margin: 0 -40px">
+  <table class="device-info-table space-between-col text-14">
+    <tr class="text-16 bold">
+      <th style="width: 50%">
+        <div class="header">
+          <div class="title">Hardware</div>
+          <div class="horizontal-line"></div>
+        </div>
+      </th>
+      <th style="width: 50%">
+        <div class="header">
+          <div class="title">Firmware</div>
+          <div class="horizontal-line"></div>
+        </div>
+      </th>
+    </tr>
+    <tr>
+      <td>
+        <table>
+          <tr>
+            <td>Sensor</td>
+            <td>
+              :
+              <span class="attribute-style" data-testid="sensor">
+                {{ device_info.sensor }}</span
+              >
+            </td>
+          </tr>
+        </table>
+      </td>
+      <td>
+        <table>
+          <tr>
+            <td>Main chip</td>
+            <td class="separator-align">
+              :
+              <span class="attribute-style" data-testid="main_chip">
+                {{ device_info.main_chip }}</span
+              >
+            </td>
+          </tr>
+          <tr>
+            <td>Sensor Chip FW (main)</td>
+            <td class="separator-align">
+              :
+              <span class="attribute-style" data-testid="sensor_fw_main">
+                {{ device_info.sensor_chip_fw_main }}</span
+              >
+            </td>
+          </tr>
+          <tr>
+            <td>Sensor Chip FW (loader)</td>
+            <td class="separator-align">
+              :
+              <span class="attribute-style" data-testid="sensor_fw_loader">
+                {{ device_info.sensor_chip_fw_loader }}</span
+              >
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+    <tr>
+      <th>
+        <div class="header">
+          <div class="title">Status</div>
+          <div class="horizontal-line"></div>
+        </div>
+      </th>
+      <th>
+        <div class="header">
+          <div class="title">ID</div>
+          <div class="horizontal-line"></div>
+        </div>
+      </th>
+    </tr>
+    <tr>
+      <td>
+        <table>
+          <tr>
+            <td>Processing State</td>
+            <td class="separator-align">
+              :
+              <span class="attribute-style" data-testid="processing_state">
+                {{ device_info.processing_state }}</span
+              >
+            </td>
+          </tr>
+        </table>
+      </td>
+      <td>
+        <table>
+          <tr>
+            <td>Device Id</td>
+            <td class="separator-align">
+              :
+              <span class="attribute-style" data-testid="device_id">
+                {{ device_info.device_id }}</span
+              >
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</div>

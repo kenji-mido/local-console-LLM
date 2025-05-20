@@ -1,0 +1,18 @@
+# System Stub Service
+[Unit]
+Description=System Stub Service
+After=network.target
+
+[Service]
+Type=exec
+StandardOutput=journal
+StandardError=journal
+ExecStart=/opt/senscord/share/senscord/setup_env.sh /opt/system-stub/venv/bin/system-stub --host ${EVP_MQTT_HOST} --port ${EVP_MQTT_PORT}
+Restart=always
+#User=pi
+WorkingDirectory=/opt/system-stub
+Environment=PYTHONUNBUFFERED=1
+EnvironmentFile=/etc/system-app/env.conf
+
+[Install]
+WantedBy=multi-user.target

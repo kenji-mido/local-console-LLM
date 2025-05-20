@@ -33,19 +33,6 @@
   }
 }
 
-.card-belt {
-  font-size: 20px;
-  margin: 8px 0;
-  display: inline-flex;
-  align-items: flex-end;
-
-  .subtext {
-    padding-left: 15px;
-    font-size: initial;
-    color: $gray;
-  }
-}
-
 .qrcode-page {
   position: fixed;
   top: 0;
@@ -53,7 +40,7 @@
   bottom: 0;
   left: 0;
   z-index: 99;
-  background-color: rgba(0, 0, 0, 0.9);
+  background-color: rgba(0, 0, 0, 0.95);
 }
 
 .split-row app-text-input {

@@ -16,25 +16,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-.alert-dialog {
-  display: flex;
-  align-items: center;
-  white-space: pre-line;
-}
-
-.alert-dialog-title {
-  font-size: 20px;
-}
-
-.type-icon {
-  width: 48px;
-  padding: 0px 10px 0px 10px;
-}
-
-.alert-dialog-content {
-  width: 600px;
-}
-
 .alert-dialog-actions {
   justify-content: flex-end;
 }

@@ -16,168 +16,218 @@
  SPDX-License-Identifier: Apache-2.0
 -->
 
-<div class="deployment-hub-screen">
-  <div class="deployment-hub-page">
-    <div class="page-header">
-      <div class="component-title">
-        <img
-          src="images/{{ theme }}/deployment-hub.svg"
-          alt=""
-          class="page-icon"
-        />
-        <span class="span">Deployment</span>
+<div class="hub">
+  <div class="row gap-1 align-center">
+    <img class="page-title-icon" src="images/{{ theme }}/deployment-hub.svg" />
+    <span class="text-28 bold">Deployment</span>
+  </div>
+  <div class="card-box">
+    <div class="stack">
+      <div class="stack gap-0">
+        <span class="text-24"> Deploy Edge Device Software </span>
+        <span class="text-14 sub"
+          >Select a target device and Edge Device Software to be deployed</span
+        >
       </div>
     </div>
-    <div class="page-body">
-      <app-card
-        title="Deploy Edge Device Software"
-        subtitle="Select a target device and Edge Device Software to be deployed"
-      >
-        <form [formGroup]="bodyForm" card-body>
-          <!-- Select Device section -->
-          <div class="section">
-            <div class="section-title">Select Device</div>
-            <div class="hub-section">
-              <div class="section-body" data-testid="select-device-section">
-                <button
-                  data-testid="select-device-to-deploy-button"
-                  class="weak-hub-btn"
-                  type="button"
-                  (click)="openDeviceSelectionDialog()"
-                >
-                  Select
-                </button>
-                <div class="device-section">
-                  <app-icon-text
-                    [text]="selectedDevice?.device_name || 'Not selected'"
-                  ></app-icon-text>
-                  @if(selectedDevice && selectedDevice.connection_state !==
-                  DeviceStatus.Unknown) {
-                  <div class="ws-12 row gap-1 align-center">
-                    <img
-                      [src]="selectedDevice.connection_state | deviceStatusSvg"
-                    />
-                    <span>{{ selectedDevice.connection_state }}</span>
-                  </div>
-                  }
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Select AI Model and Application Section -->
-          <div class="section">
-            <div class="section-title">Select AI Model and Application</div>
-            <div class="hub-section">
-              <div class="section-body rows element-layout">
-                <app-file-input
-                  #modelFile
-                  data-testid="model-selector"
-                  title="AI Model"
-                  (fileSelected)="[onModelSelection($event)]"
-                  extension=".pkg"
-                ></app-file-input>
-                <app-file-input
-                  #appFile
-                  title="Application"
-                  data-testid="app-selector"
-                  (fileSelected)="[onApplicationSelection($event)]"
-                  extension=".aot"
-                ></app-file-input>
-              </div>
-
-              <!-- Firmware Options Section -->
-              <div class="section-header">
-                <div class="card-belt">
-                  <span style="margin-right: 10px">Firmware Options</span>
-                  <app-infotip
-                    tip="If you select a firmware file to deploy, you must specify the version. If not the deployment will not be enabled"
-                  />
-                  <app-toggle
-                    [toggleStatus]="firmwareOptions"
-                    (click)="firmwareOptions = !this.firmwareOptions; resetFirmwareOptions()"
-                    >Firmware Options</app-toggle
-                  >
-                </div>
-              </div>
-
-              <div class="section-body rows">
-                <ng-container *ngIf="firmwareOptions">
-                  <!-- Firmware Fields Row -->
-                  <div class="element-layout">
-                    <app-file-input
-                      #mainChipFile
-                      title="Main Chip Firmware"
-                      data-testid="chip-fw-selector"
-                      (fileSelected)="[bodyForm.markAsDirty(), onMainChipFwSelection($event)]"
-                      extension=".bin"
-                    ></app-file-input>
-                    <span class="version-layout">Version</span>
-                    <app-text-input
-                      type="text"
-                      formName="camFwControl"
-                      placeholder="D700F6"
-                      maxLength="10"
-                    ></app-text-input>
-                  </div>
-                  <div class="element-layout">
-                    <app-file-input
-                      #sensorChipFile
-                      title="Sensor Chip Firmware (Main)"
-                      data-testid="sensor-fw-selector"
-                      (fileSelected)="[bodyForm.markAsDirty(), onSensorChipFwSelection($event)]"
-                      extension=".fpk"
-                    ></app-file-input>
-                    <span class="version-layout">Version</span>
-                    <app-text-input
-                      type="text"
-                      formName="sensorFwControl"
-                      placeholder="010707"
-                      maxLength="10"
-                    ></app-text-input>
-                  </div>
-                </ng-container>
-              </div>
-            </div>
-          </div>
-          <div class="row gap-0">
+    <form [formGroup]="bodyForm" class="col">
+      <!-- Select Device section -->
+      <div class="section">
+        <div class="text-18">Select Device</div>
+        <div class="field-box row">
+          <div class="grow stack gap-1" data-testid="select-device-section">
             <button
+              data-testid="device-selector-btn"
               class="weak-hub-btn"
-              [disabled]="!(bodyForm.dirty || app_id || model_id)"
-              (click)="reset()"
-            >
-              Reset
-            </button>
-            <button
-              class="normal-hub-btn"
               type="button"
-              (click)="onDeploy()"
-              [disabled]="isDeployButtonDisabled()"
+              (click)="openDeviceSelectionDialog()"
             >
-              Deploy
+              Select
             </button>
+            <div>
+              <app-icon-text
+                class="row padding-around"
+                [text]="selectedDevice?.device_name || 'Not selected'"
+                data-testid="selected-device"
+              ></app-icon-text>
+              @if(selectedDevice) {
+              <div class="ws-12 row gap-1 align-center">
+                <app-device-status-badge
+                  [deviceStatus]="selectedDevice.connection_state"
+                ></app-device-status-badge>
+              </div>
+              }
+            </div>
           </div>
-        </form>
-      </app-card>
-    </div>
-    <div class="page-body">
-      <app-card title="Deployment Status" subtitle="Check deployment status">
-        <div card-header-right>
-          <span class="span-refresh">Last Update: {{ refresh_datetime }}</span>
-          <button
-            mat-button
-            class="weak-hub-btn refresh-btn"
-            (click)="refresh()"
-          >
-            <img [src]="refreshIcon" alt="" />
-            <span class="btn-span">Refresh</span>
-          </button>
+          <div class="grow"><div class="row"></div></div>
         </div>
-        <form [formGroup]="bodyStatus" card-body>
-          <app-deployment-list card-body></app-deployment-list>
-        </form>
-      </app-card>
+      </div>
+
+      <!-- Select AI Model and Application Section -->
+      <div class="section">
+        <div class="line gap-1 align-center">
+          <div class="text-18">Select AI Model and Application</div>
+          <app-infotip
+            tip="Select one or more options to deploy: AI Model, Application, or Firmware"
+          ></app-infotip>
+        </div>
+
+        <div class="field-box stack">
+          <div class="row">
+            <app-file-input
+              #modelFile
+              data-testid="model-selector"
+              class="grow"
+              title="AI Model"
+              (fileSelected)="[onModelSelection($event)]"
+              iconUrl="images/light/type_model.svg"
+              extensions=".pkg,.rpk"
+              [disabled]="selectedDevice?.connection_state !== DeviceStatus.Connected
+                          || (selectedDevice | archetype) === DeviceArchetype.UNKNOWN"
+            ></app-file-input>
+            <app-file-input
+              #appFile
+              title="Application"
+              class="grow"
+              data-testid="app-selector"
+              (fileSelected)="[onApplicationSelection($event)]"
+              iconUrl="images/light/type_app.svg"
+              extensions=".aot,.py,.wasm"
+              [disabled]="selectedDevice?.connection_state !== DeviceStatus.Connected
+                          || (selectedDevice | archetype) === DeviceArchetype.UNKNOWN"
+            ></app-file-input>
+          </div>
+          <div class="stack">
+            <!-- Firmware Options Section -->
+            <div class="section-header">
+              <div class="row align-center text-18">
+                <div class="line gap-1">
+                  <span>Firmware Options</span>
+                  <app-infotip
+                    tip="If you select a firmware file to deploy, you must specify the version. If not the deployment will not be enabled."
+                  />
+                </div>
+                <app-toggle
+                  [toggleStatus]="firmwareOptions"
+                  (click)="firmwareOptions = !this.firmwareOptions; resetFirmwareOptions()"
+                ></app-toggle>
+              </div>
+            </div>
+            @if (firmwareOptions) {
+            <div class="row">
+              <!-- Firmware Fields Row -->
+              <div class="grow stack gap-3">
+                <app-file-input
+                  #mainChipFile
+                  title="Main Chip Firmware"
+                  data-testid="chip-fw-selector"
+                  (fileSelected)="[bodyForm.markAsDirty(), onMainChipFwSelection($event)]"
+                  iconUrl="images/light/type_firmware.svg"
+                  extensions=".bin"
+                  [disabled]="selectedDevice?.connection_state !== DeviceStatus.Connected
+                          || [DeviceArchetype.UNKNOWN, DeviceArchetype.RASPI].includes(selectedDevice | archetype)"
+                ></app-file-input>
+                <div class="stack gap-0">
+                  <span class="version-layout">Version</span>
+                  <app-text-input
+                    type="text"
+                    formName="camFwControl"
+                    placeholder="D700F6"
+                    maxLength="10"
+                    [disabled]="selectedDevice?.connection_state !== DeviceStatus.Connected
+                          || [DeviceArchetype.UNKNOWN, DeviceArchetype.RASPI].includes(selectedDevice | archetype)"
+                  ></app-text-input>
+                </div>
+              </div>
+              <div class="grow stack gap-3">
+                <app-file-input
+                  #sensorChipFile
+                  title="Sensor Chip Firmware (Main)"
+                  data-testid="sensor-fw-selector"
+                  (fileSelected)="[bodyForm.markAsDirty(), onSensorChipFwSelection($event)]"
+                  iconUrl="images/light/type_firmware.svg"
+                  extensions=".fpk"
+                  [disabled]="selectedDevice?.connection_state !== DeviceStatus.Connected
+                          || [DeviceArchetype.UNKNOWN, DeviceArchetype.RASPI].includes(selectedDevice | archetype)"
+                ></app-file-input>
+                <div class="stack gap-0">
+                  <span class="version-layout">Version</span>
+                  <app-text-input
+                    type="text"
+                    formName="sensorFwControl"
+                    placeholder="010707"
+                    maxLength="10"
+                    [disabled]="selectedDevice?.connection_state !== DeviceStatus.Connected
+                          || [DeviceArchetype.UNKNOWN, DeviceArchetype.RASPI].includes(selectedDevice | archetype)"
+                  ></app-text-input>
+                </div>
+              </div>
+            </div>
+            }
+          </div>
+        </div>
+      </div>
+      <div class="row">
+        <button
+          class="weak-hub-btn"
+          [disabled]="!(bodyForm.dirty || app_id || model_id)"
+          (click)="reset()"
+        >
+          Reset
+        </button>
+        <button
+          class="normal-hub-btn"
+          type="button"
+          (click)="onDeploy()"
+          [disabled]="isDeployButtonDisabled()"
+        >
+          Deploy
+        </button>
+      </div>
+    </form>
+  </div>
+  <div class="card-box">
+    <div class="row">
+      <div class="stack grow">
+        <div class="stack gap-0">
+          <span class="text-24"> Deployment Status </span>
+          <span class="text-14 sub">Check deployment status</span>
+        </div>
+      </div>
+      <div class="line align-center">
+        <span class="text-14 sub"
+          >update: {{ refresh_datetime | lcDateTime }}</span
+        >
+        <button mat-button class="weak-hub-btn icon-prefix" (click)="refresh()">
+          <img [src]="refreshIcon" alt="" />
+          <span class="btn-span">Refresh</span>
+        </button>
+      </div>
     </div>
-    <div class="page-footer"></div>
+    <form [formGroup]="bodyStatus" card-body>
+      <app-deployment-list card-body></app-deployment-list>
+    </form>
   </div>
 </div>
+
+<ng-template #firmwareDeploymentConfirmation>
+  <div class="col gap-3 text-14">
+    <div>You are about to execute following deployment:</div>
+    <div class="text-18">
+      @if (bodyForm.value.camFwControl) {
+      <div>
+        <span class="bold">Main Chip Firmware version</span> {{
+        bodyForm.value.camFwControl }}
+      </div>
+      } @if (bodyForm.value.sensorFwControl) {
+      <div>
+        <span class="bold">Sensor Chip Firmware version</span> {{
+        bodyForm.value.sensorFwControl }}
+      </div>
+      }
+      <div>
+        <span class="bold">Target</span> {{ selectedDevice!.device_name }}
+      </div>
+    </div>
+  </div>
+</ng-template>

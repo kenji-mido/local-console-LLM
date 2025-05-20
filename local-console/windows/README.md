@@ -33,7 +33,7 @@ Follow this procedure in case your Windows installation rejects the executable i
 
 ### Installing
 
-Prior to starting, make sure you have either cloned the [local-console repository](https://github.com/midokura/local-console) or you have unpacked a source tarball into your machine. We shall refer to its location at `$local_console_repository_root`. Now, open a PowerShell window at that location and proceed with the steps below:
+Prior to starting, make sure you have either cloned the [local-console repository](https://github.com/SonySemiconductorSolutions/local-console) or you have unpacked a source tarball into your machine. We shall refer to its location at `$local_console_repository_root`. Now, open a PowerShell window at that location and proceed with the steps below:
 
 1. First, set the shell at the location of this README, and allow execution of the helper script for this step:
 ```powershell
@@ -88,10 +88,12 @@ Processing z:\local-console
 Successfully built local-console paho-mqtt
 Installing collected packages: types-retry...
 Successfully installed local-console-1.7.0 ...
-[2024-04-02 09:38:47] Local Console has been installed.
-[2024-04-02 09:38:47] Virtual environment has been updated.
-[2024-04-02 09:38:50] Flatc Zipball downloaded.
-[2024-04-02 09:38:51] Flatc Executable unpacked into C:\Users\User\AppData\Roaming\LocalConsole\virtualenv\Scripts
+[YYYY-MM-DD 09:38:47] Local Console has been installed.
+[YYYY-MM-DD 09:38:47] Virtual environment has been updated.
+[YYYY-MM-DD 09:38:50] Flatc Zipball downloaded.
+[YYYY-MM-DD 09:38:51] Flatc Executable unpacked into C:\Users\User\AppData\Roaming\LocalConsole\virtualenv\Scripts
+[YYYY-MM-DD 09:38:57] WABT tarball downloaded.
+[YYYY-MM-DD 09:38:59] wasm-validate Executable unpacked into C:\Users\User\AppData\Roaming\LocalConsole\virtualenv\Scripts
 Created desktop shortcut at: C:\Users\User\Desktop\Local Console.lnk
 ```
 

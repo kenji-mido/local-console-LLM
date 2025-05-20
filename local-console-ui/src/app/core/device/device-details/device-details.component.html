@@ -16,42 +16,48 @@
  SPDX-License-Identifier: Apache-2.0
 -->
 
-<app-card title="Preview Camera" subtitle="View image from camera">
+<div class="card-box">
+  <div class="stack gap-0">
+    <span class="text-24">Check Device View</span>
+    <span class="text-14 sub">View images from a device.</span>
+  </div>
   <div card-body class="row">
-    <div class="device-info p-2 text-3">
-      <div class="ws-12 row gap-1 align-center">
-        <img src="images/light/device_item.svg" class="w-1" />
-        <span>{{ selectedDevice?.device_name }}</span>
-      </div>
-      <div
-        class="py-4 grid grid-cols-2 gap-y-1 gap-x-4"
-        style="grid-template-columns: 150px 200px"
-      >
-        <div>Status:</div>
+    <div class="w-6 border-box text-14">
+      <div class="grid grid-cols-2 gap-y-2 gap-x-2">
+        <div>Device Name</div>
+        <div>:</div>
+        <div>{{ selectedDevice?.device_name }}</div>
+        <div>Status</div>
+        <div>:</div>
         <div>
-          <div class="ws-12 row gap-1 align-center">
-            <img [src]="selectedDevice?.connection_state | deviceStatusSvg" />
-            <span>{{ selectedDevice?.connection_state }}</span>
-          </div>
+          <app-device-status-badge
+            [deviceStatus]="selectedDevice?.connection_state"
+          ></app-device-status-badge>
         </div>
-        <div>Device Type:</div>
+        <div>Device Type</div>
+        <div>:</div>
         <div>{{ selectedDevice?.device_type }}</div>
-        <div>MQTT Port:</div>
-        <div>{{ selectedDevice?.port }}</div>
+        <div>MQTT Port</div>
+        <div>:</div>
+        <div>{{ selectedDevice?.device_id }}</div>
       </div>
     </div>
-    <app-device-visualizer
-      #visualizer
-      [device]="selectedDevice"
-    ></app-device-visualizer>
+    <div class="w-6 border-box row justify-center">
+      <app-device-visualizer
+        [device]="deviceIsBusy() ? undefined : selectedDevice"
+        class="aspect-16-9 hs-8"
+        [mode]="ExtendedMode.Preview"
+        type="image"
+      ></app-device-visualizer>
+    </div>
   </div>
-  <div class="actions" card-footer>
+  <div class="row" card-footer>
     <button
       class="weak-hub-btn"
       aria-label="Stop preview"
       data-testid="stop-preview"
-      (click)="visualizer.stopInferenceStream()"
-      [disabled]="!selectedDevice || !visualizer.streaming"
+      (click)="visualizer()?.stopInferenceStream()"
+      [disabled]="!selectedDevice || !visualizer()?.streaming()"
     >
       Stop
     </button>
@@ -59,10 +65,15 @@
       class="normal-hub-btn"
       aria-label="Start preview"
       data-testid="start-preview"
-      (click)="visualizer.startPreview()"
-      [disabled]="!selectedDevice || visualizer.streaming"
+      (click)="visualizer()?.startPreview()"
+      [disabled]="
+        !selectedDevice ||
+        selectedDevice.connection_state !== DeviceStatus.Connected ||
+        visualizer()?.streaming() ||
+        deviceIsBusy()
+      "
     >
       Preview
     </button>
   </div>
-</app-card>
+</div>

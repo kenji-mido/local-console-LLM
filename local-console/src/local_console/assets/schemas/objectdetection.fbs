@@ -35,8 +35,14 @@ table ObjectDetectionData {
   object_detection_list:[GeneralObject];
 }
 
+table CountData {
+  class_id:uint;
+  count:uint;
+}
+
 table ObjectDetectionTop {
   perception:ObjectDetectionData;
+  area_count:[CountData];
 }
 
 root_type ObjectDetectionTop;

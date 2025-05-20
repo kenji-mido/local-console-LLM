@@ -22,7 +22,7 @@ const config: Config.InitialOptions = {
   preset: 'jest-preset-angular',
   setupFilesAfterEnv: ['<rootDir>/src/setup-jest.ts'],
   testEnvironment: 'jsdom',
-  testPathIgnorePatterns: ['<rootDir>/ui-tests/'],
+  testPathIgnorePatterns: ['<rootDir>/ui-tests/', '<rootDir>/dist/'],
   globals: {
     'ts-jest': {
       tsconfig: '<rootDir>/tsconfig.spec.json',
@@ -34,6 +34,18 @@ const config: Config.InitialOptions = {
     '^@samplers/(.*)$': '<rootDir>/src/test/samplers/$1',
     '^@test/(.*)$': '<rootDir>/src/test/$1',
   },
+  reporters: [
+    'default',
+    [
+      './node_modules/jest-html-reporter',
+      {
+        pageTitle: 'Test Report',
+        outputPath: './reports/unit/report.html',
+      },
+    ],
+  ],
+  collectCoverage: true,
+  coverageDirectory: './reports/unit/coverage',
 };
 
 export default config;

@@ -26,9 +26,9 @@ from local_console.core.schemas.edge_cloud_if_v1 import Permission
 from local_console.core.schemas.edge_cloud_if_v1 import Status
 from local_console.core.schemas.edge_cloud_if_v1 import Version
 from local_console.core.schemas.schemas import DeviceConnection
-from local_console.core.schemas.schemas import EVPParams
 from local_console.core.schemas.schemas import GlobalConfiguration
 from local_console.core.schemas.schemas import MQTTParams
+from local_console.core.schemas.schemas import OnWireProtocol
 from local_console.core.schemas.schemas import WebserverParams
 
 
@@ -165,6 +165,7 @@ def generate_agent_config(draw: st.DrawFn) -> DeviceConnection:
                     port=draw(generate_valid_port_number()),
                 ),
                 name="Default",
+                onwire_schema=OnWireProtocol.EVP1,
             )
         )
     )
@@ -173,8 +174,6 @@ def generate_agent_config(draw: st.DrawFn) -> DeviceConnection:
 @st.composite
 def generate_global_config(draw: st.DrawFn) -> GlobalConfiguration:
     return GlobalConfiguration(
-        evp=EVPParams(iot_platform="EVP1"),
-        active_device="Default",
         devices=[draw(generate_agent_config())],
     )
 

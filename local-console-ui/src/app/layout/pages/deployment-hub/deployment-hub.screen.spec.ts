@@ -16,31 +16,24 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { TestBed, ComponentFixture, fakeAsync } from '@angular/core/testing';
-import { DeploymentHubScreen } from './deployment-hub.screen';
-import { MatDialog } from '@angular/material/dialog';
-import { FilesService } from '@app/core/file/files.service';
-import { EdgeAppService } from '@app/core/edge_app/edge_app.service';
-import { FirmwareService } from '@app/core/firmware/firmware.service';
-import { FirmwareV2 } from '@app/core/firmware/firmware';
-import { DeploymentService } from '@app/core/deployment/deployment.service';
-import { ModelService } from '@app/core/model/model.service';
+import { ComponentFixture, fakeAsync, TestBed } from '@angular/core/testing';
 import { ReactiveFormsModule } from '@angular/forms';
-import { Observable, of } from 'rxjs';
-import { DeviceSelectionPopupComponent } from './device-selector/device-selection-popup.component';
-import { Files } from '@samplers/file';
-import { FileInputComponent } from '@app/core/file/file-input/file-input.component';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
-import { DeviceService } from '@app/core/device/device.service';
+import { DeploymentService } from '@app/core/deployment/deployment.service';
 import { DeviceStatus } from '@app/core/device/device';
+import { DeviceService } from '@app/core/device/device.service';
+import { EdgeAppService } from '@app/core/edge_app/edge_app.service';
+import { FileInputComponent } from '@app/core/file/file-input/file-input.component';
+import { FilesService } from '@app/core/file/files.service';
+import { FirmwareV2 } from '@app/core/firmware/firmware';
+import { FirmwareService } from '@app/core/firmware/firmware.service';
+import { ModelService } from '@app/core/model/model.service';
+import { DialogService } from '@app/layout/dialogs/dialog.service';
+import { action } from '@app/layout/dialogs/user-prompt/action';
 import { Device } from '@samplers/device';
-
-class MockMatDialog {
-  afterCloseVal: boolean = true;
-  open = jest
-    .fn()
-    .mockReturnValue({ afterClosed: () => of(this.afterCloseVal) });
-}
+import { Files } from '@samplers/file';
+import { of } from 'rxjs';
+import { DeploymentHubScreen } from './deployment-hub.screen';
 
 class MockFilesService {
   createFiles = jest.fn();
@@ -66,25 +59,36 @@ class MockModelService {
 }
 
 class MockDeviceService {
-  getDeviceV2 = jest.fn();
+  getDevice = jest.fn();
+  getConfiguration = jest.fn().mockResolvedValue({
+    ai_model_file: null,
+    module_file: null,
+  });
+  patchConfiguration = jest.fn();
+  askForDeviceSelection = jest.fn();
+}
+
+class MockDialogService {
+  prompt = jest.fn();
+  alert = jest.fn();
 }
 
 describe('DeploymentHubScreen', () => {
   let component: DeploymentHubScreen;
   let fixture: ComponentFixture<DeploymentHubScreen>;
-  let dialog: MockMatDialog;
   let filesService: MockFilesService;
   let edgeAppService: MockEdgeAppService;
   let deploymentService: MockDeploymentService;
   let modelService: MockModelService;
   let firmwareService: MockFirmwareService;
   let deviceService: MockDeviceService;
+  let dialogs: MockDialogService;
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [ReactiveFormsModule, FileInputComponent, NoopAnimationsModule],
       providers: [
-        { provide: MatDialog, useClass: MockMatDialog },
+        { provide: DialogService, useClass: MockDialogService },
         { provide: FilesService, useClass: MockFilesService },
         { provide: EdgeAppService, useClass: MockEdgeAppService },
         { provide: DeploymentService, useClass: MockDeploymentService },
@@ -96,7 +100,6 @@ describe('DeploymentHubScreen', () => {
 
     fixture = TestBed.createComponent(DeploymentHubScreen);
     component = fixture.componentInstance;
-    dialog = TestBed.inject(MatDialog) as unknown as MockMatDialog;
     filesService = TestBed.inject(FilesService) as unknown as MockFilesService;
     edgeAppService = TestBed.inject(
       EdgeAppService,
@@ -111,6 +114,7 @@ describe('DeploymentHubScreen', () => {
     deviceService = TestBed.inject(
       DeviceService,
     ) as unknown as MockDeviceService;
+    dialogs = TestBed.inject(DialogService) as unknown as MockDialogService;
 
     fixture.detectChanges();
   });
@@ -124,48 +128,49 @@ describe('DeploymentHubScreen', () => {
   });
 
   describe('openDeviceSelectionDialog', () => {
-    it('should open the device selection dialog and set selectedDevice and selectedDevicePort on close', fakeAsync(() => {
-      const changedDevice = Device.sampleLocal(Device.sample(), 1884);
-      const initialDevice = Device.sampleLocal();
-      component.selectedDevice = initialDevice;
-
-      const mockDialogRef = {
-        afterClosed: () => of(changedDevice),
-      };
-      dialog.open.mockReturnValue(mockDialogRef);
-
-      component.openDeviceSelectionDialog();
-
-      expect(dialog.open).toHaveBeenCalledWith(DeviceSelectionPopupComponent, {
-        panelClass: 'custom-dialog-container',
-        data: { selectedDevice: initialDevice },
+    it('should open the device selection dialog and set selectedDevice and selectedDevicePort on close', async () => {
+      const changedDevice = Device.sample({
+        device_name: 'device-12345',
+        device_id: '1883',
       });
+      const initialDevice = Device.sample();
+      component.selectedDevice = initialDevice;
+      deviceService.askForDeviceSelection.mockResolvedValue(changedDevice);
+
+      await component.openDeviceSelectionDialog();
+
+      expect(deviceService.askForDeviceSelection).toHaveBeenCalledWith(
+        initialDevice,
+      );
       expect(component.selectedDevice).toBe(changedDevice);
-    }));
+    });
 
     it('should not change selectedDevice and selectedDevicePort if dialog is closed without result', fakeAsync(() => {
-      const changedDevice = Device.sampleLocal(Device.sample(), 1884);
-      const expectedPort = 1883;
-      component.selectedDevice = Device.sampleLocal(
-        Device.sample(),
-        expectedPort,
-      );
-
-      const mockDialogRef = {
-        afterClosed: () => of(null),
-      };
-      dialog.open.mockReturnValue(mockDialogRef);
+      const changedDevice = Device.sample({
+        device_name: 'device-12345',
+        device_id: '1883',
+      });
+      const expectedPort = '1884';
+      component.selectedDevice = Device.sample({
+        device_name: 'device123',
+        device_id: '1884',
+      });
+      deviceService.askForDeviceSelection.mockResolvedValue(undefined);
 
       component.openDeviceSelectionDialog();
 
-      expect(dialog.open).toHaveBeenCalled();
-      expect(component.selectedDevice.port).toBe(expectedPort);
+      expect(deviceService.askForDeviceSelection).toHaveBeenCalled();
+      expect(component.selectedDevice.device_id).toBe(expectedPort.toString());
     }));
   });
 
   describe('onModelSelection', () => {
     it('should create model and set model_id', async () => {
       const mockFileHandle = Files.sample('model.bin');
+      component.selectedDevice = Device.sample({
+        device_name: 'device-12345',
+        device_id: '1883',
+      });
       filesService.createFiles.mockResolvedValue('file123');
       modelService.createModel.mockResolvedValue('model123');
 
@@ -200,6 +205,11 @@ describe('DeploymentHubScreen', () => {
   describe('onApplicationSelection', () => {
     it('should create edge app and set app_id', async () => {
       const mockFileHandle = Files.sample('app.bin');
+      component.selectedDevice = Device.sample({
+        device_name: 'device-12345',
+        device_id: '1883',
+      });
+
       filesService.createFiles.mockResolvedValue('file456');
       edgeAppService.createEdgeApp.mockResolvedValue('app789');
 
@@ -266,18 +276,19 @@ describe('DeploymentHubScreen', () => {
 
   describe('refreshDeviceStatus', () => {
     it('should update the selectedDeviceStatus', async () => {
-      component.selectedDevice = Device.sampleLocal();
+      component.selectedDevice = Device.sample();
       component.selectedDevice.connection_state = DeviceStatus.Disconnected;
       const newStatus = DeviceStatus.Connected;
-      const updatedDevice = Device.sampleLocal();
+      const updatedDevice = Device.sample();
       updatedDevice.connection_state = newStatus;
 
-      deviceService.getDeviceV2.mockResolvedValue(updatedDevice);
+      deviceService.getDevice.mockResolvedValue(updatedDevice);
 
       await component.refreshDeviceStatus();
 
-      expect(deviceService.getDeviceV2).toHaveBeenCalledWith(
+      expect(deviceService.getDevice).toHaveBeenCalledWith(
         component.selectedDevice.device_id,
+        true,
       );
       expect(component.selectedDevice.connection_state).toEqual(newStatus);
     });
@@ -285,21 +296,24 @@ describe('DeploymentHubScreen', () => {
     it('should not update the status if no device selected', async () => {
       component.selectedDevice = undefined;
       const newStatus = DeviceStatus.Connected;
-      const updatedDevice = Device.sampleLocal();
+      const updatedDevice = Device.sample();
       updatedDevice.connection_state = newStatus;
 
-      deviceService.getDeviceV2.mockResolvedValue(updatedDevice);
+      deviceService.getDevice.mockResolvedValue(updatedDevice);
 
       await component.refreshDeviceStatus();
 
-      expect(deviceService.getDeviceV2).not.toHaveBeenCalled();
+      expect(deviceService.getDevice).not.toHaveBeenCalled();
     });
   });
 
   describe('onDeploy', () => {
     it('should deploy successfully when all conditions are met', async () => {
       const port = 1883;
-      component.selectedDevice = Device.sampleLocal(Device.sample(), port);
+      component.selectedDevice = Device.sample({
+        device_name: 'device-12345',
+        device_id: '1883',
+      });
       component.app_id = 'app123';
       component.model_id = 'model123';
       component.cam_fw_file_id = 'firmwarefile123';
@@ -317,6 +331,7 @@ describe('DeploymentHubScreen', () => {
         result: 'SUCCESS',
       });
       firmwareService.createFirmwareV2.mockResolvedValue('firmware123');
+      dialogs.prompt.mockResolvedValue(action.normal('deploy', 'Deploy'));
 
       await component.onDeploy();
 
@@ -371,7 +386,10 @@ describe('DeploymentHubScreen', () => {
     });
 
     it('should not deploy if is not confirmed', async () => {
-      component.selectedDevice = Device.sampleLocal(Device.sample(), 1883);
+      component.selectedDevice = Device.sample({
+        device_name: 'device-12345',
+        device_id: '1883',
+      });
       component.app_id = 'app123';
       component.model_id = 'model123';
       component.cam_fw_file_id = 'firmwarefile123';
@@ -380,7 +398,7 @@ describe('DeploymentHubScreen', () => {
       component.bodyForm.controls['sensorFwControl'].setValue('1.0.0');
       component.cam_fw_deploy = true;
       component.sensor_fw_deploy = true;
-      dialog.afterCloseVal = false;
+      dialogs.prompt.mockResolvedValue(action.weak('cancel', 'Cancel'));
       firmwareService.createFirmwareV2.mockResolvedValue('firmware123');
 
       await component.onDeploy();
@@ -412,7 +430,10 @@ describe('DeploymentHubScreen', () => {
 
     it('should handle failure in applying deployment config', async () => {
       const port = 1883;
-      component.selectedDevice = Device.sampleLocal(Device.sample(), port);
+      component.selectedDevice = Device.sample({
+        device_name: 'device-12345',
+        device_id: '1883',
+      });
       deploymentService.createDeploymentConfigV2.mockResolvedValue({
         result: 'SUCCESS',
         config_id: 'config123',
@@ -443,14 +464,14 @@ describe('DeploymentHubScreen', () => {
 
   describe('reset functionality', () => {
     let selectedDevice = 'Device1';
-    let selectedDevicePort = 1883;
+    let selectedDevicePort = '1883';
 
     beforeEach(() => {
       // set initial values different from default
-      component.selectedDevice = Device.sampleLocal(
-        Device.sample(selectedDevice),
-        selectedDevicePort,
-      );
+      component.selectedDevice = Device.sample({
+        device_name: selectedDevice,
+        device_id: selectedDevicePort,
+      });
 
       component.firmwareOptions = true;
       component.bodyForm.patchValue({
@@ -490,6 +511,67 @@ describe('DeploymentHubScreen', () => {
       expect(component.cam_fw_file_id).toBeNull();
       expect(component.sensor_fw_id).toBeNull();
       expect(component.cam_fw_id).toBeNull();
+    });
+  });
+
+  describe('isDeployButtonDisabled', () => {
+    beforeEach(() => {
+      component.selectedDevice = Device.sample();
+      component.cam_fw_deploy = false;
+      component.sensor_fw_deploy = false;
+      component.bodyForm.controls['camFwControl'].setValue('');
+      component.bodyForm.controls['sensorFwControl'].setValue('');
+    });
+
+    it('should return true if the device is not connected', () => {
+      component.selectedDevice = Device.sample({
+        connection_state: DeviceStatus.Disconnected,
+      });
+      expect(component.isDeployButtonDisabled()).toBe(true);
+    });
+
+    it('should return true if camFwControl is not valid and cam_fw_deploy is true', () => {
+      component.selectedDevice = Device.sample();
+      component.cam_fw_deploy = true;
+      component.bodyForm.controls['camFwControl'].setValue(''); // invalid value
+      expect(component.isDeployButtonDisabled()).toBe(true);
+    });
+
+    it('should return true if sensorFwControl is not valid and sensor_fw_deploy is true', () => {
+      component.selectedDevice = Device.sample();
+      component.sensor_fw_deploy = true;
+      component.bodyForm.controls['sensorFwControl'].setValue(''); // invalid value
+      expect(component.isDeployButtonDisabled()).toBe(true);
+    });
+
+    it('should return false if any of cam_fw_deploy, sensor_fw_deploy, app_id, or model_id are set', () => {
+      component.selectedDevice = Device.sample();
+      component.cam_fw_deploy = true;
+      component.bodyForm.controls['camFwControl'].setValue('valid'); // valid value
+      expect(component.isDeployButtonDisabled()).toBe(false);
+    });
+
+    it('should return true if no conditions are met', () => {
+      component.selectedDevice = Device.sample();
+      component.cam_fw_deploy = false;
+      component.sensor_fw_deploy = false;
+      component.app_id = null;
+      component.model_id = null;
+      expect(component.isDeployButtonDisabled()).toBe(true);
+    });
+
+    it('should return false if camFwControl is valid and cam_fw_deploy is true', () => {
+      component.selectedDevice = Device.sample();
+      component.cam_fw_deploy = true;
+      component.bodyForm.controls['camFwControl'].setValue('valid');
+      expect(component.isDeployButtonDisabled()).toBe(false);
+    });
+
+    it('should return false if sensorFwControl is valid and sensor_fw_deploy is true', () => {
+      component.selectedDevice = Device.sample();
+      component.sensor_fw_deploy = true;
+      component.bodyForm.controls['sensorFwControl'].setValue('valid');
+      expect(component.isDeployButtonDisabled()).toBe(false);
     });
   });
 });

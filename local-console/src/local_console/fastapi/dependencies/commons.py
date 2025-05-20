@@ -14,27 +14,24 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 from collections.abc import AsyncGenerator
-from collections.abc import Generator
 from contextlib import asynccontextmanager
-from contextlib import contextmanager
 from typing import Annotated
 
 from fastapi import Depends
 from fastapi import FastAPI
 from fastapi import Request
 from local_console.core.config import Config
-from local_console.core.config import config_obj
 from local_console.core.deploy.tasks.task_executors import TrioBackgroundTasks
 from local_console.core.files.files import FilesManager
 from local_console.core.files.files import temporary_files_manager
 
 
 def global_config() -> Config:
-    return config_obj
+    return Config()
 
 
-@contextmanager
-def added_file_manager(app: FastAPI) -> Generator[None, None, None]:
+@asynccontextmanager
+async def added_file_manager(app: FastAPI) -> AsyncGenerator[None, None]:
     with temporary_files_manager() as file_manager:
         if not hasattr(app.state, "file_manager"):
             app.state.file_manager = file_manager

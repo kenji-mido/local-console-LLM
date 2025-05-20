@@ -1,0 +1,15 @@
+{
+  "custom_settings": {
+    "ai_models": {
+      "classification": {
+        "ai_model_bundle_id": "000002",
+        "parameters": {
+          "max_predictions": 3
+        }
+      }
+    },
+    "metadata_settings": {
+      "format": 0
+    }
+  }
+}

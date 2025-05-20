@@ -16,12 +16,19 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { DialogRef } from '@angular/cdk/dialog';
-import { Component, OnDestroy } from '@angular/core';
+import { DIALOG_DATA, DialogRef } from '@angular/cdk/dialog';
+import { Component, Inject, OnDestroy } from '@angular/core';
 import { FormControl, FormGroup, ReactiveFormsModule } from '@angular/forms';
 import { MatIconModule } from '@angular/material/icon';
 import { TextInputComponent } from '@app/layout/components/text-input/text-input.component';
-import { UserPromptDialog } from '@app/layout/dialogs/user-prompt/user-prompt.dialog';
+import {
+  UserPromptDialog,
+  UserPromptDialogData,
+} from '@app/layout/dialogs/user-prompt/user-prompt.dialog';
+
+export interface UserPromptNameDialogData extends UserPromptDialogData {
+  deviceName: string;
+}
 
 @Component({
   selector: 'app-user-prompt-name',
@@ -37,18 +44,25 @@ import { UserPromptDialog } from '@app/layout/dialogs/user-prompt/user-prompt.di
 })
 export class UserPromptNameDialog implements OnDestroy {
   inputs = new FormGroup({
-    device_name: new FormControl(),
+    deviceName: new FormControl(),
   });
 
-  device_name = null;
+  deviceName: string | null = null;
+  isDeviceNameUpdated = false;
 
-  constructor(public dialogRef: DialogRef<string | null>) {}
+  constructor(
+    public dialogRef: DialogRef<string | null>,
+    @Inject(DIALOG_DATA) public data: UserPromptNameDialogData,
+  ) {
+    this.deviceName = data.deviceName;
+  }
 
   ngOnDestroy() {
-    this.dialogRef.close(this.device_name);
+    if (this.isDeviceNameUpdated) this.dialogRef.close(this.deviceName);
   }
 
   onApply() {
-    this.device_name = this.inputs.value.device_name;
+    this.isDeviceNameUpdated = true;
+    this.deviceName = this.inputs.value.deviceName;
   }
 }

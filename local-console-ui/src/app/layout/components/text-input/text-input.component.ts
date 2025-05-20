@@ -16,19 +16,24 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { CommonModule } from '@angular/common';
 import {
   Component,
+  effect,
   EventEmitter,
   Input,
+  model,
   OnChanges,
+  Optional,
   Output,
 } from '@angular/core';
-import { ControlContainer, FormGroupDirective } from '@angular/forms';
-import { CommonModule } from '@angular/common';
+import {
+  ControlContainer,
+  FormGroupDirective,
+  ReactiveFormsModule,
+} from '@angular/forms';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
-import { ReactiveFormsModule } from '@angular/forms';
-import { Inject, OnDestroy } from '@angular/core';
 import { MatInputModule } from '@angular/material/input';
 
 export type InputType = 'text' | 'number' | 'email' | 'password';
@@ -62,10 +67,20 @@ export class TextInputComponent implements OnChanges {
   @Input() placeholder: string = '';
   @Input() readOnly = false;
   @Input() maxLength: string = '1000';
+  disabled = model(false);
 
   formFieldClass = '';
 
-  constructor() {}
+  constructor(@Optional() private controlContainer: ControlContainer) {
+    effect(() => {
+      const control = this.controlContainer?.control?.get(this.formName);
+      if (this.disabled()) {
+        control?.disable();
+      } else {
+        control?.enable();
+      }
+    });
+  }
 
   ngOnChanges(): void {
     let cls = '';

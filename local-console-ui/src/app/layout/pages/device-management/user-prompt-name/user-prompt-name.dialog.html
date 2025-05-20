@@ -22,8 +22,8 @@
     <form [formGroup]="inputs">
       <app-text-input
         type="text"
-        formName="device_name"
-        placeholder="Device1"
+        formName="deviceName"
+        [placeholder]="deviceName || 'Enter device name'"
       ></app-text-input>
     </form>
   </div>

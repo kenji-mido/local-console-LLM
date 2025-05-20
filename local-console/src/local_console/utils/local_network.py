@@ -19,69 +19,36 @@ import platform
 import socket
 
 import psutil
-from local_console.core.schemas.schemas import DeviceConnection
 
 logger = logging.getLogger(__file__)
 
 
-def get_network_ifaces() -> list[str]:
+def get_network_ifaces() -> list[tuple[str, bool]]:
     """
-    Gets network interfaces over which a local server could be
-    reached in the local network.
+    Gets all network interfaces over which a local server could be
+    reached in the local network. Does not filter networks that are down.
 
     Returns:
-        list[str]: List of network interface names
+        list[tuple]: List of tuples with network interface names and boolean that represents the status
     """
     stats = psutil.net_if_stats()
     logger.debug(stats)
     os_name = platform.system()
     if os_name == "Windows":
         chosen = list(
-            k
+            (k, v.isup)
             for k, v in stats.items()
-            if v.isup and "loopback" not in k.lower() and "vethernet" not in k.lower()
+            if "loopback" not in k.lower() and "vethernet" not in k.lower()
         )
     else:
         chosen = list(
-            k
+            (k, v.isup)
             for k, v in stats.items()
-            if v.isup
-            and "docker" not in k.lower()
-            and "running" in v.flags
+            if "docker" not in k.lower()
             and "loopback" not in v.flags
             and "pointopoint" not in v.flags
         )
     return chosen
-
-
-def get_my_ip_by_routing() -> str:
-    """
-    This gets the machine's IP by checking assigned IPv4
-    addresses to network interfaces determined to be
-    accessible by other devices in the local network.
-    """
-    ifaces = get_network_ifaces()
-    infos = psutil.net_if_addrs()
-    addr_info = {
-        iface: [
-            info for info in infos[iface] if info.family == socket.AddressFamily.AF_INET
-        ]
-        for iface in ifaces
-    }
-    chosen = next(addrs[0] for iface, addrs in addr_info.items() if addrs)
-    return chosen.address
-
-
-def get_webserver_ip(config: DeviceConnection) -> str:
-    if config.webserver.host == "localhost":
-        return get_my_ip_by_routing()
-    return config.webserver.host
-
-
-def get_mqtt_ip(config: DeviceConnection) -> str:
-    if config.mqtt.host == "localhost":
-        return get_my_ip_by_routing()
-    return config.mqtt.host
 
 
 def is_localhost(hostname: str) -> bool:
@@ -113,10 +80,6 @@ def is_valid_host(hostname: str) -> bool:
         logger.warning(f"An unexpected error occurred - {hostname}: {e}")
         return False
     return True
-
-
-def replace_local_address(hostname: str) -> str:
-    return get_my_ip_by_routing() if is_localhost(hostname) else hostname
 
 
 def is_port_open(port: int) -> bool:

@@ -20,9 +20,28 @@ import {
   Component,
   EventEmitter,
   Input,
+  model,
   OnDestroy,
   Output,
 } from '@angular/core';
+import { Box, BoxLike, Point2D, RawDrawing } from '@app/core/drawing/drawing';
+import { UnknownInferenceFormatError } from '@app/core/inference/inferenceresults.service';
+import { DialogService } from '@app/layout/dialogs/dialog.service';
+import { LabelsStored } from '@app/layout/pages/data-hub/data-hub.screen';
+import { ReplaySubject } from 'rxjs';
+import {
+  DrawingState,
+  DrawingSurfaceComponent,
+  SurfaceMode,
+} from '../../drawing/drawing-surface.component';
+import {
+  ExtendedMode,
+  isClassificationInference,
+  isDetectionInference,
+  Mode,
+} from '../../inference/inference';
+import { toDrawing } from '../adapters';
+import { OperationMode } from '../configuration';
 import {
   DEFAULT_ROI,
   DeviceFrame,
@@ -30,23 +49,11 @@ import {
   ROI,
   SENSOR_SIZE,
 } from '../device';
-import { CommonModule } from '@angular/common';
-import { DialogService } from '@app/layout/dialogs/dialog.service';
-import { CardComponent } from '@app/layout/components/card/card.component';
-import { LabelsStored } from '@app/layout/pages/data-hub/data-hub.screen';
-import { isClassificationInference, Mode } from '../../inference/inference';
 import { DevicePipesModule } from '../device.pipes';
-import {
-  DrawingSurfaceComponent,
-  SurfaceMode,
-} from '../../drawing/drawing-surface.component';
-import { Box, BoxLike, RawDrawing, Point2D } from '@app/core/drawing/drawing';
-import { toDrawing } from '../adapters';
-import { InferenceResultsService } from '@app/core/inference/inferenceresults.service';
-import { ReplaySubject } from 'rxjs';
+import { DeviceStreamingService } from './device-streaming.service';
 
-export const MAX_ERRORS_TERMINATION = 4;
-export const TIME_BETWEEN_FRAMES = 2000;
+export const MAX_INACTIVITY_BEFORE_DRAWING_CLEAR_MS = 5 * 1000;
+export const MAX_INACTIVITY_BEFORE_INFERENCE_STOP_MS = 30 * 1000;
 
 interface StreamOps {
   detach: () => Promise<void>;
@@ -55,19 +62,13 @@ interface StreamOps {
 @Component({
   selector: 'app-device-visualizer',
   standalone: true,
-  imports: [
-    CommonModule,
-    CardComponent,
-    DevicePipesModule,
-    DrawingSurfaceComponent,
-  ],
+  imports: [DevicePipesModule, DrawingSurfaceComponent],
   templateUrl: './device-visualizer.component.html',
   styleUrl: './device-visualizer.component.scss',
 })
 export class DeviceVisualizerComponent implements OnDestroy {
   private currentStreamOps?: StreamOps;
   private __roiSetSubject = new ReplaySubject<ROI>(1);
-  private __streaming = false;
   private __device?: LocalDevice;
   effectiveRoi = <ROI>{
     offset: new Point2D(0, 0),
@@ -77,7 +78,7 @@ export class DeviceVisualizerComponent implements OnDestroy {
     offset: new Point2D(0, 0),
     size: SENSOR_SIZE.clone(),
   };
-  errors = 0;
+  latestValidFrameTimestamp: undefined | number;
   currentDrawing?: RawDrawing;
 
   @Input() set device(newDevice: LocalDevice | undefined) {
@@ -89,26 +90,27 @@ export class DeviceVisualizerComponent implements OnDestroy {
   }
 
   @Input() surfaceMode: SurfaceMode = 'render';
-  @Input() mode: Mode = Mode.ImageOnly;
+  @Input() mode: Mode | ExtendedMode = Mode.ImageOnly;
+  @Input() type: OperationMode = 'custom';
   @Input() labels: LabelsStored = { labels: [], applied: false };
   @Output() frameReceived = new EventEmitter<DeviceFrame>();
   @Output() roiSet$ = this.__roiSetSubject.asObservable();
-  @Output() status = new EventEmitter();
 
-  set streaming(s: boolean) {
-    this.__streaming = s;
-    this.status.emit(s);
-  }
-
-  get streaming() {
-    return this.__streaming;
-  }
+  drawingState = model(DrawingState.Disabled);
 
   constructor(
-    private inferences: InferenceResultsService,
+    private streams: DeviceStreamingService,
     private prompts: DialogService,
   ) {
     this.__roiSetSubject.next(this.effectiveRoi);
+  }
+
+  streaming() {
+    return this.drawingState() === DrawingState.Streaming;
+  }
+
+  error() {
+    return this.drawingState() === DrawingState.Error;
   }
 
   async setDevice(newDevice: LocalDevice | undefined) {
@@ -119,9 +121,9 @@ export class DeviceVisualizerComponent implements OnDestroy {
       await this.stopPreview();
       if (newDevice) {
         this.setROI(newDevice.last_known_roi || DEFAULT_ROI);
-        if (this.inferences.isDeviceStreaming(newDevice.device_id)) {
+        if (this.streams.isDeviceStreaming(newDevice.device_id)) {
           console.log('Device stream cached, restarting!');
-          await this.startPreview();
+          await this.hookStream();
         }
       }
     }
@@ -132,76 +134,74 @@ export class DeviceVisualizerComponent implements OnDestroy {
   }
 
   public async startPreview() {
-    if (!this.streaming && this.device) {
-      this.errors = 0;
-      this.streaming = true;
+    if (!this.streaming() && this.device) {
       try {
-        const { stream, detach } = await this.inferences.getInferencesAsFrame(
+        this.drawingState.set(DrawingState.Streaming);
+        await this.streams.setupStreaming(
           this.device.device_id,
           this.effectiveRoi.offset,
           this.effectiveRoi.size,
-          TIME_BETWEEN_FRAMES,
           this.mode,
+          this.type,
         );
-        const sub = stream.subscribe((frame) => this.handleFrame(frame));
-        this.currentStreamOps = {
-          detach: async () => {
-            sub.unsubscribe();
-            await detach();
-          },
-        };
+        await this.hookStream();
         // If stop was called while bootstrapping
-        if (!this.streaming) this.stopInferenceStream();
+        if (!this.streaming()) await this.stopInferenceStream();
         return true;
       } catch (e) {
         console.error('Failed to start stream: ', e);
       }
     }
-    await this.stopInferenceStream();
     // generic error
-    if (this.mode === Mode.ImageOnly) {
-      this.prompts.alert(
-        'Failed to stream',
-        `Failed to start or get images.`,
-        'error',
-      );
-    } else {
-      this.prompts.alert(
-        'Failed to stream',
-        `Failed to start or get images and inferences.
-        Please check that a model and application are loaded on the device,
-        and that the configuration parameters sent are compatible.`,
-        'error',
-      );
-    }
+    this.prompts.alert(
+      'Failed to stream',
+      `Failed to start or get images and inferences.
+      Please check that a model and application are loaded on the device,
+      and that the configuration parameters sent are compatible.`,
+      'error',
+    );
+    await this.stopInferenceStream();
     return false;
   }
 
+  private async hookStream() {
+    this.drawingState.set(DrawingState.Streaming);
+    const stream = await this.streams.getDeviceStreamAsFrames(
+      this.device!.device_id,
+    );
+    const sub = stream.subscribe((frame) => this.handleFrame(frame));
+    this.currentStreamOps = {
+      detach: async () => {
+        sub.unsubscribe();
+      },
+    };
+  }
+
   public async stopPreview() {
+    this.drawingState.set(DrawingState.Disabled);
     await this.currentStreamOps?.detach();
     delete this.currentStreamOps;
     delete this.currentDrawing;
-    this.streaming = false;
   }
 
   public async stopInferenceStream(forced = false) {
     await this.stopPreview();
+    if (forced) {
+      this.prompts.alert(
+        'Preview stopped',
+        `The device failed to produce an image after ${MAX_INACTIVITY_BEFORE_INFERENCE_STOP_MS} milliseconds`,
+        'error',
+      );
+    }
     if (this.device)
       try {
-        await this.inferences.stopInferences(this.device.device_id);
+        await this.streams.stopStreaming(this.device.device_id);
       } catch (e) {
         console.error(
           `Couldn't switch device inferences off. Is the device online? [${this.device.device_id}]`,
           e,
         );
       }
-    if (forced) {
-      this.prompts.alert(
-        'Preview stopped',
-        `The device failed to produce an image too many times (${MAX_ERRORS_TERMINATION})`,
-        'error',
-      );
-    }
   }
 
   public async restartPreview() {
@@ -210,11 +210,25 @@ export class DeviceVisualizerComponent implements OnDestroy {
   }
 
   private async handleFrame(frame: DeviceFrame | Error) {
-    if (frame instanceof Error) {
-      delete this.currentDrawing;
-      if (++this.errors >= MAX_ERRORS_TERMINATION)
+    if (!this.streaming()) return;
+    if (!this.latestValidFrameTimestamp) {
+      // Initialize in first `handleFrame` in case there's no valid frame at any time
+      this.latestValidFrameTimestamp = this.getNow();
+    }
+
+    if (frame instanceof UnknownInferenceFormatError) {
+      await this.stopInferenceStream();
+      this.drawingState.set(DrawingState.Error);
+    } else if (frame instanceof Error) {
+      const timeSinceLastValidFrame =
+        this.getNow() - this.latestValidFrameTimestamp;
+      if (timeSinceLastValidFrame > MAX_INACTIVITY_BEFORE_DRAWING_CLEAR_MS)
+        delete this.currentDrawing;
+      if (timeSinceLastValidFrame > MAX_INACTIVITY_BEFORE_INFERENCE_STOP_MS)
         await this.stopInferenceStream(true);
     } else {
+      // if valid new frame, reset timestamp
+      this.latestValidFrameTimestamp = this.getNow();
       if (frame.inference) {
         if (isClassificationInference(frame.inference)) {
           frame.inference.perception.classification_list.forEach((item) => {
@@ -224,7 +238,7 @@ export class DeviceVisualizerComponent implements OnDestroy {
               item.label = this.labels.labels[item.class_id];
             }
           });
-        } else {
+        } else if (isDetectionInference(frame.inference)) {
           frame.inference.perception.object_detection_list.forEach((item) => {
             if (item.class_id > this.labels.labels.length - 1) {
               item.label = 'Class ' + item.class_id;
@@ -272,5 +286,9 @@ export class DeviceVisualizerComponent implements OnDestroy {
       offset: roi.offset.clone(),
       size: roi.size.clone(),
     };
+  }
+
+  private getNow(): number {
+    return Date.now();
   }
 }

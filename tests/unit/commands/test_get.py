@@ -23,25 +23,36 @@ from local_console.core.camera.enums import MQTTTopics
 from local_console.core.enums import GetObjects
 from typer.testing import CliRunner
 
+from tests.mocks.config import set_configuration
 from tests.strategies.configs import generate_text
+from tests.strategies.samplers.configs import GlobalConfigurationSampler
+
 
 runner = CliRunner()
 
 
-def test_get_deployment_command():
-    with (patch("local_console.commands.get.Agent") as mock_agent,):
+def test_get_deployment_command(single_device_config):
+    with (
+        patch("local_console.commands.get.Agent") as mock_agent,
+        patch("local_console.commands.get.read_only_loop") as mock_read_loop,
+    ):
         result = runner.invoke(app, [GetObjects.DEPLOYMENT.value])
-        mock_agent.return_value.read_only_loop.assert_called_once_with(
+        mock_read_loop.assert_called_once_with(
+            mock_agent(),
             subs_topics=[MQTTTopics.ATTRIBUTES.value],
             message_task=on_message_print_payload,
         )
         assert result.exit_code == 0
 
 
-def test_get_telemetry_command():
-    with (patch("local_console.commands.get.Agent") as mock_agent,):
+def test_get_telemetry_command(single_device_config):
+    with (
+        patch("local_console.commands.get.Agent") as mock_agent,
+        patch("local_console.commands.get.read_only_loop") as mock_read_loop,
+    ):
         result = runner.invoke(app, [GetObjects.TELEMETRY.value])
-        mock_agent.return_value.read_only_loop.assert_called_once_with(
+        mock_read_loop.assert_called_once_with(
+            mock_agent(),
             subs_topics=[MQTTTopics.TELEMETRY.value],
             message_task=on_message_telemetry,
         )
@@ -50,12 +61,15 @@ def test_get_telemetry_command():
 
 @given(generate_text())
 def test_get_instance_command(instance_id: str):
+    set_configuration(GlobalConfigurationSampler(num_of_devices=1).sample())
     with (
         patch("local_console.commands.get.Agent") as mock_agent,
+        patch("local_console.commands.get.read_only_loop") as mock_read_loop,
         patch("local_console.commands.get.on_message_instance") as mock_msg_inst,
     ):
         result = runner.invoke(app, [GetObjects.INSTANCE.value, instance_id])
-        mock_agent.return_value.read_only_loop.assert_called_once_with(
+        mock_read_loop.assert_called_once_with(
+            mock_agent(),
             subs_topics=[MQTTTopics.ATTRIBUTES.value],
             message_task=mock_msg_inst.return_value,
         )

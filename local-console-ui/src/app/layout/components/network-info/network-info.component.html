@@ -15,12 +15,14 @@
 
  SPDX-License-Identifier: Apache-2.0
 -->
-<div style="display: flex; align-items: flex-start">
-  <table class="device-info-table">
-    <tr>
+<div style="display: flex; align-items: flex-start; column-gap: 40px">
+  <table class="device-info-table text-14">
+    <tr class="text-16 bold">
       <th>
-        MQTT
-        <hr />
+        <div class="header">
+          <div class="title">MQTT</div>
+          <div class="horizontal-line"></div>
+        </div>
       </th>
     </tr>
 
@@ -48,10 +50,12 @@
         </table>
       </td>
     </tr>
-    <tr>
-      <th>
-        Network Time Protocol
-        <hr />
+    <tr class="text-16 bold">
+      <th style="width: 33%">
+        <div class="header">
+          <div class="title">Network Time Protocol</div>
+          <div class="horizontal-line"></div>
+        </div>
       </th>
     </tr>
 
@@ -72,11 +76,13 @@
     </tr>
   </table>
 
-  <table class="device-info-table">
-    <tr>
+  <table class="device-info-table text-14">
+    <tr class="text-16 bold">
       <th>
-        IPv4 Address
-        <hr />
+        <div class="header">
+          <div class="title">IPv4 Address</div>
+          <div class="horizontal-line"></div>
+        </div>
       </th>
     </tr>
 
@@ -84,7 +90,7 @@
       <td>
         <table>
           <tr>
-            <div class="card-belt">
+            <div class="line gap-2 align-center">
               <span>DHCP</span>
               <app-toggle
                 [toggleStatus]="network_info.static"
@@ -134,11 +140,13 @@
     </tr>
   </table>
 
-  <table class="device-info-table">
-    <tr>
+  <table class="device-info-table text-14">
+    <tr class="text-16 bold">
       <th>
-        Proxy Server
-        <hr />
+        <div class="header">
+          <div class="title">Proxy Server</div>
+          <div class="horizontal-line"></div>
+        </div>
       </th>
     </tr>
 
@@ -184,10 +192,12 @@
         </table>
       </td>
     </tr>
-    <tr>
+    <tr class="text-16 bold">
       <th>
-        Wi-Fi
-        <hr />
+        <div class="header">
+          <div class="title">Wi-Fi</div>
+          <div class="horizontal-line"></div>
+        </div>
       </th>
     </tr>
 

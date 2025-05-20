@@ -16,99 +16,184 @@
  SPDX-License-Identifier: Apache-2.0
 -->
 
-<div class="hub scroll fullheight">
-  <div class="stack">
-    <div class="text-1 row">
-      <img src="images/light/data_hub_icon.svg" />
-      <span>Inference</span>
-    </div>
+<div class="hub fullwidth scroll fullheight gap-1">
+  <div class="row gap-1 align-center">
+    <img class="page-title-icon" src="images/{{ theme }}/data_hub.svg" />
+    <span class="text-24 bold">Inference</span>
   </div>
-  <div class="row grow">
-    <div class="card-box basis-11">
+  <div class="row grow gap-2">
+    <div class="card-box basis-11 p-2 gap-2">
       <div class="stack">
-        <div class="text-2 my-2 row align-center">
-          <span> Environment </span>
+        <div class="row gap-1 align-center p-1">
+          <span class="text-24"> Environment </span>
           <app-infotip
             tip="Configure settings for AI Inference. Optionally, you can select local folders of your choice to save Image files and Inference Result Metadata files."
           />
         </div>
       </div>
-      <div class="col">
-        <div class="field-box stack">
-          <div class="text-3">Device</div>
+      <div class="col text-14 gap-1">
+        <div class="stack gap-half round-half">
+          <div class="text-20 bold">Device</div>
           <div class="row gap-1 align-center">
             <app-icon-text
               [text]="selectedDevice?.device_name || 'Not selected'"
+              data-testid="selected-device"
             ></app-icon-text>
             <button
               (click)="openDeviceSelectionDialog()"
+              data-testid="device-selector-btn"
               class="stack center align-center bg-edgeaipf round-1 ws-1 hs-1"
             >
               <img class="bleached" src="images/light/device_item.svg" />
             </button>
           </div>
         </div>
-        <div class="field-box stack">
-          <div class="text-3 row align-center">
+        <div class="stack round-half gap-2">
+          <div class="text-20 bold row gap-1 align-center">
             <span> Operation Mode </span>
-            <app-infotip tip="Select a type of AI inference operation." />
+            <app-infotip tip="Select a type of AI inference operation" />
           </div>
-          <div class="stack">
-            <mat-form-field class="fullwidth mb-0">
-              <mat-select [(ngModel)]="operationMode">
+          <div class="stack gap-1">
+            <mat-form-field
+              class="fullwidth mb-0 common-drop-down-list text-14"
+            >
+              <mat-select
+                [(ngModel)]="opMode"
+                (ngModelChange)="onModeChange()"
+                data-testid="ai-model-type-selector"
+                disableRipple
+                hideSingleSelectionIndicator
+                panelClass="common-drop-down-list-panel"
+                [disabled]="visualizer?.streaming() || false"
+              >
                 <mat-option value="classification"
                   >{{getModelName("classification")}}</mat-option
                 >
                 <mat-option value="detection"
                   >{{getModelName("detection")}}</mat-option
                 >
+                <mat-option value="generic_classification"
+                  >{{getModelName("generic_classification")}}</mat-option
+                >
+                <mat-option value="generic_detection"
+                  >{{getModelName("generic_detection")}}</mat-option
+                >
+                <mat-option value="custom"
+                  >{{getModelName("custom")}}</mat-option
+                >
                 <mat-option value="image">Image Capture</mat-option>
               </mat-select>
             </mat-form-field>
             <app-file-input
-              *ngIf="operationMode !== 'image'"
+              *ngIf="!['image','custom'].includes(opMode() || '')"
               iconButton="images/light/file_folder.svg"
+              data-testid="label-file-select-btn"
               #modelFile
               title="Label File"
               (fileSelected)="onLabelsSelected($event)"
+              [disabled]="visualizer?.streaming() || false"
             ></app-file-input>
             <app-file-input
-              *ngIf="operationMode !== 'image'"
+              *ngIf="opMode() !== 'image'"
+              data-testid="ppl-file-select-btn"
               #paramsFile
               iconButton="images/light/file_folder.svg"
-              title="PPL Parameters File"
+              title="Configuration File"
+              [required]="true"
               (fileSelected)="onPPLFileSelected($event)"
+              [disabled]="visualizer?.streaming() || false"
             ></app-file-input>
           </div>
         </div>
-        <div class="field-box stack">
-          <div class="text-3">Storage</div>
-          <div class="stack">
-            <app-folder-picker
-              title="Image Folder Path"
-              [folderPath]="selectedDeviceConfiguration.image_dir_path || 'Not Selected'"
-              (folderSelected)="onImagePathSelected($event)"
-            ></app-folder-picker>
-            <app-folder-picker
-              title="Inference Folder Path"
-              [folderPath]="selectedDeviceConfiguration.inference_dir_path || 'Not Selected'"
-              (folderSelected)="onInferencePathSelected($event)"
-            ></app-folder-picker>
-            <div class="col storage">
-              <span>Storage Size Limitation</span>
-              <div class="row align-center">
-                <app-number-spinner
-                  [min]="1"
-                  [max]="50000"
-                  [data]="selectedDeviceConfiguration.size!"
-                  [editableDisabled]="false"
-                  [minusPlusDisabled]="false"
-                  (DataChange)="onStorageSizeChange($event)"
-                ></app-number-spinner>
-                <span>MB</span>
-              </div>
-            </div>
+        <div
+          class="stack round-half gap-2 storage"
+          data-testid="storage-settings"
+          [class.highlight]="storageHighlight()"
+        >
+          <div class="row gap-1 align-center">
+            <span class="text-20 bold">Storage</span>
+            <app-infotip
+              tip="Configure local folders for image files, inference results, and folders size limit"
+            ></app-infotip>
           </div>
+          <div class="stack gap-half">
+            <app-folder-picker
+              title="Destination Folder"
+              data-testid="destination-folder-selector"
+              [folderPath]="selectedDeviceConfiguration().device_dir_path || 'Not Selected'"
+              (folderSelected)="onDestinationFolderSelected($event)"
+              [disabled]="visualizer?.streaming() || false"
+            ></app-folder-picker>
+            @if (showDestinationFolderHint()) {
+            <app-icon-text
+              class="text-14 sub warning caution pl-0"
+              iconUrl="images/light/status-caution.svg"
+              text="Access Denied"
+            ></app-icon-text>
+            }
+          </div>
+          <div class="stack gap-half storage">
+            <div class="row gap-1 align-center">
+              <div class="line gap-half align-left">
+                <span>Folder Quota</span>
+                <i class="required"></i>
+              </div>
+              <app-infotip
+                [size]="20"
+                tip="Folders share a combined size limit, including pre-existing files. When their total size exceeds the limit, the oldest files are removed."
+              ></app-infotip>
+            </div>
+            <div class="row gap-half align-center">
+              <app-number-spinner
+                [min]="1"
+                [max]="50000"
+                [data]="selectedDeviceConfiguration().size!"
+                [editableDisabled]="false"
+                [minusPlusDisabled]="false"
+                [width]="70"
+                (DataChange)="onStorageSizeChange($event)"
+                [disabled]="visualizer?.streaming() || false"
+                data-testid="quota-spinner"
+              ></app-number-spinner>
+              <span>MB</span>
+            </div>
+            @if (showQuotaHint()) {
+            <app-icon-text
+              class="text-14 warning caution"
+              iconUrl="images/light/status-caution.svg"
+              text="Quota Reached"
+            ></app-icon-text>
+            }
+          </div>
+          <div class="stack gap-half">
+            <div class="row gap-1">
+              <span>Automatic File Deletion</span>
+              <app-infotip
+                [size]="20"
+                tip="If enabled, the server will automatically delete the oldest images and inferences when the quota is reached. If disabled, the process will halt when quota is met."
+              ></app-infotip>
+            </div>
+            <app-segments
+              data-testid="auto-deletion-selector"
+              [value]="selectedDeviceConfiguration().auto_deletion ? 'On' : 'Off'"
+              (valueChange)="onAutoDeletionChange($event)"
+              [options]="['On', 'Off']"
+              [disabled]="visualizer?.streaming() || false"
+            />
+            @if (showHint()) {
+            <app-icon-text
+              class="text-14 sub warning"
+              iconUrl="images/light/status-warning.svg"
+              text='Default to "Off" on setting change'
+            ></app-icon-text>
+            }
+          </div>
+          @if (visualizer?.streaming() &&
+          selectedDeviceConfiguration().auto_deletion) {
+          <div data-testid="deletion-notice" class="blinking text-14 sub">
+            Performing Automatic File Deletion
+          </div>
+          }
         </div>
         <div class="grow"></div>
         <div class="row">
@@ -116,7 +201,7 @@
             class="normal-hub-btn"
             aria-label="Apply configuration"
             data-testid="apply-configuration"
-            [disabled]="!selectedDevice"
+            [disabled]="!isApplyEnabled()"
             (click)="onApply()"
           >
             Apply
@@ -125,78 +210,110 @@
       </div>
     </div>
     <div class="card-box grow">
-      <div class="stack">
-        <div class="text-3 row align-center">
-          <span> Inference Control </span>
-          <app-infotip
-            tip="Start/Stop AI Inference.  Inference results will be decoded and annotated for visualization. "
-          />
-        </div>
-      </div>
       <div class="inference row grow">
-        <div class="field-box basis-11 stack">
-          <div class="text-3 row align-center">
-            <span> Region of Interest </span>
-            <app-infotip
-              tip="Select the area of view you are interested in for inference using your mouse."
-            />
-          </div>
-          @if(visualizer && (visualizer.status | async)) {
-          <app-roi-display [visualizer]="visualizer"></app-roi-display>
-          }
-        </div>
-        <div class="field-box visualization row">
-          <div class="image-stream">
-            <div class="text-3 pb-1">Image</div>
-            <div>
-              <app-device-visualizer
-                class="p-1 border-box fullwidth aspect-square"
-                [device]="selectedDevice"
-                [mode]="operationMode === 'image' ? Mode.ImageOnly : Mode.ImageAndInferenceResult"
-                [labels]="labels"
-                (frameReceived)="onFrameReceived($event)"
-              >
-              </app-device-visualizer>
-            </div>
-          </div>
-          <div class="inference-result">
-            <div class="text-3 subtitle">Results and Status</div>
-            <div class="text-info">
-              <div class="text-info-content">
-                <span><b>Status</b></span>
-                <span
-                  >{{(visualizer?.status | async) ? 'Streaming':
-                  'Stopped'}}</span
-                >
-              </div>
-              <div class="text-info-content">
-                <span><b>Mode</b></span>
-                <span>{{getModeName(operationMode)}}</span>
-              </div>
-              <div class="text-info-content">
-                <span><b>AI Model</b></span>
-                <span>{{getModelName(operationMode)}}</span>
+        <div class="visualization row gap-3">
+          <div class="image-stream ws-15 col h-full">
+            <div class="stack">
+              <div class="row gap-1 align-center">
+                <span class="text-24"> Image </span>
+                <app-infotip
+                  tip="Start/Stop AI Inference. Inference results will be decoded and annotated for visualization."
+                />
               </div>
             </div>
+            <app-device-visualizer
+              class="border-box fullwidth aspect-square"
+              [device]="selectedDevice"
+              [mode]="opMode() === 'image' ? Mode.ImageOnly : Mode.ImageAndInferenceResult"
+              [type]="opMode() || 'custom'"
+              [labels]="labels"
+              (frameReceived)="onFrameReceived($event)"
+            >
+            </app-device-visualizer>
+          </div>
+          <div class="inference-result col grow h-full">
             <app-inference-display
-              [disabled]="operationMode === 'image'"
+              [disabled]="opMode() === 'image'"
+              [mode]="opMode() === 'custom' ? InferenceDisplayMode.rawOnly : InferenceDisplayMode.all"
               [inference]="inference"
               [labels]="labels"
+              [error]="visualizer?.error() ? true : false"
             ></app-inference-display>
           </div>
         </div>
       </div>
-      <div class="row start-stop">
+      <div class="row gap-3">
+        <div class="stack gap-2 ws-15">
+          <div class="text-20 bold row gap-1 align-center">
+            <span> Region of Interest </span>
+            <app-infotip
+              tip="Select the area of view you are interested in for inference using your mouse"
+            />
+            <div class="grow h-full column">
+              <div class="hr center"></div>
+            </div>
+          </div>
+          @if(visualizer && visualizer.streaming()) {
+          <div class="col gap-1">
+            @let roi = visualizer.roiSet$ | async;
+            <div>
+              @if (roi) { {{ '(' + roi.offset.x + ', ' + roi.offset.y + ') - ('
+              + (roi.offset.x + roi.size.x) + ', ' + (roi.offset.y + roi.size.y)
+              + ')' }} }
+            </div>
+            <div class="row gap-2">
+              <button
+                class="weak-hub-btn button"
+                [disabled]="visualizer.surfaceMode === 'capture'"
+                (click)="visualizer.resetROI()"
+              >
+                Reset
+              </button>
+              <button
+                class="weak-hub-btn button"
+                [disabled]="visualizer.surfaceMode === 'capture'"
+                (click)="visualizer.surfaceMode = 'capture'"
+              >
+                Set
+              </button>
+            </div>
+          </div>
+          }
+        </div>
+        <div class="text-info text-14 gap-1 col grow">
+          <div class="text-20 bold row gap-half align-center">
+            <span> Status </span>
+            <div class="grow h-full column">
+              <div class="hr center"></div>
+            </div>
+          </div>
+          <div class="text-info-content row">
+            <div class="ws-5"><b>Status</b></div>
+            <div>{{visualizer?.streaming() ? 'Streaming': 'Stopped'}}</div>
+          </div>
+          <div class="text-info-content row">
+            <div class="ws-5"><b>Mode</b></div>
+            <div>{{getModeName(opMode())}}</div>
+          </div>
+          <div class="text-info-content row">
+            <div class="ws-5"><b>AI Model</b></div>
+            <div>{{getModelName(opMode())}}</div>
+          </div>
+        </div>
+      </div>
+      <div class="line gap-2">
         <button
           class="weak-hub-btn button"
-          [disabled]="!(visualizer?.status | async)"
+          data-testid="stop-inference-btn"
+          [disabled]="!visualizer?.streaming()"
           (click)="stopStreaming()"
         >
           Stop
         </button>
         <button
           class="normal-hub-btn button"
-          [disabled]="(visualizer?.status | async)"
+          data-testid="start-inference-btn"
+          [disabled]="!isStartEnabled()"
           (click)="startStreaming()"
         >
           Start
@@ -205,3 +322,29 @@
     </div>
   </div>
 </div>
+
+@if (applying) {
+<div class="loader">
+  <mat-spinner></mat-spinner>
+</div>
+}
+
+<ng-template #enableAutoDeletionTpl>
+  <div class="stack">
+    <span class="bold"
+      >Any files in the destination folder will be removed.</span
+    >
+    <span
+      >Automatic File Deletion keeps disk usage under the specified quota by
+      deleting any files in the destination folders. Older files are deleted so
+      that disk usage does not exceed the specified quota.</span
+    >
+    <span
+      >If files should not be deleted, select a different folder or move files
+      from the target folder(s).</span
+    >
+    <span class="bold"
+      >Are you sure you want to enable Automatic File Deletion?</span
+    >
+  </div>
+</ng-template>

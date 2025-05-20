@@ -23,13 +23,15 @@
 }
 .preview-frame {
   background-color: $darkBlue;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
 
   &.streaming {
     background: url("images/light/preview_loading.gif");
+    background-position: center center;
+    background-size: cover;
+  }
+
+  &.error {
+    background: url("images/light/error_image.svg");
     background-position: center center;
     background-size: cover;
   }

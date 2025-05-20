@@ -20,27 +20,27 @@ import { EdgeAppModuleConfigurationV2, EdgeAppModuleStateV2 } from './edgeapp';
 import {
   isSysModuleConfig,
   isSysModuleState,
-  SysAppModuleConfigurationV2,
+  SysAppModuleConfigV2,
   SysAppModuleStateV2,
 } from './sysapp';
 
-export interface DeviceModuleV2 {
-  module_id: string;
-  module_name: string;
-  app_name?: string;
-  app_version?: string;
+export interface SysDeviceModule {
   property: {
-    configuration?: SysAppModuleConfigurationV2 | EdgeAppModuleConfigurationV2;
-    state?: SysAppModuleStateV2 | EdgeAppModuleStateV2;
-  };
-}
-
-export interface SysDeviceModule extends DeviceModuleV2 {
-  property: {
-    configuration?: SysAppModuleConfigurationV2;
+    configuration?: SysAppModuleConfigV2;
     state?: SysAppModuleStateV2;
   };
 }
+
+export interface EdgeAppModule {
+  property: EdgeAppModuleProperty;
+}
+
+export interface EdgeAppModuleProperty {
+  configuration?: EdgeAppModuleConfigurationV2;
+  state?: EdgeAppModuleStateV2;
+}
+
+export type DeviceModuleV2 = SysDeviceModule | EdgeAppModule;
 
 export function isSysModule(module: DeviceModuleV2): module is SysDeviceModule {
   const prop = module.property;

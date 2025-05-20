@@ -16,26 +16,26 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 @use "sass:color";
+@import "./edgeaipf.scss";
 
 html,
 body {
-  height: 100%;
+  height: 100vh;
 }
 
 body {
   margin: 0;
-  font-family: Roboto, "Helvetica Neue", sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
 }
 
 * :not(.material-icons) {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, 
-               "Helvetica Neue", Arial, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
   letter-spacing: normal;
 }
 
 input {
-  color: #fff;
-
   &:focus {
     outline: none;
   }
@@ -187,10 +187,10 @@ tr.mat-header-row {
 
 .app-container .mat-drawer {
   background-color: $bgColor;
-  border-right: 3px solid $contentSeparator;
 
   &.mat-drawer-side {
     z-index: 1 !important;
+    border-right: 0;
   }
 }
 
@@ -863,11 +863,18 @@ cdk-virtual-scroll-viewport,
 $dialogPaddings: 24px;
 
 .cdk-dialog-container {
-  background-color: #fff;
-  min-width: 420px;
+  padding: 48px 64px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 40px;
+  background-color: white;
+  width: 640px !important;
+  height: auto !important;
+  max-height: 90vh;
   position: relative;
   overflow: hidden;
-  padding-top: calc($dialogPaddings + 48px);
+  border-radius: 4px;
+  box-sizing: border-box;
 
   h2.dialog-title,
   h1.mat-dialog-title {
@@ -887,6 +894,12 @@ $dialogPaddings: 24px;
       overflow-y: auto;
     }
   }
+}
+
+.extended .cdk-dialog-container {
+  width: 1234px !important;
+  height: 620px !important;
+  background-color: var(--color-bg-main);
 }
 
 .mat-form-field {

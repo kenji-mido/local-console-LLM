@@ -212,25 +212,24 @@
 }
 
 .hub-page {
-  --hub-header-height: 80px;
   width: 1162px;
-  padding: 5px 22px 22px;
+  padding: 24px;
   height: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
 
   .page-header {
     display: flex;
     align-items: center;
-    height: var(--hub-header-height);
-    margin-left: 2px;
 
     .page-header-title {
-      color: #000;
-      font-size: 31px;
       display: flex;
       align-items: center;
+      gap: 8px;
+
       span {
         display: block;
-        margin: -0.12em 10px 0;
       }
     }
   }
@@ -248,7 +247,7 @@
     overflow: hidden;
     .page-body {
       width: 100%;
-      height: calc(100% - var(--hub-header-height));
+      flex-grow: 1;
       overflow: hidden;
     }
   }
@@ -338,10 +337,6 @@
   .section-footer {
     display: flex;
     justify-content: flex-end;
-
-    app-button {
-      margin-right: 15px;
-    }
   }
 
   &.minimal {

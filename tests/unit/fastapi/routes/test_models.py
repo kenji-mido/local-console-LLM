@@ -20,7 +20,6 @@ from local_console.core.files.values import FileType
 from local_console.fastapi.routes.models import GetModelsOutDTO
 from local_console.fastapi.routes.models import ModelDTO
 
-from tests.fixtures.fastapi import fa_client
 from tests.strategies.samplers.files import FileInfoSampler
 
 
@@ -124,7 +123,7 @@ def test_post_models_invalid_json(fa_client: TestClient) -> None:
     payload = "Invalid JSON string"
 
     response = fa_client.post(
-        "/models", data=payload, headers={"Content-Type": "application/json"}
+        "/models", content=payload, headers={"Content-Type": "application/json"}
     )
 
     assert response.status_code == 422

@@ -15,7 +15,6 @@
 # SPDX-License-Identifier: Apache-2.0
 import random
 import string
-from datetime import datetime
 
 
 def random_text(characters: str = string.ascii_letters, length: int = 10) -> str:
@@ -28,7 +27,3 @@ def random_alphanumeric(length: int = 10) -> str:
 
 def random_int(min: int = 0, max: int = 2**31) -> int:
     return random.randint(min, max)
-
-
-def timestamp() -> str:
-    return datetime.now().strftime("%Y%m%d%H%M%S%f")[:-3]

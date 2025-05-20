@@ -16,92 +16,46 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { BaseObject, SystemId } from '../common/base';
-import { Classification, Detection } from '../inference/inference';
-import { DeviceModuleV2 } from '../module/module';
 import { Point2D } from '../drawing/drawing';
+import { InferenceLike } from '../inference/inference';
+import { DeviceModuleV2, isSysModule } from '../module/module';
 
-export const SENSOR_SIZE = new Point2D(4056, 3040);
-
-export enum DeviceType {
-  Type2 = '00',
-  Type3 = '01',
-  Type4 = '02',
-  Type3W = '03',
-  EdgeBox = '10',
-  Undefined = '99',
-  RbsRNS = '1001',
-  RbsFMS = '1101',
-  Empty = '',
-}
-
-export interface UpdateModuleConfigurationPayloadV2 {
-  property: {
-    configuration: {};
-  };
-}
-
-export type DeviceConnectionState = '' | 'Disconnected' | 'Connected';
-export interface DeviceGroupBase extends BaseObject {
-  device_group_id: string;
-  device_type: `${DeviceType}` | '';
-}
-export interface DeviceGroupLink extends DeviceGroupBase {
-  description: string;
-  ins_id: string;
-  ins_date: string;
-  upd_id: string;
-  upd_date: string;
-}
-export interface DeviceBase extends BaseObject {
-  device_id: SystemId;
-  device_type: `${DeviceType}`;
-  display_device_type: string;
-  place: string;
-  property: {
-    device_name: SystemId;
-    internal_device_id: string;
-  };
-  models:
-    | {
-        model_version_id: string;
-      }[]
-    | '';
-  device_groups: DeviceGroupLink[];
-  connectionState: DeviceConnectionState;
-  lastActivityTime: string;
-}
-export interface DeviceListItem extends DeviceBase {}
+export const SENSOR_SIZE = new Point2D(2028, 1520);
+export const SYSTEM_MODULE_ID = '$system';
 
 export interface DeviceModelInfoV2 {
   model_id?: string;
   model_version_id?: string;
 }
 
-export interface DeviceGroupV2 {
-  device_group_id: string;
-  device_type?: string;
-  comment: string;
-  description: string;
-  ins_id?: string;
-  ins_date?: string;
-  upd_id?: string;
-  upd_date?: string;
-}
-
 export enum DeviceStatus {
   Connected = 'Connected',
   Disconnected = 'Disconnected',
   Periodic = 'Periodic',
-  Unknown = 'Unknown',
+  Connecting = 'Connecting',
 }
 
-export interface DeviceV2 {
+export enum DeviceArchetype {
+  UNKNOWN,
+  T3,
+  T5,
+  RASPI,
+}
+
+export enum DeviceType {
+  T3P_LUCID = 'SZP123S-001',
+  T3P_RAYPRUS = 'CSV26',
+  T3WS = 'AIH-IVRW2',
+  T5 = 'AIH-IPRSW',
+  RASPI = 'Raspberry Pi',
+  UNKNOWN = 'unknown',
+}
+
+export interface LocalDevice {
   device_id: string;
   description: string;
   device_name: string;
-  internal_device_id: string;
-  device_type?: string;
+  device_type: string;
   ins_id?: string;
   ins_date?: string;
   upd_id?: string;
@@ -110,8 +64,8 @@ export interface DeviceV2 {
   last_activity_time?: string;
   inactivity_timeout: number;
   models?: DeviceModelInfoV2[];
-  device_groups: DeviceGroupV2[];
   modules?: DeviceModuleV2[];
+  last_known_roi: ROI;
 }
 
 export type ROI = {
@@ -124,18 +78,19 @@ export const DEFAULT_ROI: ROI = {
   size: SENSOR_SIZE,
 };
 
-export interface LocalDevice extends DeviceV2 {
-  port: number;
-  last_known_roi: ROI;
-}
-
-export function isLocalDevice(device: DeviceV2): device is LocalDevice {
-  return 'port' in device;
-}
-
 export interface DeviceListV2 {
   continuation_token: string;
-  devices: DeviceV2[];
+  devices: LocalDevice[];
+}
+
+export interface DeviceFrame {
+  image: string;
+  inference?: InferenceLike;
+  identifier: string;
+}
+
+export interface UpdateModuleConfigurationPayloadV2 {
+  configuration: {};
 }
 
 export interface ModuleConfigurationV2 {
@@ -147,36 +102,22 @@ export interface ModuleConfigurationV2 {
   $metadata: {};
 }
 
-// v1 and v2 api use same minimal response,
-// v1 use comment, v2 use description
-// keep both
-export interface MinimalDeviceListItem {
-  device_id: string;
-  device_type?: `${DeviceType}`;
-  display_device_type?: string;
-  place?: string;
-  comment: string;
-  description: string;
-  ins_id?: string;
-  ins_date?: string;
-  upd_id?: string;
-  upd_date?: string;
-  property: {
-    device_name: string;
-    internal_device_id: string;
-  };
-  connection_state: string;
-  device_groups: MinimalDeviceListItemGroup[];
+export function getSystemModule(device: LocalDevice) {
+  const mod = device.modules?.find(isSysModule);
+  if (mod && isSysModule(mod)) return mod;
+  return undefined;
 }
 
-export interface MinimalDeviceListItemGroup {
-  device_group_id: string;
-  description: string;
-  comment: string;
-  device_type: string;
-}
-
-export interface DeviceFrame {
-  image: string;
-  inference?: Classification | Detection;
+export function deviceTypeToArchetype(deviceType?: string): DeviceArchetype {
+  switch (deviceType) {
+    case DeviceType.T3P_LUCID:
+    case DeviceType.T3P_RAYPRUS:
+    case DeviceType.T3WS:
+      return DeviceArchetype.T3;
+    case DeviceType.T5:
+      return DeviceArchetype.T5;
+    case DeviceType.RASPI:
+      return DeviceArchetype.RASPI;
+  }
+  return DeviceArchetype.UNKNOWN;
 }

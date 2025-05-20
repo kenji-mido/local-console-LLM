@@ -17,8 +17,8 @@
  */
 
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { NumberSpinnerComponent } from './number-spinner.component';
 import { FormsModule } from '@angular/forms';
+import { NumberSpinnerComponent } from './number-spinner.component';
 
 describe('NumberSpinnerComponent', () => {
   let component: NumberSpinnerComponent;

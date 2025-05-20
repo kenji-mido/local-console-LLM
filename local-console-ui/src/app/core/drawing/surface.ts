@@ -40,9 +40,11 @@ export class Surface {
       parseFloat(styles.paddingLeft) + parseFloat(styles.paddingRight),
       parseFloat(styles.paddingTop) + parseFloat(styles.paddingBottom),
     );
-    const finalDimensions = dimm.add(pad.mul(-1));
-    this.canvas.width = finalDimensions.x;
-    this.canvas.height = finalDimensions.y;
+    const finalDimensions = dimm.add(pad.mul(-1)).round();
+    if (this.canvas.width !== finalDimensions.x)
+      this.canvas.width = finalDimensions.x;
+    if (this.canvas.height !== finalDimensions.y)
+      this.canvas.height = finalDimensions.y;
     return finalDimensions;
   }
 

@@ -16,7 +16,6 @@
 from local_console.fastapi.dependencies.deploy import firmware_manager
 from starlette.testclient import TestClient
 
-from tests.fixtures.fastapi import fa_client
 from tests.strategies.samplers.files import FileInfoSampler
 
 

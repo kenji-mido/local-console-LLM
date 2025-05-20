@@ -16,12 +16,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { CommonModule } from '@angular/common';
 import { Component } from '@angular/core';
+import { MatSidenavModule } from '@angular/material/sidenav';
 import { RouterOutlet } from '@angular/router';
+import { DeviceNotificationsHandlerComponent } from './core/device/device-notifications/device-notifications-handler.component';
 import { HeaderComponent } from './layout/header/header.component';
 import { SidebarComponent } from './layout/sidebar/sidebar.component';
-import { MatSidenavModule } from '@angular/material/sidenav';
-import { CommonModule } from '@angular/common';
 
 @Component({
   selector: 'app-root',
@@ -32,6 +33,7 @@ import { CommonModule } from '@angular/common';
     SidebarComponent,
     MatSidenavModule,
     CommonModule,
+    DeviceNotificationsHandlerComponent,
   ],
   templateUrl: './app.component.html',
   styleUrl: './app.component.scss',

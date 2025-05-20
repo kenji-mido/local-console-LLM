@@ -1,0 +1,30 @@
+#!/bin/sh
+set -e
+
+INSTALL_DIR="/opt/system-stub"
+LOGFILE="/var/log/system-stub.log"
+SERVICE_DIR="/etc/systemd/system"
+SYSTEM_APP_CONF_DIR="/etc/system-app/"
+
+# Prepare virtualenv
+python3 -m venv "$INSTALL_DIR/venv" --system-site-packages
+"$INSTALL_DIR/venv/bin/pip" install --upgrade pip
+"$INSTALL_DIR/venv/bin/pip" install --upgrade -r "$INSTALL_DIR/requirements.txt"
+"$INSTALL_DIR/venv/bin/pip" install ${INSTALL_DIR}
+
+# install service and evp-agent override
+mkdir -p ${SYSTEM_APP_CONF_DIR}
+mkdir -p ${SERVICE_DIR}/evp-agent.service.d/
+cp ${INSTALL_DIR}/override.conf         ${SERVICE_DIR}/evp-agent.service.d/
+cp ${INSTALL_DIR}/system-stub.service   ${SERVICE_DIR}
+# Install only if non existent
+[ -f "${SYSTEM_APP_CONF_DIR}/env.conf" ] || cp ${INSTALL_DIR}/env.conf ${SYSTEM_APP_CONF_DIR}
+
+# Ensure log file exists
+touch "$LOGFILE"
+
+# Make it available from /usr/bin
+ln -sf ${INSTALL_DIR}/venv/bin/system-stub /usr/bin
+
+systemctl daemon-reexec
+systemctl daemon-reload

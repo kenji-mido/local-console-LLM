@@ -59,6 +59,20 @@ async def test_server_main_happy_path(nursery):
 
 
 @pytest.mark.trio
+async def test_server_main_config_binding(nursery):
+    with (
+        patch("local_console.commands.server.Config") as mock_config,
+        patch("local_console.commands.server.serve"),
+        patch("local_console.commands.server.shutdown_trigger"),
+        patch("local_console.commands.server.is_port_open", return_value=False),
+    ):
+        retcode = await server_main()
+        assert retcode == 0
+
+        assert mock_config.return_value.bind == [f"0.0.0.0:{LISTEN_PORT}"]
+
+
+@pytest.mark.trio
 async def test_server_main_some_server_error(nursery, caplog):
 
     mock_server = AsyncMock()

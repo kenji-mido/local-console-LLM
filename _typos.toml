@@ -4,6 +4,7 @@
 extend-ignore-identifiers-re = [
     # This is a valid Unicode character category
     "Nd",
+    "PNG"
 ]
 
 [default.extend-words]

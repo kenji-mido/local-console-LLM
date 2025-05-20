@@ -17,13 +17,14 @@
  */
 
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { DeviceManagementScreen, Tab } from './device-management.screen';
-import { DeviceService } from '@app/core/device/device.service';
-import { of } from 'rxjs';
-import { DeviceStatus, isLocalDevice } from '@app/core/device/device';
-import { DeviceList, DeviceModule } from '@samplers/device';
-import { DialogService } from '@app/layout/dialogs/dialog.service';
 import { MatDialogModule } from '@angular/material/dialog';
+import { DeviceStatus } from '@app/core/device/device';
+import { DeviceService } from '@app/core/device/device.service';
+import { DialogService } from '@app/layout/dialogs/dialog.service';
+import { ButtonVariant } from '@app/layout/dialogs/user-prompt/action';
+import { DeviceList } from '@samplers/device';
+import { of } from 'rxjs';
+import { DeviceManagementScreen, Tab } from './device-management.screen';
 import { UserPromptNameDialog } from './user-prompt-name/user-prompt-name.dialog';
 
 class MockDeviceService {
@@ -32,18 +33,13 @@ class MockDeviceService {
   loadDevices = jest.fn();
   deleteDevice = jest.fn();
   updateDeviceName = jest.fn();
-  getDeviceV2 = jest.fn();
+  getDevice = jest.fn();
 }
 
 class MockDialogService {
   prompt = jest.fn();
   open = jest.fn();
 }
-
-jest.mock('@app/core/device/device', () => ({
-  ...jest.requireActual('@app/core/device/device'),
-  isLocalDevice: jest.fn(),
-}));
 
 describe('DeviceManagementScreen', () => {
   let component: DeviceManagementScreen;
@@ -99,12 +95,12 @@ describe('DeviceManagementScreen', () => {
     // Check device statuses from the sampler
     expect(devices[0].connection_state).toBe(DeviceStatus.Connected);
     expect(devices[1].connection_state).toBe(DeviceStatus.Disconnected);
-    expect(devices[2].connection_state).toBe(DeviceStatus.Periodic);
+    expect(devices[2].connection_state).toBe(DeviceStatus.Connecting);
   });
 
   it('should select a device and update selectedDeviceId', async () => {
     const device = DeviceList.sample().devices[0];
-    deviceService.getDeviceV2.mockReturnValue(Promise.resolve(device));
+    deviceService.getDevice.mockReturnValue(Promise.resolve(device));
     await component.onDeviceSelected(device);
 
     expect(component.selectedDeviceId).toBe(device.device_id);
@@ -123,6 +119,11 @@ describe('DeviceManagementScreen', () => {
   });
 
   it('should resize device details pane on drag move', () => {
+    // We select a device to make the details pane appear
+    const device = DeviceList.sample().devices[0];
+    deviceService.getDevice.mockReturnValue(Promise.resolve(device));
+    component.onDeviceSelected(device);
+
     const initialInfoSize = component.initialInfoSize;
     const mockEvent = {
       distance: { y: -10 },
@@ -141,8 +142,6 @@ describe('DeviceManagementScreen', () => {
 
     dialogService.prompt.mockReturnValue(Promise.resolve({ id: 'delete' }));
 
-    (isLocalDevice as unknown as jest.Mock).mockReturnValue(true);
-
     // select a device
     component.onDeviceSelected(device);
     expect(component.selectedDevice).toBe(device);
@@ -152,8 +151,11 @@ describe('DeviceManagementScreen', () => {
     expect(dialogService.prompt).toHaveBeenCalledWith({
       message: `'${device.device_name}' will be removed from Local Console.  Existing image and metadata will not be removed.`,
       title: 'Are you sure you want to delete the device?',
-      actionButtons: [{ id: 'delete', text: 'Delete', variant: 'primary' }],
+      actionButtons: [
+        { id: 'delete', text: 'Delete', variant: ButtonVariant.negative },
+      ],
       type: 'warning',
+      showCancelButton: true,
     });
 
     expect(deviceService.deleteDevice).toHaveBeenCalled();
@@ -190,8 +192,13 @@ describe('DeviceManagementScreen', () => {
 
     expect(dialogService.open).toHaveBeenCalledWith(UserPromptNameDialog, {
       title: 'Rename Device',
-      actionButtons: [{ id: 'rename', text: 'Rename', variant: 'primary' }],
+      message: '',
+      actionButtons: [
+        { id: 'rename', text: 'Rename', variant: ButtonVariant.normal },
+      ],
       type: 'warning',
+      showCancelButton: true,
+      deviceName: device.device_name,
     });
 
     expect(deviceService.updateDeviceName).toHaveBeenCalledWith(
@@ -220,7 +227,6 @@ describe('DeviceManagementScreen', () => {
     const device2 = DeviceList.sample().devices[1];
 
     dialogService.prompt.mockReturnValue(Promise.resolve({ id: 'delete' }));
-    (isLocalDevice as unknown as jest.Mock).mockReturnValue(true);
 
     component.onDeviceSelected(device);
     await component.onDelete(device2);

@@ -16,21 +16,31 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { Component, Output, EventEmitter, Input } from '@angular/core';
-import { FormGroup, FormControl } from '@angular/forms';
-import { RadioButtonComponent } from '../../../components/radio-button/radio-button.component';
+import { CommonModule } from '@angular/common';
+import {
+  AfterViewInit,
+  Component,
+  EventEmitter,
+  Input,
+  Output,
+  viewChild,
+} from '@angular/core';
+import { FormControl, FormGroup, ReactiveFormsModule } from '@angular/forms';
+import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { InfotipDirective } from '@app/core/feedback/infotip.component';
+import { NIC } from '@app/core/nic/nic';
+import { NICService } from '@app/core/nic/nic.service';
+import { asyncState } from '@app/core/signal/async-state-manager';
 import { ipAddressValidator } from '../../../../core/common/validation';
 import { ROUTER_LINKS } from '../../../../core/config/routes';
-import { CardComponent } from '../../../components/card/card.component';
-import { CommonModule } from '@angular/common';
-import { TextInputComponent } from '../../../components/text-input/text-input.component';
-import { ReactiveFormsModule } from '@angular/forms';
-import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
-import { ToggleComponent } from '../../../components/toggle/toggle.component';
+import {
+  SearchInputComponent,
+  SearchInputItem,
+} from '../../../../core/input/search-input/search-input';
 import { QrService } from '../../../../core/qr/qr.service';
 import { QrcodeComponent } from '../../../../core/qr/qrcode.component';
-import { FeaturesService } from '../../../../core/common/features.service';
-import { InfotipDirective } from '@app/core/feedback/infotip.component';
+import { TextInputComponent } from '../../../components/text-input/text-input.component';
+import { ToggleComponent } from '../../../components/toggle/toggle.component';
 
 type InputType = 'text' | 'number' | 'email' | 'password';
 export interface FormItems {
@@ -42,6 +52,8 @@ export interface FormItems {
   placeholder?: string;
 }
 
+type SearchableNICs = NIC & SearchInputItem;
+
 @Component({
   selector: 'app-network-settings',
   templateUrl: './network-settings.pane.html',
@@ -49,21 +61,21 @@ export interface FormItems {
   standalone: true,
   imports: [
     CommonModule,
-    CardComponent,
     TextInputComponent,
-    RadioButtonComponent,
     ReactiveFormsModule,
     MatProgressSpinnerModule,
     ToggleComponent,
     QrcodeComponent,
     InfotipDirective,
+    SearchInputComponent,
   ],
 })
-export class NetworkSettingsPane {
+export class NetworkSettingsPane implements AfterViewInit {
   theme = 'light';
   PATH = ROUTER_LINKS;
   wifiSettings = false;
   networkConfigure: boolean = false;
+  availableNics = asyncState<SearchableNICs[]>([]);
   qrcodeFormGroup = new FormGroup({
     // ipv4 settings
     ip_address: new FormControl('', [ipAddressValidator]),
@@ -109,7 +121,7 @@ export class NetworkSettingsPane {
       label: 'NTP',
       type: 'text',
       maxLength: '1000',
-      placeholder: 'pool.ntp.org',
+      placeholder: 'ex: pool.ntp.org',
     },
   ];
   qrcodeIpv4FormItems: FormItems[] = [
@@ -178,14 +190,14 @@ export class NetworkSettingsPane {
       label: 'SSID',
       type: 'text',
       maxLength: '64',
-      placeholder: 'Enter Wi-Fi SSID',
+      placeholder: 'ex: WLAN_1234',
     },
     {
       name: 'wifi_pass',
       label: 'Password',
       type: 'password',
       maxLength: '256',
-      placeholder: 'Enter Wi-Fi password',
+      placeholder: 'ex: a76b3c832ef900',
     },
   ];
 
@@ -194,9 +206,7 @@ export class NetworkSettingsPane {
   qrImage?: string;
   qrCreatedDate?: Date;
   qrExpiredDate?: Date;
-  get features() {
-    return this.featuresService.getFeatures();
-  }
+
   @Output() qrCode = new EventEmitter();
   @Input()
   set mqttPort(newPort: number | undefined) {
@@ -206,14 +216,24 @@ export class NetworkSettingsPane {
       });
     }
   }
+  nicsPanel = viewChild(SearchInputComponent);
 
   constructor(
     private qrs: QrService,
-    private featuresService: FeaturesService,
+    private nicService: NICService,
   ) {}
+
+  ngAfterViewInit() {
+    this.availableNics.capture(
+      this.nicService
+        .getAvailableNICs()
+        .then((nics) => nics.map((nic) => ({ value: nic.ip, ...nic }))),
+    );
+  }
 
   clearAll() {
     this.qrcodeFormGroup.reset(this.qrcodeFormGroupInit);
+    this.nicsPanel()?.reset();
   }
 
   async generateQRCode() {
@@ -223,10 +243,7 @@ export class NetworkSettingsPane {
       ...this.qrcodeFormGroup.value,
       auto: true,
     };
-    if (!this.features.device_registration.mqtt_port) {
-      delete payload.mqtt_port;
-      delete payload.mqtt_host;
-    }
+
     await this.qrs.generateQrCode(payload).then(
       (resp) => {
         this.qrImage = `data:image/jpeg;base64,${resp.contents}`;

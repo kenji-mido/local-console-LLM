@@ -21,6 +21,7 @@ from local_console.core.firmwares import FirmwareManager
 from local_console.core.models import Model
 from local_console.core.models import ModelManager
 from pydantic import BaseModel
+from pydantic import ConfigDict
 
 
 class EdgeAppIn(BaseModel):
@@ -33,6 +34,8 @@ class DeployConfigIn(BaseModel):
     fw_ids: list[str]
     edge_apps: list[EdgeAppIn]
     model_ids: list[str]
+
+    model_config = ConfigDict(protected_namespaces=())
 
 
 class DeployConfig(BaseModel):

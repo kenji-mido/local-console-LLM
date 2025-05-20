@@ -18,6 +18,10 @@
 
 import { DTDLReqInfoV2, DTDLResInfoV2 } from './dtdl';
 
+export interface EdgeAppModuleConfigurationPatchV2 {
+  configuration?: EdgeAppModuleConfigurationV2;
+}
+
 // Module: edge app
 //  - configuration: TODO: Spec unknown
 //  - state

@@ -16,38 +16,31 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { DIALOG_DATA, DialogRef } from '@angular/cdk/dialog';
+import { CommonModule } from '@angular/common';
 import {
   Component,
   EventEmitter,
   Inject,
   OnDestroy,
   Output,
+  TemplateRef,
 } from '@angular/core';
-import {
-  ButtonComponent,
-  Variant,
-} from '../../components/button/button.component';
-import { logError } from '../../../core/common/logging';
-import { DIALOG_DATA, DialogModule, DialogRef } from '@angular/cdk/dialog';
-import { DialogActionComponent } from '../../components/dialog-action/dialog-action.component';
-import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatIconModule } from '@angular/material/icon';
-import { CommonModule } from '@angular/common';
-import { MatDialogModule } from '@angular/material/dialog';
+import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { logError } from '../../../core/common/logging';
 import { DialogCloseDirective } from '../dialog.close.directive';
-
-export interface ActionButton {
-  id: string;
-  text: string;
-  variant: Variant;
-}
+import { ActionButton, ButtonVariant } from './action';
 
 export interface UserPromptDialogData {
   title: string;
-  message: string;
+  message: string | TemplateRef<any>;
   type?: 'error' | 'warning' | 'success' | 'info';
   actionButtons?: ActionButton[];
   closeButtonText?: string;
+  showCancelButton: boolean;
+  btnType?: ButtonVariant;
+  context?: any;
 }
 
 @Component({
@@ -56,15 +49,14 @@ export interface UserPromptDialogData {
   styleUrls: ['./user-prompt.dialog.scss'],
   standalone: true,
   imports: [
-    DialogActionComponent,
-    ButtonComponent,
     MatProgressSpinnerModule,
     MatIconModule,
-    CommonModule,
     DialogCloseDirective,
+    CommonModule,
   ],
 })
 export class UserPromptDialog implements OnDestroy {
+  ButtonVariant = ButtonVariant;
   @Output() isNotCancelled = new EventEmitter();
 
   theme = 'light';
@@ -85,5 +77,9 @@ export class UserPromptDialog implements OnDestroy {
     } catch (err: any) {
       logError(err);
     }
+  }
+
+  isTemplate(message: string | TemplateRef<any>): message is TemplateRef<any> {
+    return message instanceof TemplateRef;
   }
 }

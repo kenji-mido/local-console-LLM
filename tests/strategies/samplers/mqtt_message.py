@@ -22,9 +22,12 @@ from local_console.core.camera.enums import MQTTTopics
 
 
 class MockMQTTMessage:
-    def __init__(self, topic: str, payload):
+    def __init__(self, topic: str, payload: Any):
         self.topic = topic
         self.payload = payload
+
+    def __str__(self) -> str:
+        return f"MockMQTTMessage(topic={self.topic}, payload={self.payload})"
 
     @classmethod
     def config_status(

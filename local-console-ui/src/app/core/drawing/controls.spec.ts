@@ -17,9 +17,9 @@
  */
 
 import { Controls } from './controls';
-import { Surface } from './surface';
-import { Scene } from './scene';
 import { Box, Point2D } from './drawing';
+import { Scene } from './scene';
+import { Surface } from './surface';
 
 class MockContext {
   clearRect = jest.fn();

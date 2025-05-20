@@ -18,13 +18,16 @@ import logging
 from collections import defaultdict
 from typing import Annotated
 from typing import Callable
+from typing import Optional
 
 import trio
 import typer
 from local_console.clients.agent import Agent
+from local_console.commands.rpc import rpc_task
+from local_console.commands.utils import find_device_config
 from local_console.core.camera.enums import MQTTTopics
-from local_console.core.config import config_obj
-from local_console.core.schemas.schemas import OnWireProtocol
+from local_console.core.helpers import read_only_loop
+from local_console.core.schemas.schemas import DeviceConnection
 from local_console.plugin import PluginBase
 
 logger = logging.getLogger(__name__)
@@ -46,14 +49,27 @@ def logs(
             help="Max seconds to wait for a module instance log to be reported",
         ),
     ] = 10,
+    device: Annotated[
+        Optional[str],
+        typer.Option(
+            "--device",
+            "-d",
+            help="The name of the device from which to retrieve the logs.",
+        ),
+    ] = None,
+    port: Annotated[
+        Optional[int],
+        typer.Option(
+            help="An alternative to --device, using the port to identify the device instead of its name. Ignored if the --device option is specified."
+        ),
+    ] = None,
 ) -> None:
-    config = config_obj.get_config()
-    config_device = config_obj.get_active_device_config()
-    schema = OnWireProtocol.from_iot_spec(config.evp.iot_platform)
-    agent = Agent(config_device.mqtt.host, config_device.mqtt.port, schema)
+    config_device = find_device_config(device, port)
+    agent = Agent(config_device.mqtt.port)
     try:
-        trio.run(agent.request_instance_logs, instance_id)
-        agent.read_only_loop(
+        trio.run(request_instance_logs, instance_id, config_device)
+        read_only_loop(
+            agent,
             subs_topics=[MQTTTopics.TELEMETRY.value],
             message_task=on_message_logs(instance_id, timeout),
         )
@@ -61,6 +77,13 @@ def logs(
         raise SystemExit(
             f"Could not send command for enabling logs to device {instance_id}"
         )
+
+
+async def request_instance_logs(
+    instance_id: str,
+    config: DeviceConnection,
+) -> None:
+    await rpc_task(instance_id, "$agent/set", '{"log_enable": true}', config)
 
 
 def on_message_logs(instance_id: str, timeout: int) -> Callable:

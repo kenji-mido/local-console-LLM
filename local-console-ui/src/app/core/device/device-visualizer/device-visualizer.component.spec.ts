@@ -16,33 +16,33 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import {
-  ComponentFixture,
-  fakeAsync,
-  TestBed,
-  tick,
-} from '@angular/core/testing';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
 
+import { Component, Input } from '@angular/core';
+import { Box, BoxLike, Drawing, Point2D } from '@app/core/drawing/drawing';
+import {
+  DrawingState,
+  DrawingSurfaceComponent,
+} from '@app/core/drawing/drawing-surface.component';
+import { Mode } from '@app/core/inference/inference';
+import { DialogService } from '@app/layout/dialogs/dialog.service';
+import { Device } from '@samplers/device';
+import { waitForExpect } from '@test/utils';
+import { Subject } from 'rxjs';
+import { DeviceFrame, ROI, SENSOR_SIZE } from '../device';
+import { DeviceStreamingService } from './device-streaming.service';
 import {
   DeviceVisualizerComponent,
-  MAX_ERRORS_TERMINATION,
+  MAX_INACTIVITY_BEFORE_DRAWING_CLEAR_MS,
+  MAX_INACTIVITY_BEFORE_INFERENCE_STOP_MS,
 } from './device-visualizer.component';
-import { Device } from '@samplers/device';
-import { DialogService } from '@app/layout/dialogs/dialog.service';
-import { Subject } from 'rxjs';
-import { Component, Input } from '@angular/core';
-import { InferenceResultsService } from '@app/core/inference/inferenceresults.service';
-import { Box, BoxLike, Drawing, Point2D } from '@app/core/drawing/drawing';
-import { DrawingSurfaceComponent } from '@app/core/drawing/drawing-surface.component';
-import { Mode } from '@app/core/inference/inference';
-import { waitForExpect } from '@test/utils';
-import { ROI, SENSOR_SIZE } from '../device';
 
-class MockInferencesService {
-  getInferences = jest.fn();
-  getInferencesAsFrame = jest.fn();
-  stopInferences = jest.fn();
+class MockDeviceStreamingService implements Required<DeviceStreamingService> {
+  getDeviceStreamAsFrames = jest.fn();
+  stopStreaming = jest.fn();
   isDeviceStreaming = jest.fn();
+  setupStreaming = jest.fn();
+  getStreamingMode = jest.fn();
 }
 class MockDialogService {
   alert = jest.fn();
@@ -62,14 +62,17 @@ describe('StreamingPreviewComponent', () => {
   let component: DeviceVisualizerComponent;
   let fixture: ComponentFixture<DeviceVisualizerComponent>;
   let dialogService: MockDialogService;
-  let inferencesService: MockInferencesService;
+  let streamingService: jest.Mocked<Required<DeviceStreamingService>>;
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [DeviceVisualizerComponent, MockDrawingSurfaceComponent],
       providers: [
         { provide: DialogService, useClass: MockDialogService },
-        { provide: InferenceResultsService, useClass: MockInferencesService },
+        {
+          provide: DeviceStreamingService,
+          useClass: MockDeviceStreamingService,
+        },
       ],
     })
       .overrideComponent(DeviceVisualizerComponent, {
@@ -81,9 +84,9 @@ describe('StreamingPreviewComponent', () => {
       .compileComponents();
 
     fixture = TestBed.createComponent(DeviceVisualizerComponent);
-    inferencesService = TestBed.inject(
-      InferenceResultsService,
-    ) as unknown as MockInferencesService;
+    streamingService = TestBed.inject(
+      DeviceStreamingService,
+    ) as unknown as MockDeviceStreamingService;
     dialogService = TestBed.inject(
       DialogService,
     ) as unknown as MockDialogService;
@@ -98,159 +101,124 @@ describe('StreamingPreviewComponent', () => {
 
   describe('previewing', () => {
     it('should start preview if not already streaming and a device is selected', async () => {
-      const device = Device.sampleLocal();
+      const device = Device.sample();
 
-      const mock = inferencesService.getInferencesAsFrame.mockReturnValue({
-        stream: new Subject(),
-        detach: jest.fn(),
-      });
+      streamingService.getDeviceStreamAsFrames.mockResolvedValue(new Subject());
       await component.setDevice(device);
 
       await component.startPreview();
 
-      expect(component.streaming).toBeTruthy();
-      expect(mock).toHaveBeenCalledWith(
+      expect(component.streaming()).toBeTruthy();
+      expect(streamingService.getDeviceStreamAsFrames).toHaveBeenCalledWith(
         device.device_id,
-        expect.any(Point2D),
-        expect.any(Point2D),
-        expect.any(Number),
-        Mode.ImageOnly,
       );
     });
 
-    it('should handle errors during streaming and stop after max errors', async () => {
-      const device = Device.sampleLocal();
-      const stream = new Subject();
-      const detach = jest.fn();
+    it('should handle errors during streaming and stop after timeout', async () => {
+      const device = Device.sample();
+      const stream = new Subject<DeviceFrame | Error>();
 
-      inferencesService.getInferencesAsFrame.mockReturnValue({
-        stream,
-        detach,
-      });
+      streamingService.getDeviceStreamAsFrames.mockResolvedValue(stream);
       await component.setDevice(device);
-
       await component.startPreview();
-      expect(component.streaming).toBeTruthy();
+      expect(component.streaming()).toBeTruthy();
 
-      const errorsToTest = MAX_ERRORS_TERMINATION + 1; // simulate one extra to test boundary
-      for (let i = 0; i < errorsToTest; i++) {
-        stream.next(new Error('Stream error'));
-      }
+      const nowSpy = jest.spyOn(component as any, 'getNow');
+      nowSpy.mockReturnValueOnce(0);
+      nowSpy.mockReturnValueOnce(MAX_INACTIVITY_BEFORE_DRAWING_CLEAR_MS + 1);
+      nowSpy.mockReturnValueOnce(MAX_INACTIVITY_BEFORE_INFERENCE_STOP_MS + 1);
+
+      // first error, show "Getting image..."
+      stream.next(new Error('Stream error'));
 
       await waitForExpect(() => {
-        expect(component.errors).toBe(MAX_ERRORS_TERMINATION);
-        expect(component.streaming).toBeFalsy();
-        expect(detach).toHaveBeenCalled();
+        expect(component.streaming()).toBeTruthy();
+        expect(dialogService.alert).not.toHaveBeenCalledWith();
+      });
+
+      // last error, stop inference
+      stream.next(new Error('Stream error'));
+
+      await waitForExpect(() => {
+        expect(component.streaming()).toBeFalsy();
         expect(dialogService.alert).toHaveBeenCalledWith(
           'Preview stopped',
-          `The device failed to produce an image too many times (${MAX_ERRORS_TERMINATION})`,
+          `The device failed to produce an image after ${MAX_INACTIVITY_BEFORE_INFERENCE_STOP_MS} milliseconds`,
           'error',
         );
       });
     });
 
     it('should unsubscribe and stop streaming when component is destroyed', async () => {
-      const device = Device.sampleLocal();
-      const detach = jest.fn();
-      inferencesService.getInferencesAsFrame.mockReturnValue({
-        stream: new Subject(),
-        detach: detach,
-      });
+      const device = Device.sample();
+      streamingService.getDeviceStreamAsFrames.mockResolvedValue(new Subject());
       await component.setDevice(device);
 
       await component.startPreview();
 
       component.ngOnDestroy();
       await waitForExpect(() => {
-        expect(component.streaming).toBeFalsy();
-        expect(detach).toHaveBeenCalled();
+        expect(component.streaming()).toBeFalsy();
       });
     });
 
     it('should reset everything even if component reports as not streaming', async () => {
-      const device = Device.sampleLocal();
-      const detach = jest.fn();
+      const device = Device.sample();
 
-      inferencesService.getInferencesAsFrame.mockReturnValue({
-        stream: new Subject(),
-        detach: detach,
-      });
+      streamingService.getDeviceStreamAsFrames.mockResolvedValue(new Subject());
       await component.setDevice(device);
 
       await component.startPreview();
-      component.streaming = false;
+      component.drawingState.set(DrawingState.Disabled);
 
       component.stopPreview();
-
-      expect(detach).toHaveBeenCalled();
     });
 
     it('should start preview in Mode.ImageOnly', async () => {
-      const device = Device.sampleLocal();
+      const device = Device.sample();
       component.mode = Mode.ImageOnly;
 
       await component.setDevice(device);
 
-      const mock = inferencesService.getInferencesAsFrame.mockReturnValue({
-        stream: new Subject(),
-        detach: jest.fn(),
-      });
+      streamingService.getDeviceStreamAsFrames.mockResolvedValue(new Subject());
 
       await component.startPreview();
 
-      expect(component.streaming).toBeTruthy();
-      expect(mock).toHaveBeenCalledWith(
+      expect(component.streaming()).toBeTruthy();
+      expect(streamingService.getDeviceStreamAsFrames).toHaveBeenCalledWith(
         device.device_id,
-        expect.any(Point2D),
-        expect.any(Point2D),
-        expect.any(Number),
-        Mode.ImageOnly,
       );
     });
 
     it('should start preview in Mode.ImageAndInferenceResult', async () => {
-      const device = Device.sampleLocal();
+      const device = Device.sample();
       component.mode = Mode.ImageAndInferenceResult;
 
       await component.setDevice(device);
-      const mock = inferencesService.getInferencesAsFrame.mockReturnValue({
-        stream: new Subject(),
-        detach: jest.fn(),
-      });
+      streamingService.getDeviceStreamAsFrames.mockResolvedValue(new Subject());
 
       await component.startPreview();
 
       expect(component.streaming).toBeTruthy();
-      expect(mock).toHaveBeenCalledWith(
+      expect(streamingService.getDeviceStreamAsFrames).toHaveBeenCalledWith(
         device.device_id,
-        expect.any(Point2D),
-        expect.any(Point2D),
-        expect.any(Number),
-        Mode.ImageAndInferenceResult,
       );
     });
 
     it('should toggle mode and restart preview correctly', async () => {
-      const device = Device.sampleLocal();
+      const device = Device.sample();
 
       await component.setDevice(device);
 
-      const mock = inferencesService.getInferencesAsFrame.mockReturnValue({
-        stream: new Subject(),
-        detach: jest.fn().mockResolvedValue(undefined),
-      });
+      streamingService.getDeviceStreamAsFrames.mockResolvedValue(new Subject());
 
       // Start in ImageOnly mode
       component.mode = Mode.ImageOnly;
       await component.startPreview();
 
-      expect(component.streaming).toBeTruthy();
-      expect(mock).toHaveBeenCalledWith(
+      expect(component.streaming()).toBeTruthy();
+      expect(streamingService.getDeviceStreamAsFrames).toHaveBeenCalledWith(
         device.device_id,
-        expect.any(Point2D),
-        expect.any(Point2D),
-        expect.any(Number),
-        Mode.ImageOnly,
       );
 
       // Change to ImageAndInferenceResult mode and restart
@@ -258,27 +226,23 @@ describe('StreamingPreviewComponent', () => {
       component.mode = Mode.ImageAndInferenceResult;
       await component.startPreview();
 
-      expect(component.streaming).toBeTruthy();
-      expect(mock).toHaveBeenCalledWith(
+      expect(component.streaming()).toBeTruthy();
+      expect(streamingService.getDeviceStreamAsFrames).toHaveBeenCalledWith(
         device.device_id,
-        expect.any(Point2D),
-        expect.any(Point2D),
-        expect.any(Number),
-        Mode.ImageAndInferenceResult,
       );
     });
 
     it('should gracefully shutdown preview and alert user if streaming cannot be started', async () => {
-      const device = Device.sampleLocal();
+      const device = Device.sample();
 
-      inferencesService.getInferencesAsFrame.mockRejectedValue(new Error());
+      streamingService.getDeviceStreamAsFrames.mockRejectedValue(new Error());
       await component.setDevice(device);
 
       const state = await component.startPreview();
 
       expect(state).toBeFalsy();
 
-      expect(inferencesService.stopInferences).toHaveBeenCalled();
+      expect(streamingService.stopStreaming).toHaveBeenCalled();
       expect(dialogService.alert).toHaveBeenCalledWith(
         'Failed to stream',
         expect.any(String),
@@ -287,47 +251,34 @@ describe('StreamingPreviewComponent', () => {
     });
 
     it('should automatically start previewing device if cache is hit', async () => {
-      const device = Device.sampleLocal();
-      const newDevice = Device.sampleLocal(
-        Device.sample('second device', 'second_device'),
-        6543,
-      );
-      const stream = new Subject();
-      const detach = jest.fn().mockResolvedValue(undefined);
-      await component.setDevice(device);
-      inferencesService.getInferencesAsFrame.mockResolvedValue({
-        stream,
-        detach,
+      const device = Device.sample();
+      const newDevice = Device.sample({
+        device_name: 'second device',
+        device_id: '6543',
       });
+      const stream = new Subject<DeviceFrame | Error>();
+      await component.setDevice(device);
+      streamingService.getDeviceStreamAsFrames.mockResolvedValue(new Subject());
       console.log('start...');
       await component.startPreview();
-      console.log('started, streaming is: ' + component.streaming);
+      console.log('started, streaming is: ' + component.streaming());
 
-      expect(component.streaming).toBeTruthy();
-      expect(inferencesService.getInferencesAsFrame).toHaveBeenCalledWith(
+      expect(component.streaming()).toBeTruthy();
+      expect(streamingService.getDeviceStreamAsFrames).toHaveBeenCalledWith(
         device.device_id,
-        expect.any(Point2D),
-        expect.any(Point2D),
-        expect.any(Number),
-        component.mode,
       );
 
-      inferencesService.isDeviceStreaming.mockReturnValue(true);
+      streamingService.isDeviceStreaming.mockReturnValue(true);
 
       await component.setDevice(newDevice);
-      expect(component.streaming).toBeTruthy();
+      expect(component.streaming()).toBeTruthy();
 
       await waitForExpect(() => {
-        expect(detach).toHaveBeenCalled();
-        expect(inferencesService.isDeviceStreaming).toHaveBeenCalledWith(
+        expect(streamingService.isDeviceStreaming).toHaveBeenCalledWith(
           newDevice.device_id,
         );
-        expect(inferencesService.getInferencesAsFrame).toHaveBeenCalledWith(
+        expect(streamingService.getDeviceStreamAsFrames).toHaveBeenCalledWith(
           newDevice.device_id,
-          expect.any(Point2D),
-          expect.any(Point2D),
-          expect.any(Number),
-          component.mode,
         );
       });
     });
@@ -354,36 +305,37 @@ describe('StreamingPreviewComponent', () => {
 
     describe('makeROIEffective', () => {
       it('should set effective ROI, stop inference stream, emit ROI, and start preview', async () => {
-        const device = Device.sampleLocal();
+        const device = Device.sample();
         await component.setDevice(device);
         component.roi = {
           offset: new Point2D(10, 10),
           size: new Point2D(20, 20),
         };
         let emittedROI: ROI | undefined;
-        const detach = jest.fn();
-        inferencesService.getInferencesAsFrame.mockReturnValue({
-          stream: new Subject(),
-          detach: detach,
-        });
+        streamingService.getDeviceStreamAsFrames.mockResolvedValue(
+          new Subject(),
+        );
         component.roiSet$.subscribe((roi) => (emittedROI = roi)); // Subscribe to observe emitted ROI
 
         await component.makeROIEffective();
 
-        expect(inferencesService.stopInferences).toHaveBeenCalled();
-        expect(inferencesService.getInferencesAsFrame).toHaveBeenCalledWith(
+        expect(streamingService.stopStreaming).toHaveBeenCalled();
+        expect(streamingService.setupStreaming).toHaveBeenCalledWith(
           device.device_id,
           new Point2D(10, 10),
           new Point2D(20, 20),
-          expect.any(Number),
           component.mode,
+          'custom',
+        );
+        expect(streamingService.getDeviceStreamAsFrames).toHaveBeenCalledWith(
+          device.device_id,
         );
       });
     });
 
     describe('resetROI', () => {
       it('should reset ROI and effective ROI, stop inference stream, emit ROI, and start preview', async () => {
-        const device = Device.sampleLocal();
+        const device = Device.sample();
         await component.setDevice(device);
         let emittedROI: ROI | undefined;
         component.roiSet$.subscribe((roi) => (emittedROI = roi)); // Subscribe to observe emitted ROI
@@ -395,13 +347,9 @@ describe('StreamingPreviewComponent', () => {
         expect(component.effectiveRoi.size).toEqual(SENSOR_SIZE.clone());
         expect(component.roi.offset).toEqual(new Point2D(0, 0));
         expect(component.roi.size).toEqual(SENSOR_SIZE.clone());
-        expect(inferencesService.stopInferences).toHaveBeenCalled();
-        expect(inferencesService.getInferencesAsFrame).toHaveBeenCalledWith(
+        expect(streamingService.stopStreaming).toHaveBeenCalled();
+        expect(streamingService.getDeviceStreamAsFrames).toHaveBeenCalledWith(
           device.device_id,
-          new Point2D(0, 0),
-          SENSOR_SIZE,
-          expect.any(Number),
-          component.mode,
         );
         expect(emittedROI).toEqual(component.effectiveRoi);
       });

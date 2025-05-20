@@ -15,6 +15,7 @@
 # SPDX-License-Identifier: Apache-2.0
 from local_console.core.camera.schemas import DeviceStateInformation
 from local_console.core.device_services import DeviceServices
+from local_console.core.schemas.schemas import DeviceID
 from local_console.fastapi.routes.deploy_history.dto import DeviceDeployHistoryInfo
 
 
@@ -26,13 +27,17 @@ class DeploymentManager:
 
     def __init__(self, device_service: DeviceServices) -> None:
         # map `deploy_id` to list of `device_id`
-        self._device_deployments: dict[str, set[int]] = {}
+        self._device_deployments: dict[str, set[DeviceDeployHistoryInfo]] = {}
         self._device_service = device_service
 
-    def add_device_to_deployment(self, deploy_id: str, device_id: int) -> None:
-        self._device_deployments.setdefault(deploy_id, set()).add(device_id)
+    def add_device_to_deployment(self, deploy_id: str, device_id: DeviceID) -> None:
+        self._device_deployments.setdefault(deploy_id, set()).add(
+            self._device_dto_to_history(self._device_service.get_device(device_id))
+        )
 
-    def get_devices_for_deployment(self, deploy_id: str) -> list[int]:
+    def get_devices_for_deployment(
+        self, deploy_id: str
+    ) -> list[DeviceDeployHistoryInfo]:
         return list(self._device_deployments.get(deploy_id, []))
 
     def _device_dto_to_history(
@@ -47,10 +52,5 @@ class DeploymentManager:
     ) -> list[DeviceDeployHistoryInfo]:
         """
         Get a list of device history information (DTOs) for a given deployment.
-        This extends the manager to also interact with DevicesController to fetch device details.
         """
-        device_ids = self.get_devices_for_deployment(deploy_id)
-        return [
-            self._device_dto_to_history(self._device_service.get_device(device_id))
-            for device_id in device_ids
-        ]
+        return list(self._device_deployments.get(deploy_id, []))

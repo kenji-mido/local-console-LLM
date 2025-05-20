@@ -16,12 +16,17 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { NetworkInfo, replaceAsterisks } from './network-info.component';
-import { DeviceV2 } from '@app/core/device/device';
-import { EdgeAppModuleStateV2 } from '@app/core/module/edgeapp';
-import { SysAppModuleStateV2, isSysModuleState } from '@app/core/module/sysapp';
-import { Device } from '@samplers/device';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { LocalDevice } from '@app/core/device/device';
+import { EdgeAppModuleStateV2 } from '@app/core/module/edgeapp';
+import {
+  SysAppModuleConfigV2,
+  SysAppModuleStateV2,
+  isSysModuleConfig,
+  isSysModuleState,
+} from '@app/core/module/sysapp';
+import { Device } from '@samplers/device';
+import { NetworkInfo, replaceAsterisks } from './network-info.component';
 
 describe('DeviceInfoComponent', () => {
   let component: NetworkInfo;
@@ -55,18 +60,18 @@ describe('DeviceInfoComponent', () => {
 
   describe('onNetworkInfoReceived', () => {
     it('should define all elements undefined if device is null', () => {
-      const device: DeviceV2 | null = null;
+      const device: LocalDevice | null = null;
       component.onDeviceInfoReceived(device);
       expect(component.network_info).toEqual(network_info_null);
     });
     it('should define all elements undefined if modules is null', () => {
-      let device: DeviceV2 | null = Device.sample();
+      let device: LocalDevice | null = Device.sample();
       device.modules = undefined;
       component.onDeviceInfoReceived(device);
       expect(component.network_info).toEqual(network_info_null);
     });
     it('should define all elements undefined if not sysmodules', () => {
-      let device: DeviceV2 | null = Device.sample();
+      let device: LocalDevice | null = Device.sample();
       const edge_app_state: EdgeAppModuleStateV2 = { edge_app: undefined };
       if (device.modules?.[0].property.state) {
         device.modules[0].property.state = edge_app_state;
@@ -75,11 +80,16 @@ describe('DeviceInfoComponent', () => {
       expect(component.network_info).toEqual(network_info_null);
     });
     it('should define all elements correctly', () => {
-      let device: DeviceV2 | null = Device.sample();
+      let device: LocalDevice | null = Device.sample();
       component.onDeviceInfoReceived(device);
-      if (isSysModuleState(device.modules?.[0].property.state!)) {
+      if (
+        isSysModuleState(device.modules?.[0].property.state!) &&
+        isSysModuleConfig(device.modules?.[0].property.configuration!)
+      ) {
         let deviceState: SysAppModuleStateV2 =
           device.modules?.[0].property.state!;
+        let deviceConfig: SysAppModuleConfigV2 =
+          device.modules?.[0].property.configuration!;
 
         expect(component.network_info.broker).toEqual(
           deviceState.PRIVATE_endpoint_settings?.endpoint_url,
@@ -88,32 +98,32 @@ describe('DeviceInfoComponent', () => {
           deviceState.PRIVATE_endpoint_settings?.endpoint_port,
         );
         expect(component.network_info.ntpServer).toEqual(
-          deviceState.network_settings?.ntp_url,
+          deviceConfig.network_settings?.ntp_url,
         );
         expect(component.network_info.static).toEqual(true);
         expect(component.network_info.ipAddress).toEqual(
-          deviceState.network_settings?.ip_address,
+          deviceConfig.network_settings?.ip_address,
         );
         expect(component.network_info.subnetMask).toEqual(
-          deviceState.network_settings?.subnet_mask,
+          deviceConfig.network_settings?.subnet_mask,
         );
         expect(component.network_info.gateway).toEqual(
-          deviceState.network_settings?.gateway_address,
+          deviceConfig.network_settings?.gateway_address,
         );
         expect(component.network_info.DNS).toEqual(
-          deviceState.network_settings?.dns_address,
+          deviceConfig.network_settings?.dns_address,
         );
         expect(component.network_info.proxyUrl).toEqual(
-          deviceState.network_settings?.proxy_url,
+          deviceConfig.network_settings?.proxy_url,
         );
         expect(component.network_info.proxyPort).toEqual(
-          deviceState.network_settings?.proxy_port,
+          deviceConfig.network_settings?.proxy_port,
         );
         expect(component.network_info.proxyUsername).toEqual(
-          deviceState.network_settings?.proxy_user_name,
+          deviceConfig.network_settings?.proxy_user_name,
         );
         expect(component.network_info.proxyPassword).toEqual(
-          replaceAsterisks(deviceState.network_settings?.proxy_password),
+          replaceAsterisks(deviceConfig.network_settings?.proxy_password),
         );
         expect(component.network_info.ssid).toEqual(
           deviceState.wireless_setting?.sta_mode_setting?.ssid,

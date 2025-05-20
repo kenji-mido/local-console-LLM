@@ -35,12 +35,12 @@ class TimeoutConfig(BaseModel):
 
     def num_of_iterations(self) -> int:
         if self.pollin_interval_in_seconds >= self.timeout_in_seconds:
-            logger.warn(
+            logger.warning(
                 f"Invalid waiting times [{self.pollin_interval_in_seconds},{self.timeout_in_seconds}]"
             )
             return 1
         if self.pollin_interval_in_seconds == 0:
-            logger.warn(
+            logger.warning(
                 f"Invalid waiting times [{self.pollin_interval_in_seconds},{self.timeout_in_seconds}]"
             )
             return 100

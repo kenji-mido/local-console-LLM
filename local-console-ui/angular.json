@@ -42,7 +42,8 @@
             ],
             "scripts": [],
             "externalDependencies": [
-              "images/light/preview_loading.gif"
+              "images/light/preview_loading.gif",
+              "images/light/error_image.svg"
             ]
           },
           "configurations": {
@@ -64,13 +65,7 @@
             "development": {
               "optimization": false,
               "extractLicenses": false,
-              "sourceMap": true,
-              "fileReplacements": [
-                {
-                  "replace": "src/environments/environment.ts",
-                  "with": "src/environments/environment.development.ts"
-                }
-              ]
+              "sourceMap": true
             }
           },
           "defaultConfiguration": "production"

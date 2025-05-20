@@ -16,177 +16,420 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { Injectable } from '@angular/core';
 import { HttpParams } from '@angular/common/http';
+import { Injectable } from '@angular/core';
+import { EnvService } from '../common/environment.service';
 import { HttpApiClient } from '../common/http/http';
-import { environment } from '../../../environments/environment';
-import {
-  catchError,
-  from,
-  interval,
-  Subject,
-  switchMap,
-  takeUntil,
-} from 'rxjs';
+import { OperationMode } from '../device/configuration';
+import { DeviceFrame } from '../device/device';
+import { DeviceStreamProvider } from '../device/device-visualizer/device-stream-provider';
+import { getRandomColorOklch } from '../drawing/color';
+import { Point2D } from '../drawing/drawing';
+import { ModuleConfigService } from '../module/module-config.service';
 import {
   Classification,
-  ClassificationPerception,
+  CustomInference,
   Detection,
-  DetectionPerception,
-  Inference,
+  ErrorInference,
+  ExtendedMode,
+  InferenceData,
   InferenceItem,
+  InferenceLike,
+  Inferences,
+  isClassificationInference,
+  isDetectionInference,
+  isErrorInference,
   Mode,
+  TaskType,
 } from './inference';
-import { DeviceFrame } from '../device/device';
-import { getGenerator } from '@app/layout/pages/data-hub/data-hub.utils';
-import { DeviceService } from '../device/device.service';
-import { Point2D } from '../drawing/drawing';
+import {
+  isClassificationItem,
+  isDetectionItem,
+} from './inferenceresults.utils';
+
+export const ALLOWED_MODES: Array<Mode | ExtendedMode> = [
+  Mode.ImageAndInferenceResult,
+  Mode.InferenceResult,
+];
+export const PROCESS_STATE_RUNNING = 2;
+export const PROCESS_STATE_IDLE = 1;
+// TODO: This id should be explored properly
+export const PERMANENT_MODULE_ID = 'node';
+export const ABORTED = new Error('ABORTED');
+
+export class AbortedError extends Error {
+  constructor(message?: string) {
+    super(message ?? 'ABORTED');
+  }
+}
+
+export class UnknownInferenceFormatError extends Error {
+  constructor(message?: string) {
+    super(message ?? 'INFERENCE_FORMAT');
+  }
+}
+
+export interface ImageDescriptor {
+  name: string;
+  sas_url: string;
+}
+
+export interface Images {
+  data: ImageDescriptor[];
+  continuation_token: string | null;
+}
+export interface InferenceImagePairs {
+  data: InferenceImagePairItem[];
+  continuation_token: string | null;
+}
+export interface InferenceImagePairItem {
+  id: string;
+  inference: InferenceData;
+  image: ImageDescriptor;
+}
+
+export const TaskTypeOperationsModeMap = {
+  [TaskType.Classification]: ['classification', 'generic_classification'],
+  [TaskType.ObjectDetection]: ['detection', 'generic_detection'],
+  [TaskType.Custom]: ['custom'],
+};
 
 @Injectable({
   providedIn: 'root',
 })
-export class InferenceResultsService {
-  private inferencePath = `${environment.apiV2Url}/inferenceresults/devices`;
-  private imagePath = `${environment.apiV2Url}/images/devices`;
-  private __activeStreamsCache = new Map<String, boolean>();
-  private used_colors: [[number, number, number]] = [
-    this.getColor(getGenerator()),
-  ];
-
+export class InferenceResultsService implements DeviceStreamProvider {
   constructor(
     private http: HttpApiClient,
-    private devices: DeviceService,
+    private properties: ModuleConfigService,
+    private envService: EnvService,
   ) {}
 
-  async getInference(device_id: string) {
-    return await this.http.get<Inference>(
-      `${this.inferencePath}/${device_id}?limit=1`,
-      undefined,
-      false,
-    );
+  get inferencePath() {
+    return `${this.envService.getApiUrl()}/inferenceresults/devices`;
   }
 
-  async getInferencesAsFrame(
+  get imagePath() {
+    return `${this.envService.getApiUrl()}/images/devices`;
+  }
+
+  async getLastInference(device_id: string, lastIdentifier?: string) {
+    const response = await this.http.get<Inferences>(
+      `${this.inferencePath}/${device_id}?limit=1`,
+      {},
+      false,
+    );
+
+    const inferenceResult = response?.data?.[0]?.inference_result;
+    const identifier = inferenceResult?.Inferences?.[0]?.T;
+
+    if (!inferenceResult || !identifier) {
+      throw new Error('Invalid response structure');
+    }
+
+    if (lastIdentifier === identifier) {
+      throw new Error('No new images found for this device');
+    }
+
+    return { inferenceResult, identifier };
+  }
+
+  async init(
     device_id: string,
     roiOffset: Point2D,
     roiSize: Point2D,
-    intervalTime: number,
-    mode: Mode,
+    mode: Mode | ExtendedMode,
   ) {
-    const detach$ = new Subject<void>();
-    const abortController = new AbortController();
-
-    // Abort the controller when detach$ emits
-    detach$.subscribe(() => {
-      abortController.abort();
-      console.info('Stream aborted for ' + device_id);
-    });
-
-    // First start inferencing (idempotent)
-    await this.devices.startUploadInferenceData(
+    if (!ALLOWED_MODES.includes(mode))
+      throw new Error('Incorrect mode for Inference Results provider');
+    await this.properties.patchModuleConfiguration(
       device_id,
-      roiOffset,
-      roiSize,
-      mode,
-    );
-
-    // Then we can start loop
-    const stream$ = interval(intervalTime).pipe(
-      switchMap(() =>
-        from(
-          this.fetchDeviceFrame(device_id, mode, abortController.signal),
-        ).pipe(
-          catchError((error) => {
-            console.error('Error fetching frame:', error);
-            return [new Error('Cannot get device frame', error)];
-          }),
-          takeUntil(detach$), // Ensure the inner observable completes when detached
-        ),
-      ),
-      takeUntil(detach$), // Ensure the interval completes when detached
-    );
-
-    this.__activeStreamsCache.set(device_id, true);
-    return {
-      stream: stream$,
-      detach: async () => {
-        const completionSignal = new Promise<void>((complete) => {
-          stream$.subscribe({ complete });
-        });
-        detach$.next();
-        detach$.complete();
-        console.info('Detaching stream from ' + device_id);
-        await completionSignal;
+      PERMANENT_MODULE_ID,
+      {
+        common_settings: {
+          process_state: PROCESS_STATE_RUNNING,
+          pq_settings: {
+            image_cropping: {
+              left: roiOffset.x,
+              top: roiOffset.y,
+              width: roiSize.x,
+              height: roiSize.y,
+            },
+          },
+          port_settings: {
+            metadata: {
+              enabled: true,
+            },
+            input_tensor: {
+              enabled: true,
+            },
+          },
+        },
       },
-    };
+    );
   }
 
-  async stopInferences(device_id: string) {
-    this.__activeStreamsCache.set(device_id, false);
-    console.log('Stopping inferences for ' + device_id);
-    return await this.devices.stopUploadInferenceData(device_id);
+  async teardown(device_id: string) {
+    await this.properties.patchModuleConfiguration(
+      device_id,
+      PERMANENT_MODULE_ID,
+      {
+        common_settings: {
+          port_settings: {
+            metadata: {
+              enabled: false,
+            },
+            input_tensor: {
+              enabled: false,
+            },
+          },
+        },
+      },
+    );
   }
 
-  isDeviceStreaming(device_id: string) {
-    return !!this.__activeStreamsCache.get(device_id);
-  }
-
-  private async fetchDeviceFrame(
+  async getNextFrame(
     device_id: string,
-    mode: Mode,
+    mode: Mode | ExtendedMode,
+    expectedType: OperationMode,
     abortSignal: AbortSignal,
+    lastFrame: DeviceFrame | undefined,
   ): Promise<DeviceFrame | Error> {
-    const aborted = new Error('ABORTED');
     try {
-      if (abortSignal.aborted) return aborted;
-      let image = null;
-      let parsedInference = null;
-
-      if (mode === Mode.ImageAndInferenceResult) {
-        const rawInference = await this.getInference(device_id);
-        if (abortSignal.aborted) return aborted;
-
-        const infDef = rawInference.data[0].inference_result.Inferences[0];
-        parsedInference = await this.convertToJson(device_id, infDef.O);
-        if (abortSignal.aborted) return aborted;
-
-        const hits =
-          (<DetectionPerception>parsedInference.perception)
-            .object_detection_list ||
-          (<ClassificationPerception>parsedInference.perception)
-            .classification_list;
-        this.fillInInferenceData(hits);
-
-        image = await this.getInferenceImage(device_id, infDef.T + '.jpg');
-        if (abortSignal.aborted) return aborted;
-      } else if (mode === Mode.ImageOnly) {
-        const imageName = await this.getLatestImageName(device_id);
-        if (abortSignal.aborted) return aborted;
-
-        image = await this.getInferenceImage(device_id, imageName);
-        if (abortSignal.aborted) return aborted;
-      } else {
-        console.error(`Mode ${mode} not supported`);
+      if (abortSignal.aborted) return ABORTED;
+      if (!ALLOWED_MODES.includes(mode))
         return new Error(`Mode ${mode} not supported`);
+
+      const latestPair = await this.getLatestPair(
+        device_id,
+        lastFrame?.identifier,
+      );
+      if (abortSignal.aborted) return ABORTED;
+
+      const identifier = latestPair.id;
+      if (identifier === lastFrame?.identifier) {
+        return new Error('No new frame available');
       }
 
-      return { image, inference: parsedInference } as DeviceFrame;
+      const image = await this.getImageByName(device_id, latestPair.image.name);
+      const infDef = latestPair.inference.inference_result?.Inferences?.[0];
+      if (!infDef) throw new Error('Missing inference data');
+
+      const parsedInference = await this.getInferenceData(
+        device_id,
+        infDef.O,
+        !!infDef.F,
+        abortSignal,
+        mode,
+        expectedType,
+      );
+
+      if (parsedInference instanceof Error) return parsedInference;
+      if (abortSignal.aborted) return ABORTED;
+
+      const finalInference = this.checkTaskTypeOperationModeMatch(
+        infDef.P,
+        expectedType,
+        parsedInference,
+      );
+
+      return { image, inference: finalInference, identifier };
     } catch (error) {
-      return new Error('Cannot get device frame', error as Error);
+      console.error(error);
+      return new Error('Cannot get device frame');
     }
+  }
+
+  async getLatestPair(
+    device_id: string,
+    lastIdentifier?: string,
+  ): Promise<InferenceImagePairItem> {
+    const response = await this.http.get<InferenceImagePairs>(
+      `${this.inferencePath}/${device_id}/withimage?limit=1`,
+      {},
+      false,
+    );
+
+    const inferenceResult = response?.data?.[0]?.inference.inference_result;
+    const identifier = inferenceResult?.Inferences?.[0]?.T;
+
+    if (!inferenceResult || !identifier) {
+      throw new Error('Invalid response structure');
+    }
+    // TODO: handle when `lastIdentifier === identifier`
+
+    return response.data[0];
+  }
+
+  async getInferenceData(
+    device_id: string,
+    rawData: any,
+    formatIsJson: boolean,
+    abortSignal: AbortSignal,
+    mode: Mode | ExtendedMode,
+    expectedType: OperationMode,
+  ) {
+    let parsedInference: InferenceLike | Error;
+
+    if (!formatIsJson) {
+      if (expectedType == 'custom') {
+        return <ErrorInference>{
+          errorLabel: `Only JSON allowed for Custom Operation Mode (Flatbuffer detected in the inferences)`,
+        };
+      } else {
+        parsedInference = await this.convertToJson(device_id, rawData);
+      }
+      if (abortSignal.aborted) return ABORTED;
+    } else {
+      parsedInference = this.getInferenceFromJSONLiteral(
+        rawData,
+        mode,
+        expectedType,
+      );
+    }
+
+    if (parsedInference instanceof Error) return parsedInference;
+
+    if (
+      mode === Mode.ImageAndInferenceResult &&
+      !isErrorInference(parsedInference)
+    ) {
+      return this.processKnownInferences(parsedInference, expectedType);
+    }
+
+    return parsedInference;
+  }
+
+  getOperationTypeName(operationModeType: OperationMode): OperationMode {
+    return <OperationMode>{
+      classification: 'classification',
+      detection: 'detection',
+      generic_classification: 'classification',
+      generic_detection: 'detection',
+      custom: 'custom',
+      image: 'image',
+    }[operationModeType];
+  }
+
+  checkTaskTypeOperationModeMatch(
+    taskType: TaskType | undefined,
+    operationMode: OperationMode,
+    inference: InferenceLike,
+  ): InferenceLike {
+    if (isErrorInference(inference)) {
+      return inference;
+    } else if (
+      !taskType ||
+      TaskTypeOperationsModeMap[taskType].includes(operationMode)
+    ) {
+      return inference;
+    } else {
+      return <ErrorInference>{
+        errorLabel: `The task type reported by the application running in the device is ${TaskTypeOperationsModeMap[taskType][0]},
+            but ${this.getOperationTypeName(operationMode)} was expected for the given Operation Mode.`,
+      };
+    }
+  }
+
+  getInferenceFromJSONLiteral(
+    rawData: any,
+    mode: Mode | ExtendedMode,
+    expectedType: OperationMode,
+  ) {
+    let partialInference: Object[] = [];
+    if (typeof rawData === 'string') {
+      try {
+        partialInference = JSON.parse(rawData);
+      } catch (error) {
+        console.warn(error);
+        return <ErrorInference>{
+          errorLabel:
+            'Unable to parse metadata contents. Only UTF-8 encoded JSON is supported. Please contact Edge App supplier for more information.',
+        };
+      }
+    } else {
+      partialInference = rawData;
+    }
+    if (expectedType !== 'custom' && !Array.isArray(partialInference)) {
+      return new UnknownInferenceFormatError();
+    }
+    return this.completeJson(partialInference, expectedType);
+  }
+
+  processKnownInferences(
+    inference: Classification | Detection | CustomInference,
+    expectedType: OperationMode,
+  ) {
+    let hits: InferenceItem[] = [];
+
+    switch (expectedType) {
+      case 'detection':
+      case 'generic_detection':
+        if (isDetectionInference(inference)) {
+          this.fillInInferenceData(inference.perception.object_detection_list);
+          return inference;
+        }
+        break;
+      case 'classification':
+      case 'generic_classification':
+        if (isClassificationInference(inference)) {
+          this.fillInInferenceData(inference.perception.classification_list);
+          return inference;
+        }
+        break;
+      default: // really just 'custom', 'image' should never be here...
+        return <CustomInference>inference;
+    }
+    return new UnknownInferenceFormatError();
   }
 
   async convertToJson(device_id: string, flatbuffer_payload: string) {
     let queryParams = new HttpParams();
     queryParams = queryParams.append('flatbuffer_payload', flatbuffer_payload);
     return await this.http
-      .get<
-        Classification | Detection
-      >(`${this.inferencePath}/${device_id}/json`, queryParams, false)
-      .catch();
+      .get<InferenceLike>(
+        `${this.inferencePath}/${device_id}/json`,
+        queryParams,
+        false,
+      )
+      .catch((err) => {
+        return <ErrorInference>{
+          errorLabel: `Error happened in the conversion of the flatbuffer: ${err.error.message}`,
+        };
+      });
   }
 
-  async getInferenceImage(device_id: string, name: string) {
+  completeJson(
+    partialInference: Object[],
+    expectedType: OperationMode,
+  ): InferenceLike {
+    switch (expectedType) {
+      case 'detection':
+      case 'generic_detection':
+        if (partialInference.every(isDetectionItem)) {
+          let detection: Detection = {
+            perception: { object_detection_list: [] },
+          };
+          detection.perception.object_detection_list = partialInference;
+          return detection;
+        }
+        break;
+      case 'classification':
+      case 'generic_classification':
+        if (partialInference.every(isClassificationItem)) {
+          let classification: Classification = {
+            perception: { classification_list: [] },
+          };
+          classification.perception.classification_list = partialInference;
+          return classification;
+        }
+        break;
+      default: // really just 'custom', 'image' should never be here...
+        return <CustomInference>partialInference;
+    }
+    return new UnknownInferenceFormatError();
+  }
+
+  async getImageByName(device_id: string, name: string) {
     const bytes = await this.http.getblob(
       `${this.imagePath}/${device_id}/image/${name}`,
       undefined,
@@ -195,38 +438,49 @@ export class InferenceResultsService {
     return 'data:image/jpeg;base64,' + this.arrayBufferToBase64(bytes);
   }
 
-  async getLatestImageName(device_id: string) {
-    return (
-      await this.http.get(
-        `${this.imagePath}/${device_id}/directories?limit=1`,
-        undefined,
-        false,
-      )
-    ).data[0].name;
+  async getImageBySasUrl(sasUrl: string) {
+    const bytes = await this.http.getblob(
+      `${this.envService.getApiUrl()}${sasUrl}`,
+      undefined,
+      false,
+    );
+    return 'data:image/jpeg;base64,' + this.arrayBufferToBase64(bytes);
+  }
+
+  async getLatestImageDescriptor(device_id: string, lastIdentifier?: string) {
+    const response = await this.http.get<Images>(
+      `${this.imagePath}/${device_id}/directories?limit=1`,
+      {},
+      false,
+    );
+
+    const latestImage = response?.data?.[0];
+
+    if (!latestImage || !latestImage.name || !latestImage.sas_url) {
+      throw new Error('Invalid response structure');
+    }
+
+    if (lastIdentifier === latestImage.name) {
+      throw new Error('No new images found for this device');
+    }
+
+    return {
+      name: latestImage.name,
+      identifier: latestImage.name,
+      sasUrl: latestImage.sas_url,
+    };
   }
 
   private fillInInferenceData(hits: InferenceItem[]) {
     // Reset random for consistent colors
-    const prng = getGenerator();
     hits.forEach((item) => {
       item.score = Math.round(item.score * 100 * 100) / 100;
-      if (this.used_colors.length - 1 < item.class_id) {
-        this.used_colors.push(this.getColor(prng));
-      }
-      item.color = this.used_colors[item.class_id];
+      item.color = getRandomColorOklch(item.class_id);
       item.label = 'Class ' + item.class_id;
     });
   }
 
-  private getColor(prng: () => number): [number, number, number] {
-    return [
-      Math.floor(prng() * 256),
-      Math.floor(prng() * 256),
-      Math.floor(prng() * 256),
-    ];
-  }
-
-  private arrayBufferToBase64(buffer: ArrayBuffer): string {
+  public arrayBufferToBase64(buffer: ArrayBuffer): string {
     const uint8Array = new Uint8Array(buffer);
 
     let binaryString = '';

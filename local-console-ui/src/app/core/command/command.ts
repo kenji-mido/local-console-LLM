@@ -16,9 +16,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-export interface ExecuteCommandPayloadV2 {
+export interface ExecuteCommandPayloadV2<T> {
   command_name: string;
-  parameters: {};
+  parameters: T;
 }
 
 export interface ExecuteCommandResponseV2 {

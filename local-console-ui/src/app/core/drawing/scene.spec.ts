@@ -16,10 +16,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { Drawings } from '@samplers/drawing';
+import { Drawing } from './drawing';
 import { ROI_COLOR, ROI_WIDTH, Scene } from './scene';
 import { Surface } from './surface';
-import { Drawing, Point2D } from './drawing';
-import { Drawings } from '@samplers/drawing';
 
 class MockContext {
   clearRect = jest.fn();

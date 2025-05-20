@@ -18,54 +18,60 @@
 
 import {
   Component,
+  ElementRef,
+  EventEmitter,
+  HostListener,
   Input,
   Output,
-  EventEmitter,
-  ElementRef,
   ViewChild,
 } from '@angular/core';
+import { LcDateTimePipe } from '../common/date';
 import { downloadFile } from '../common/file.utils';
-import { MatIconModule } from '@angular/material/icon';
-import { CommonModule } from '@angular/common';
+
+const QR_IMAGE_LEVEL_MIN = 0;
+const QR_IMAGE_LEVEL_MAX = 6;
 
 @Component({
   selector: 'app-qrcode',
   templateUrl: './qrcode.component.html',
   styleUrls: ['./qrcode.component.scss'],
   standalone: true,
-  imports: [MatIconModule, CommonModule],
+  imports: [LcDateTimePipe],
 })
 export class QrcodeComponent {
   @Input() qrImage?: string;
   @Input() qrExpiredDate?: Date;
   @Output() qrClose = new EventEmitter();
   qrImageLevel: number = 3;
-  qrImageLevelMin: number = 0;
-  qrImageLevelMax: number = 6;
-  qrBodyClass: string = 'qr-body-' + this.qrImageLevel;
+  fullScreen = false;
   theme = 'light';
 
-  @ViewChild('qrImageDiv') qrImageDiv!: ElementRef<HTMLElement>;
+  @ViewChild('qrWrapper') qrWrapper!: ElementRef<HTMLElement>;
 
-  fullScreen() {
-    this.qrBodyClass = 'qr-body-full';
-    if (this.qrImageDiv.nativeElement.requestFullscreen) {
-      this.qrImageDiv.nativeElement.requestFullscreen();
+  @HostListener('document:fullscreenchange', ['$event'])
+  leaveFullScreen(event: Event) {
+    if (!document.fullscreenElement) {
+      this.fullScreen = false;
+    }
+  }
+
+  enterFullScreen() {
+    this.fullScreen = true;
+    if (this.qrWrapper.nativeElement.requestFullscreen) {
+      this.qrWrapper.nativeElement.requestFullscreen();
+    }
+  }
+
+  zoomIn() {
+    if (this.qrImageLevel < QR_IMAGE_LEVEL_MAX) {
+      this.qrImageLevel++;
     }
   }
 
   zoomOut() {
-    if (this.qrImageLevel < this.qrImageLevelMax) {
-      this.qrImageLevel++;
-    }
-    this.qrBodyClass = 'qr-body-' + this.qrImageLevel;
-  }
-
-  zoomIn() {
-    if (this.qrImageLevel > this.qrImageLevelMin) {
+    if (this.qrImageLevel > QR_IMAGE_LEVEL_MIN) {
       this.qrImageLevel--;
     }
-    this.qrBodyClass = 'qr-body-' + this.qrImageLevel;
   }
 
   saveQrImage() {

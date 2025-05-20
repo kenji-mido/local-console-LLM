@@ -16,13 +16,16 @@
 from typing import Any
 
 from local_console.core.camera.schemas import DeviceStateInformation
+from local_console.core.schemas.schemas import DeviceID
+from local_console.utils.enums import StrEnum
 from pydantic import BaseModel
-from pydantic import RootModel
+from pydantic import ConfigDict
+from pydantic import Field
 
 
 class DevicePostDTO(BaseModel):
     device_name: str
-    mqtt_port: int
+    id: DeviceID
 
 
 class DeviceListDTO(BaseModel):
@@ -31,33 +34,52 @@ class DeviceListDTO(BaseModel):
 
 
 class RPCRequestDTO(BaseModel):
-    command_name: str
-    parameters: dict[str, Any]
+    command_name: str = Field(
+        description="Specify the command to execute on the server. Valid values are <code>StartUploadInferenceData</code> and <code>StopUploadInferenceData</code>."
+    )
+    parameters: dict[str, Any] = Field(
+        description="Provide a dictionary of arguments to pass to the specified command. The required arguments depend on the command:"
+        "<br>- For <code>StartUploadInferenceData</code>:"
+        "<pre>{"
+        '<br>    "CropHOffset": int,'
+        '<br>    "CropVOffset": int,'
+        '<br>    "CropHSize": int,'
+        '<br>    "CropVSize": int,'
+        '<br>    "Mode": [0, 1, 2]  // 0 for gathering images only, 1 for performing inference as well, 2 for sending only the inference'
+        "<br>}</pre>"
+        "<br>- For <code>StopUploadInferenceData</code>:"
+        "<pre>{}</pre>"
+    )
+    extra: dict[str, Any] | None = Field(
+        default=None,
+        description="Optional data not included in the RPC's payload, for the API to implement custom logic.",
+    )
+
+
+class RPCDeviceResponse(BaseModel):
+    result: str = "Accepted"
+
+    model_config = ConfigDict(extra="allow")
+
+
+class RPCResponseResult(StrEnum):
+    SUCCESS = "SUCCESS"
+    ERROR = "ERROR"
 
 
 class RPCResponseDTO(BaseModel):
-    result: str = "SUCCESS"
-    command_response: Any
-
-
-class Configuration(RootModel):
-    root: dict[str, str | int | float | dict]
-
-    def __getitem__(self, item: str) -> str | int | float | dict:
-        return self.root[item]
-
-    def to_dict(self) -> dict[str, str | int | float | dict]:
-        return self.root
+    result: RPCResponseResult = RPCResponseResult.SUCCESS
+    command_response: dict | None
 
 
 class PropertyInfo(BaseModel):
-    configuration: dict[str, Configuration]
+    configuration: dict[str, dict]
 
     def get_property_name_and_values(self) -> tuple[str, dict]:
         name = ""
         config_dict = {}
         for name, value in self.configuration.items():
-            config_dict = value.to_dict()
+            config_dict = value
             break
         return name, config_dict
 
@@ -66,5 +88,9 @@ class ConfigurationUpdateInDTO(BaseModel):
     property: PropertyInfo
 
 
-class ConfigurationUpdateOutDTO(ConfigurationUpdateInDTO):
+class ConfigurationUpdateOutDTO(PropertyInfo):
     result: str = "SUCCESS"
+
+
+class StateOutDTO(BaseModel):
+    state: dict

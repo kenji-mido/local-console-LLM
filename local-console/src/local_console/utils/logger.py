@@ -14,8 +14,17 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 import logging
+from datetime import datetime
+from datetime import timezone
 
 LOG_FORMAT = "%(asctime)s | %(levelname)s | %(filename)s:%(lineno)d | %(message)s"
+
+
+def custom_formatTime(
+    self: logging.Formatter, record: logging.LogRecord, datefmt: str | None = None
+) -> str:
+    # See https://docs.python.org/3/library/logging.html#logging.Formatter.formatTime
+    return datetime.fromtimestamp(record.created, tz=timezone.utc).isoformat()
 
 
 def configure_logger(silent: bool, verbose: bool) -> None:
@@ -24,5 +33,8 @@ def configure_logger(silent: bool, verbose: bool) -> None:
         level = logging.DEBUG
     if silent:
         level = logging.WARNING
+
     logging.basicConfig(format=LOG_FORMAT, level=level)
+    setattr(logging.Formatter, "formatTime", custom_formatTime)
+
     logging.getLogger("watchdog.observers").setLevel(logging.WARNING)

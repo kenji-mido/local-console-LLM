@@ -17,6 +17,7 @@
  */
 
 import { ScrollingModule } from '@angular/cdk/scrolling';
+import { NgStyle } from '@angular/common';
 import {
   Component,
   Directive,
@@ -24,31 +25,37 @@ import {
   Input,
   OnChanges,
 } from '@angular/core';
-import { TableVirtualScrollModule } from 'ng-table-virtual-scroll';
-import {
-  Classification,
-  Detection,
-  InferenceItem,
-  isClassificationInference,
-} from '../inference';
-import { NgStyle } from '@angular/common';
-import { SegmentsComponent } from '../../option/segments.component';
 import { FormsModule } from '@angular/forms';
-import { JsonBeautifierComponent } from '../../json/json-beautifier.component';
+import { getColorString, OkColor } from '@app/core/drawing/color';
 import { LabelsStored } from '@app/layout/pages/data-hub/data-hub.screen';
+import { TableVirtualScrollModule } from 'ng-table-virtual-scroll';
+import { InfotipDirective } from '../../feedback/infotip.component';
+import { JsonBeautifierComponent } from '../../json/json-beautifier.component';
+import { Segment, SegmentsComponent } from '../../option/segments.component';
+import {
+  InferenceItem,
+  InferenceLike,
+  isClassificationInference,
+  isDetectionInference,
+  isErrorInference,
+} from '../inference';
 
 @Directive({
   selector: '[appRgbBackground]',
   standalone: true,
 })
 export class RgbBackgroundDirective implements OnChanges {
-  @Input('appRgbBackground') color!: [number, number, number];
+  @Input('appRgbBackground') color!: OkColor;
   constructor(private el: ElementRef) {}
 
   ngOnChanges() {
-    const [r, g, b] = this.color;
-    this.el.nativeElement.style.backgroundColor = `rgb(${r},${g},${b})`;
+    this.el.nativeElement.style.backgroundColor = getColorString(this.color);
   }
+}
+
+export enum InferenceDisplayMode {
+  all,
+  rawOnly,
 }
 
 @Component({
@@ -62,21 +69,28 @@ export class RgbBackgroundDirective implements OnChanges {
     SegmentsComponent,
     FormsModule,
     JsonBeautifierComponent,
+    InfotipDirective,
   ],
-  host: { class: 'fullwidth fullheight stack gap-2' },
+  host: { class: 'fullwidth fullheight col gap-3' },
   styleUrl: './inference-display.component.scss',
   templateUrl: './inference-display.component.html',
 })
 export class InferenceDisplayComponent {
   isClassificationInference = isClassificationInference;
+  isDetectionInference = isDetectionInference;
+  isErrorInference = isErrorInference;
 
-  protected rawInference?: Classification | Detection;
+  private __currentMode?: InferenceDisplayMode;
+
+  protected rawInference?: InferenceLike;
   protected inferenceItems: InferenceItem[] = [];
   protected displayMode: 'Label' | 'Json' = 'Label';
+  protected displayOptions: Array<Segment | string> = ['Label', 'Json'];
 
   @Input() disabled = false;
+  @Input() error = false;
   @Input() labels: LabelsStored = { labels: [], applied: false };
-  @Input() set inference(inf: Classification | Detection | undefined) {
+  @Input() set inference(inf: InferenceLike | undefined) {
     this.rawInference = inf;
     if (!inf) {
       this.inferenceItems = [];
@@ -91,10 +105,8 @@ export class InferenceDisplayComponent {
           item.label = this.labels.labels[item.class_id];
         }
       });
-
       this.inferenceItems = inf.perception.classification_list;
-    } else {
-      console.log(inf.perception.object_detection_list);
+    } else if (isDetectionInference(inf)) {
       inf.perception.object_detection_list.forEach((item) => {
         if (item.class_id > this.labels.labels.length - 1) {
           item.label = 'Class ' + item.class_id;
@@ -103,7 +115,37 @@ export class InferenceDisplayComponent {
         }
       });
       this.inferenceItems = inf.perception.object_detection_list;
-      console.log(this.inferenceItems);
+    } else if (isErrorInference(inf)) {
+      this.inferenceItems = [
+        {
+          class_id: 0,
+          score: 0,
+          label: inf.errorLabel,
+          color: { l: 0, c: 0, h: 0 },
+        },
+      ];
+      this.disabled = true;
+    } else {
+      this.displayMode = 'Json';
+    }
+  }
+
+  @Input() set mode(mode: InferenceDisplayMode) {
+    if (mode !== this.__currentMode) {
+      this.__currentMode = mode;
+      if (mode === InferenceDisplayMode.rawOnly) {
+        this.displayOptions = [
+          {
+            display: 'Label',
+            disabled: true,
+            tooltip: 'Labels are not available in User Applications',
+          },
+          { display: 'Json' },
+        ];
+        this.displayMode = 'Json';
+      } else {
+        this.displayOptions = [{ display: 'Label' }, { display: 'Json' }];
+      }
     }
   }
 }

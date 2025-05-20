@@ -16,6 +16,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+:host {
+  display: block;
+}
 app-drawing {
-  min-height: 300px;
+  min-height: 150px;
 }

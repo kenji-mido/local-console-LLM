@@ -17,200 +17,800 @@
  */
 
 import { TestBed } from '@angular/core/testing';
+import { Inferences } from '@samplers/inferences';
 import { HttpApiClient } from '../common/http/http';
-import { DeviceService } from '../device/device.service';
-import { InferenceResultsService } from './inferenceresults.service';
-import { Device } from '@samplers/device';
+import { OperationMode } from '../device/configuration';
+import { DeviceFrame } from '../device/device';
 import { Point2D } from '../drawing/drawing';
-import { SENSOR_SIZE } from '../device/device';
-import { Mode } from './inference';
+import { ModuleConfigService } from '../module/module-config.service';
+import {
+  Classification,
+  Detection,
+  ErrorInference,
+  ExtendedMode,
+  Mode,
+  TaskType,
+} from './inference';
+import {
+  InferenceResultsService,
+  TaskTypeOperationsModeMap,
+} from './inferenceresults.service';
+import {
+  isClassificationItem,
+  isDetectionItem,
+} from './inferenceresults.utils';
 
 class HttpApiClientMock {
   get = jest.fn();
-  getBlob = jest.fn();
+  getblob = jest.fn();
 }
 
-class DeviceServiceMock {
-  startUploadInferenceData = jest.fn();
-  stopUploadInferenceData = jest.fn();
+class MockedModuleConfigService implements Required<ModuleConfigService> {
+  getModuleProperty = jest.fn();
+  patchModuleConfiguration = jest.fn();
 }
-
-const ORIGIN = new Point2D(0, 0);
-const TIME_BETWEEN_FRAMES = 1000;
 
 describe('InferenceResultsService', () => {
   let service: InferenceResultsService;
   let httpMock: HttpApiClientMock;
-  let deviceServiceMock: DeviceServiceMock;
+  let moduleConfigService: jest.Mocked<Required<ModuleConfigService>>;
 
   beforeEach(() => {
     TestBed.configureTestingModule({
       providers: [
         InferenceResultsService,
         { provide: HttpApiClient, useClass: HttpApiClientMock },
-        { provide: DeviceService, useClass: DeviceServiceMock },
+        { provide: ModuleConfigService, useClass: MockedModuleConfigService },
       ],
     });
     service = TestBed.inject(InferenceResultsService);
     httpMock = TestBed.inject(HttpApiClient) as unknown as HttpApiClientMock;
-    deviceServiceMock = TestBed.inject(
-      DeviceService,
-    ) as unknown as DeviceServiceMock;
+    moduleConfigService = TestBed.inject(
+      ModuleConfigService,
+    ) as unknown as MockedModuleConfigService;
   });
 
   it('should be created', () => {
     expect(service).toBeTruthy();
   });
 
-  describe('getInference', () => {
+  describe('getLastInference', () => {
     it('should retrieve inference data for a device', async () => {
       const deviceId = '123';
-      const mockResponse = { data: 'some data' };
+      const inferenceResult = { Inferences: [{ T: 'NAME1' }] };
+      const mockResponse = {
+        data: [{ inference_result: inferenceResult }],
+        continuation_token: 'TOKEN1',
+      };
       httpMock.get.mockResolvedValue(mockResponse);
-      const response = await service.getInference(deviceId);
+      const response = await service.getLastInference(deviceId);
       expect(httpMock.get).toHaveBeenCalledWith(
         `${service['inferencePath']}/${deviceId}?limit=1`,
-        undefined,
+        {},
         false,
       );
-      expect(response).toEqual(mockResponse);
+      expect(response).toEqual({ inferenceResult, identifier: 'NAME1' });
     });
 
     it('should handle errors when retrieving inference data', async () => {
       const deviceId = '123';
       const error = new Error('Network error');
       httpMock.get.mockRejectedValue(error);
-      await expect(service.getInference(deviceId)).rejects.toThrow(
+      await expect(service.getLastInference(deviceId)).rejects.toThrow(
         'Network error',
       );
     });
-  });
 
-  describe('getInferencesAsFrame', () => {
-    it('should manage an inference frame stream with image and data parsing', async () => {
+    it('should return error if continuation_token is the same as latest', async () => {
       const deviceId = '123';
-      const mockFrame = Device.sampleFrame();
-      httpMock.get
-        .mockResolvedValueOnce(mockFrame.inference) // For getInference
-        .mockResolvedValueOnce(mockFrame.inference) // For convertToJson
-        .mockResolvedValueOnce(mockFrame.image); // For getInferenceImage
-
-      jest.useFakeTimers();
-      deviceServiceMock.startUploadInferenceData.mockResolvedValue(undefined);
-
-      const { stream, detach } = await service.getInferencesAsFrame(
-        deviceId,
-        ORIGIN,
-        SENSOR_SIZE,
-        TIME_BETWEEN_FRAMES,
-        Mode.ImageAndInferenceResult,
-      );
-
-      stream.subscribe({
-        next: (result) => {
-          expect(result).toEqual(mockFrame);
-          detach();
-        },
+      httpMock.get.mockResolvedValue({
+        data: [{ inference_result: 'some data' }],
+        continuation_token: 'TOKEN1',
       });
-
-      expect(deviceServiceMock.startUploadInferenceData).toHaveBeenCalledWith(
-        deviceId,
-        new Point2D(0, 0),
-        SENSOR_SIZE,
-        Mode.ImageAndInferenceResult,
-      );
-
-      jest.runOnlyPendingTimers(); // Simulates the timeout for the next tick
-      jest.useRealTimers();
-    });
-
-    it('should not bootstrap loop when startUploadInferenceData fails', async () => {
-      const deviceId = '123';
-      const roiOffset = new Point2D(10, 10);
-      const roiSize = SENSOR_SIZE;
-      const error = new Error('Error starting upload');
-      deviceServiceMock.startUploadInferenceData.mockRejectedValue(error);
-
-      try {
-        await service.getInferencesAsFrame(
-          deviceId,
-          roiOffset,
-          roiSize,
-          TIME_BETWEEN_FRAMES,
-          Mode.ImageAndInferenceResult,
-        );
-        fail();
-      } catch (caughtError) {
-        expect(caughtError).toBe(error);
-      }
-
-      expect(httpMock.get).not.toHaveBeenCalled();
+      await expect(
+        service.getLastInference(deviceId, 'TOKEN1'),
+      ).rejects.toThrow();
     });
   });
 
-  describe('isDeviceStreaming', () => {
-    it('should return true only if streaming', async () => {
-      const deviceIdA = '123';
-      const deviceIdB = '456';
-
-      deviceServiceMock.startUploadInferenceData.mockResolvedValue(undefined);
-
-      await service.getInferencesAsFrame(
-        deviceIdA,
-        ORIGIN,
-        SENSOR_SIZE,
-        TIME_BETWEEN_FRAMES,
-        Mode.ImageAndInferenceResult,
+  describe('getLatestImageDescriptor', () => {
+    it('should retrieve inference data for a device', async () => {
+      const deviceId = '123';
+      httpMock.get.mockResolvedValue({
+        data: [{ name: 'some name', sas_url: 'some sas_url' }],
+        continuation_token: 'TOKEN1',
+      });
+      const response = await service.getLatestImageDescriptor(deviceId);
+      expect(httpMock.get).toHaveBeenCalledWith(
+        `${service['imagePath']}/${deviceId}/directories?limit=1`,
+        {},
+        false,
       );
-
-      expect(service.isDeviceStreaming(deviceIdA)).toBeTruthy();
-      expect(service.isDeviceStreaming(deviceIdB)).toBeFalsy();
-
-      await service.getInferencesAsFrame(
-        deviceIdB,
-        ORIGIN,
-        SENSOR_SIZE,
-        TIME_BETWEEN_FRAMES,
-        Mode.ImageAndInferenceResult,
-      );
-
-      expect(service.isDeviceStreaming(deviceIdB)).toBeTruthy();
+      expect(response).toEqual({
+        name: 'some name',
+        sasUrl: 'some sas_url',
+        identifier: 'some name',
+      });
     });
 
-    it('should return true even after detached', async () => {
-      const deviceIdA = '123';
-      const deviceIdB = '456';
+    it('should return error if continuation_token is the same as latest', async () => {
+      const deviceId = '123';
+      httpMock.get.mockResolvedValue({
+        data: [{ name: 'some name', sas_url: 'some sas_url' }],
+        continuation_token: 'TOKEN1',
+      });
+      await expect(
+        service.getLatestImageDescriptor(deviceId, 'some name'),
+      ).rejects.toThrow();
+    });
+  });
 
-      deviceServiceMock.startUploadInferenceData.mockResolvedValue(undefined);
-
-      const aOps = await service.getInferencesAsFrame(
-        deviceIdA,
-        ORIGIN,
-        SENSOR_SIZE,
-        TIME_BETWEEN_FRAMES,
-        Mode.ImageAndInferenceResult,
+  describe('checkTaskTypeOperationModeMatch', () => {
+    it('should return inference if tasktype undefined or tasktype and operationmode match', async () => {
+      let taskType = undefined;
+      let operationMode: OperationMode = 'classification';
+      let mockInference = Inferences.sample('classification');
+      let result = service.checkTaskTypeOperationModeMatch(
+        taskType,
+        operationMode,
+        mockInference,
       );
-      const bOps = await service.getInferencesAsFrame(
-        deviceIdB,
-        ORIGIN,
-        SENSOR_SIZE,
-        TIME_BETWEEN_FRAMES,
-        Mode.ImageAndInferenceResult,
+
+      expect(result).toEqual(mockInference);
+
+      taskType = TaskType.Classification;
+      result = service.checkTaskTypeOperationModeMatch(
+        taskType,
+        operationMode,
+        mockInference,
       );
 
-      bOps.detach();
-      expect(service.isDeviceStreaming(deviceIdA)).toBeTruthy();
-      expect(service.isDeviceStreaming(deviceIdB)).toBeTruthy();
+      operationMode = 'detection';
+      taskType = TaskType.ObjectDetection;
+      result = service.checkTaskTypeOperationModeMatch(
+        taskType,
+        operationMode,
+        mockInference,
+      );
 
-      aOps.detach();
-      expect(service.isDeviceStreaming(deviceIdA)).toBeTruthy();
+      expect(result).toEqual(mockInference);
 
-      await service.stopInferences(deviceIdA);
-      expect(service.isDeviceStreaming(deviceIdA)).toBeFalsy();
-      expect(service.isDeviceStreaming(deviceIdB)).toBeTruthy();
+      operationMode = 'generic_classification';
+      taskType = TaskType.Classification;
+      result = service.checkTaskTypeOperationModeMatch(
+        taskType,
+        operationMode,
+        mockInference,
+      );
 
-      await service.stopInferences(deviceIdB);
-      expect(service.isDeviceStreaming(deviceIdB)).toBeFalsy();
+      expect(result).toEqual(mockInference);
+
+      operationMode = 'generic_detection';
+      taskType = TaskType.ObjectDetection;
+      result = service.checkTaskTypeOperationModeMatch(
+        taskType,
+        operationMode,
+        mockInference,
+      );
+
+      expect(result).toEqual(mockInference);
+    });
+
+    it('should return error inference if inference is Error or tasktype and operation mode NOT match', async () => {
+      let taskType = TaskType.Classification;
+      let operationMode: OperationMode = 'classification';
+      let mockInference = Inferences.sample('error');
+      let result = service.checkTaskTypeOperationModeMatch(
+        taskType,
+        operationMode,
+        mockInference,
+      );
+
+      expect(result).toEqual(mockInference);
+
+      taskType = TaskType.ObjectDetection;
+      mockInference = Inferences.sample('classification');
+      result = service.checkTaskTypeOperationModeMatch(
+        taskType,
+        operationMode,
+        mockInference,
+      );
+
+      expect(result).toEqual(<ErrorInference>{
+        errorLabel: `The task type reported by the application running in the device is ${TaskTypeOperationsModeMap[taskType][0]},
+            but ${service.getOperationTypeName(operationMode)} was expected for the given Operation Mode.`,
+      });
+    });
+  });
+
+  describe('init', () => {
+    it('should start inference upload with correct parameters', async () => {
+      const deviceId = 'dev1';
+      const roiOffset = new Point2D(0, 0);
+      const roiSize = new Point2D(100, 100);
+      const mode = Mode.ImageAndInferenceResult;
+
+      await service.init(deviceId, roiOffset, roiSize, mode);
+
+      expect(moduleConfigService.patchModuleConfiguration).toHaveBeenCalledWith(
+        deviceId,
+        expect.any(String),
+        expect.objectContaining({
+          common_settings: {
+            process_state: 2,
+            pq_settings: {
+              image_cropping: {
+                left: 0,
+                top: 0,
+                width: 100,
+                height: 100,
+              },
+            },
+            port_settings: {
+              input_tensor: {
+                enabled: true,
+              },
+              metadata: {
+                enabled: true,
+              },
+            },
+          },
+        }),
+      );
+    });
+  });
+
+  describe('teardown', () => {
+    it('should stop inference upload for device', async () => {
+      const deviceId = 'dev1';
+
+      await service.teardown(deviceId);
+
+      expect(moduleConfigService.patchModuleConfiguration).toHaveBeenCalledWith(
+        deviceId,
+        expect.any(String),
+        expect.objectContaining({
+          common_settings: {
+            port_settings: {
+              input_tensor: {
+                enabled: false,
+              },
+              metadata: {
+                enabled: false,
+              },
+            },
+          },
+        }),
+      );
+    });
+  });
+
+  describe('getNextFrame', () => {
+    const deviceId = 'dev1';
+    const name = 'NAME1';
+    const name_inf = name + '.txt';
+    const name_img = name + '.jpg';
+
+    let abortController: AbortController;
+
+    beforeEach(() => {
+      abortController = new AbortController();
+    });
+
+    it('should return device frame if mode base64encoded and inference correct', async () => {
+      const inferenceResult = {
+        Inferences: [{ T: name, F: 0, O: 'classification_inference' }],
+      };
+      const mockResponse = {
+        data: [
+          {
+            id: name,
+            inference: { id: name_inf, inference_result: inferenceResult },
+            image: { name: name_img, sas_url: name_img },
+          },
+        ],
+        continuation_token: 'TOKEN1',
+      };
+      httpMock.get.mockResolvedValueOnce(mockResponse);
+
+      const mock_inf_classification = Inferences.sample('classification');
+      httpMock.get.mockResolvedValueOnce(mock_inf_classification);
+
+      const encoder = new TextEncoder();
+      const mock_bytes = encoder.encode('image');
+      httpMock.getblob.mockResolvedValueOnce(mock_bytes);
+
+      const result = await service.getNextFrame(
+        deviceId,
+        Mode.ImageAndInferenceResult,
+        'classification',
+        abortController.signal,
+        undefined,
+      );
+
+      expect(httpMock.get).toHaveBeenCalledTimes(2);
+      expect(httpMock.getblob).toHaveBeenCalled();
+
+      const expected_result: DeviceFrame = {
+        image:
+          'data:image/jpeg;base64,' + service.arrayBufferToBase64(mock_bytes),
+        inference: mock_inf_classification,
+        identifier: name,
+      };
+
+      expect(result).toStrictEqual(expected_result);
+    });
+
+    it('should return device frame if mode json and inference correct object', async () => {
+      //mock inference returned by endpoint
+      const mock_inf_classification = [
+        { class_id: 3, score: 0.351562 },
+        { class_id: 1, score: 0.214844 },
+        { class_id: 4, score: 0.1875 },
+        { class_id: 0, score: 0.167969 },
+        { class_id: 2, score: 0.078125 },
+      ];
+      const deviceId = '123';
+      const inferenceResult = {
+        Inferences: [{ T: name, F: 1, O: mock_inf_classification }],
+      };
+      const mockResponse = {
+        data: [
+          {
+            id: name,
+            inference: { id: name_inf, inference_result: inferenceResult },
+            image: { name: name_img, sas_url: name_img },
+          },
+        ],
+        continuation_token: 'TOKEN1',
+      };
+      httpMock.get.mockResolvedValueOnce(mockResponse);
+
+      const encoder = new TextEncoder();
+      const mock_bytes = encoder.encode('image');
+      httpMock.getblob.mockResolvedValueOnce(mock_bytes);
+
+      const result = await service.getNextFrame(
+        deviceId,
+        Mode.ImageAndInferenceResult,
+        'classification',
+        abortController.signal,
+        undefined,
+      );
+
+      expect(httpMock.get).toHaveBeenCalledTimes(1);
+      expect(httpMock.getblob).toHaveBeenCalled();
+
+      let expected_class_inf: Classification = {
+        perception: { classification_list: [] },
+      };
+      if (mock_inf_classification.every(isClassificationItem)) {
+        expected_class_inf.perception.classification_list =
+          mock_inf_classification;
+      }
+      expected_class_inf.perception.classification_list.forEach((entry) => {
+        entry.score = Math.round(entry.score * 100 * 100) / 100;
+      });
+      const partial_expected_result: DeviceFrame = {
+        image:
+          'data:image/jpeg;base64,' + service.arrayBufferToBase64(mock_bytes),
+        inference: expected_class_inf,
+        identifier: name,
+      };
+
+      expect(result).toMatchObject(partial_expected_result);
+    });
+
+    it('should return device frame if mode json and inference correct string', async () => {
+      //mock inference returned by endpoint
+      const mock_inf_classification = `[
+            { "class_id": 3, "score": 0.351562 },
+            { "class_id": 1, "score": 0.214844 },
+            { "class_id": 4, "score": 0.1875 },
+            { "class_id": 0, "score": 0.167969 },
+            { "class_id": 2, "score": 0.078125 }
+          ]`;
+
+      const inferenceResult = {
+        Inferences: [{ T: name, F: 1, O: mock_inf_classification }],
+      };
+      const mockResponse = {
+        data: [
+          {
+            id: name,
+            inference: { id: name_inf, inference_result: inferenceResult },
+            image: { name: name_img, sas_url: name_img },
+          },
+        ],
+        continuation_token: 'TOKEN1',
+      };
+      httpMock.get.mockResolvedValueOnce(mockResponse);
+
+      const encoder = new TextEncoder();
+      const mock_bytes = encoder.encode('image');
+      httpMock.getblob.mockResolvedValueOnce(mock_bytes);
+
+      const result = await service.getNextFrame(
+        deviceId,
+        Mode.ImageAndInferenceResult,
+        'classification',
+        abortController.signal,
+        undefined,
+      );
+
+      expect(httpMock.get).toHaveBeenCalledTimes(1);
+      expect(httpMock.getblob).toHaveBeenCalled();
+
+      let expected_class_inf: Classification = {
+        perception: { classification_list: [] },
+      };
+      if (JSON.parse(mock_inf_classification).every(isClassificationItem)) {
+        expected_class_inf.perception.classification_list = JSON.parse(
+          mock_inf_classification,
+        );
+      }
+      expected_class_inf.perception.classification_list.forEach((entry) => {
+        entry.score = Math.round(entry.score * 100 * 100) / 100;
+      });
+      const partial_expected_result: DeviceFrame = {
+        image:
+          'data:image/jpeg;base64,' + service.arrayBufferToBase64(mock_bytes),
+        inference: expected_class_inf,
+        identifier: 'NAME1',
+      };
+
+      expect(result).toMatchObject(partial_expected_result);
+    });
+
+    it('should return device frame if mode json and inference correct string, detection', async () => {
+      //mock inference returned by endpoint
+      const mock_inf_detection = [
+        {
+          class_id: 0,
+          score: 0.546875,
+          bounding_box: { left: 96, top: 5, right: 178, bottom: 136 },
+        },
+        {
+          class_id: 0,
+          score: 0.36328125,
+          bounding_box: { left: 2, top: 86, right: 33, bottom: 143 },
+        },
+      ];
+      const inferenceResult = {
+        Inferences: [{ T: name, F: 1, O: mock_inf_detection }],
+      };
+      const mockResponse = {
+        data: [
+          {
+            id: name,
+            inference: { id: name_inf, inference_result: inferenceResult },
+            image: { name: name_img, sas_url: name_img },
+          },
+        ],
+        continuation_token: 'TOKEN1',
+      };
+      httpMock.get.mockResolvedValueOnce(mockResponse);
+
+      const encoder = new TextEncoder();
+      const mock_bytes = encoder.encode('image');
+      httpMock.getblob.mockResolvedValueOnce(mock_bytes);
+
+      const result = await service.getNextFrame(
+        deviceId,
+        Mode.ImageAndInferenceResult,
+        'detection',
+        abortController.signal,
+        undefined,
+      );
+
+      expect(httpMock.get).toHaveBeenCalledTimes(1);
+      expect(httpMock.getblob).toHaveBeenCalled();
+
+      let expected_det_inf: Detection = {
+        perception: { object_detection_list: [] },
+      };
+      if (mock_inf_detection.every(isDetectionItem)) {
+        expected_det_inf.perception.object_detection_list = mock_inf_detection;
+      }
+      expected_det_inf.perception.object_detection_list.forEach((entry) => {
+        entry.score = Math.round(entry.score * 100 * 100) / 100;
+      });
+      const partial_expected_result: DeviceFrame = {
+        image:
+          'data:image/jpeg;base64,' + service.arrayBufferToBase64(mock_bytes),
+        inference: expected_det_inf,
+        identifier: 'NAME1',
+      };
+
+      expect(result).toMatchObject(partial_expected_result);
+    });
+
+    it('should return ErrorInference if mode json and inference incorrect', async () => {
+      //mock inference returned by endpoint
+      const mock_inf_classification = `This is not a json`;
+      const deviceId = '123';
+      const inferenceResult = {
+        Inferences: [{ T: 'NAME1', F: 1, O: mock_inf_classification }],
+      };
+      const mockResponse = {
+        data: [
+          {
+            id: name,
+            inference: { id: name_inf, inference_result: inferenceResult },
+            image: { name: name_img, sas_url: name_img },
+          },
+        ],
+        continuation_token: 'TOKEN1',
+      };
+      httpMock.get.mockResolvedValueOnce(mockResponse);
+
+      const encoder = new TextEncoder();
+      const mock_bytes = encoder.encode('image');
+      httpMock.getblob.mockResolvedValueOnce(mock_bytes);
+
+      const result = await service.getNextFrame(
+        deviceId,
+        Mode.ImageAndInferenceResult,
+        'classification',
+        abortController.signal,
+        undefined,
+      );
+
+      expect(httpMock.get).toHaveBeenCalledTimes(1);
+
+      const errorInference: ErrorInference = {
+        errorLabel:
+          'Unable to parse metadata contents. Only UTF-8 encoded JSON is supported. Please contact Edge App supplier for more information.',
+      };
+
+      const partial_expected_result: DeviceFrame = {
+        image:
+          'data:image/jpeg;base64,' + service.arrayBufferToBase64(mock_bytes),
+        inference: errorInference,
+        identifier: 'NAME1',
+      };
+
+      expect(result).toMatchObject(partial_expected_result);
+    });
+
+    it('should return UnknownInferenceFormatError if mode json and json but not inference', async () => {
+      //mock inference returned by endpoint
+      const mock_inf_classification = `{}`;
+
+      const inferenceResult = {
+        Inferences: [{ T: name, F: 1, O: mock_inf_classification }],
+      };
+      const mockResponse = {
+        data: [
+          {
+            id: name,
+            inference: { id: name_inf, inference_result: inferenceResult },
+            image: { name: name_img, sas_url: name_img },
+          },
+        ],
+        continuation_token: 'TOKEN1',
+      };
+      httpMock.get.mockResolvedValueOnce(mockResponse);
+
+      const encoder = new TextEncoder();
+      const mock_bytes = encoder.encode('image');
+      httpMock.getblob.mockResolvedValueOnce(mock_bytes);
+
+      const result = await service.getNextFrame(
+        deviceId,
+        Mode.ImageAndInferenceResult,
+        'classification',
+        abortController.signal,
+        undefined,
+      );
+
+      expect(httpMock.get).toHaveBeenCalledTimes(1);
+
+      expect(result).toBeInstanceOf(Error);
+      expect((result as Error).message).toBe('INFERENCE_FORMAT');
+    });
+
+    it('should return aborted error if already aborted', async () => {
+      abortController.abort();
+      const result = await service.getNextFrame(
+        deviceId,
+        Mode.ImageAndInferenceResult,
+        'classification',
+        abortController.signal,
+        undefined,
+      );
+      expect(result).toBeInstanceOf(Error);
+      expect((result as Error).message).toBe('ABORTED');
+    });
+
+    it.each([
+      Mode.ImageOnly,
+      ExtendedMode.Preview,
+      'InvalidMode' as unknown as Mode,
+    ])(
+      "should return error if unsupported mode '%s' is passed",
+      async (invalidMode) => {
+        const result = await service.getNextFrame(
+          deviceId,
+          invalidMode,
+          'classification',
+          abortController.signal,
+          undefined,
+        );
+        expect(result).toBeInstanceOf(Error);
+        expect((result as Error).message).toBe(
+          `Mode ${invalidMode} not supported`,
+        );
+      },
+    );
+
+    it('should return custom inference as-is if mode is InferenceResult', async () => {
+      // Given
+      const custom_inference = [
+        {
+          class_id: 0,
+          score: 0.546875,
+          key_points: [0, 1, 4],
+        },
+        {
+          class_id: 0,
+          score: 0.36328125,
+          key_points: [0, 3, 5],
+        },
+      ];
+      const inferenceResult = {
+        Inferences: [{ T: name, F: 1, O: custom_inference }],
+      };
+      const mockResponse = {
+        data: [
+          {
+            id: name,
+            inference: { id: name_inf, inference_result: inferenceResult },
+            image: { name: name_img, sas_url: name_img },
+          },
+        ],
+        continuation_token: 'TOKEN1',
+      };
+      httpMock.get.mockResolvedValueOnce(mockResponse);
+
+      const encoder = new TextEncoder();
+      const mock_bytes = encoder.encode('image');
+      httpMock.getblob.mockResolvedValueOnce(mock_bytes);
+
+      // When
+      const result = await service.getNextFrame(
+        deviceId,
+        Mode.InferenceResult,
+        'custom',
+        abortController.signal,
+        undefined,
+      );
+
+      // Then
+      expect(httpMock.get).toHaveBeenCalledTimes(1);
+      expect(httpMock.getblob).toHaveBeenCalled();
+
+      const partial_expected_result: DeviceFrame = {
+        image:
+          'data:image/jpeg;base64,' + service.arrayBufferToBase64(mock_bytes),
+        inference: custom_inference,
+        identifier: 'NAME1',
+      };
+
+      expect(result).toMatchObject(partial_expected_result);
+    });
+
+    it('should unmarshall custom inference then return if mode is InferenceResult', async () => {
+      // Given
+      const custom_inference = [
+        {
+          class_id: 0,
+          score: 0.546875,
+          key_points: [0, 1, 4],
+        },
+        {
+          class_id: 0,
+          score: 0.36328125,
+          key_points: [0, 3, 5],
+        },
+      ];
+      const inferenceResult = {
+        Inferences: [{ T: name, F: 1, O: JSON.stringify(custom_inference) }],
+      };
+      const mockResponse = {
+        data: [
+          {
+            id: name,
+            inference: { id: name_inf, inference_result: inferenceResult },
+            image: { name: name_img, sas_url: name_img },
+          },
+        ],
+        continuation_token: 'TOKEN1',
+      };
+      httpMock.get.mockResolvedValueOnce(mockResponse);
+
+      const encoder = new TextEncoder();
+      const mock_bytes = encoder.encode('image');
+      httpMock.getblob.mockResolvedValueOnce(mock_bytes);
+
+      // When
+      const result = await service.getNextFrame(
+        deviceId,
+        Mode.InferenceResult,
+        'custom',
+        abortController.signal,
+        undefined,
+      );
+
+      // Then
+      expect(httpMock.get).toHaveBeenCalledTimes(1);
+      expect(httpMock.getblob).toHaveBeenCalled();
+
+      const partial_expected_result: DeviceFrame = {
+        image:
+          'data:image/jpeg;base64,' + service.arrayBufferToBase64(mock_bytes),
+        inference: custom_inference,
+        identifier: 'NAME1',
+      };
+
+      expect(result).toMatchObject(partial_expected_result);
+    });
+
+    it('should return error  if custom inference and format is NOT Json', async () => {
+      // Given
+      const custom_inference = [
+        {
+          class_id: 0,
+          score: 0.546875,
+          key_points: [0, 1, 4],
+        },
+        {
+          class_id: 0,
+          score: 0.36328125,
+          key_points: [0, 3, 5],
+        },
+      ];
+      const inferenceResult = {
+        Inferences: [{ T: name, F: 0, O: JSON.stringify(custom_inference) }],
+      };
+      const mockResponse = {
+        data: [
+          {
+            id: name,
+            inference: { id: name_inf, inference_result: inferenceResult },
+            image: { name: name_img, sas_url: name_img },
+          },
+        ],
+        continuation_token: 'TOKEN1',
+      };
+      httpMock.get.mockResolvedValueOnce(mockResponse);
+
+      const encoder = new TextEncoder();
+      const mock_bytes = encoder.encode('image');
+      httpMock.getblob.mockResolvedValueOnce(mock_bytes);
+
+      // When
+      const result = await service.getNextFrame(
+        deviceId,
+        Mode.InferenceResult,
+        'custom',
+        abortController.signal,
+        undefined,
+      );
+
+      // Then
+      const errorInference: ErrorInference = {
+        errorLabel: `Only JSON allowed for Custom Operation Mode (Flatbuffer detected in the inferences)`,
+      };
+
+      const partial_expected_result: DeviceFrame = {
+        image:
+          'data:image/jpeg;base64,' + service.arrayBufferToBase64(mock_bytes),
+        inference: errorInference,
+        identifier: 'NAME1',
+      };
+
+      expect(result).toMatchObject(partial_expected_result);
     });
   });
 });

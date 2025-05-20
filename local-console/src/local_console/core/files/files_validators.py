@@ -19,12 +19,17 @@ from typing import Generic
 from typing import TypeVar
 
 from local_console.core.camera.enums import FirmwareExtension
+from local_console.core.enums import AiModelExtension
+from local_console.core.enums import ModuleExtension
 from local_console.core.error.base import UserException
 from local_console.core.error.code import ErrorCodes
 from local_console.core.files.values import FileInfo
 from local_console.core.files.values import FileType
-from local_console.utils.validation import AOT_XTENSA_HEADER
-from local_console.utils.validation import IMX500_MODEL_HEADER
+from local_console.utils.validation.aot import AOT_HEADER
+from local_console.utils.validation.imx500 import IMX500_MODEL_PKG_HEADER
+from local_console.utils.validation.imx500 import IMX500_MODEL_RPK_HEADER
+from local_console.utils.validation.python_script import is_valid_python_script
+from local_console.utils.validation.wasm import is_valid_wasm_binary
 
 
 class ValidableFileInfo(FileInfo):
@@ -86,27 +91,28 @@ class FirmwareValidator(ChainableValidator[ValidableFileInfo]):
 
 
 class CheckFirstBytesValidator(ChainableValidator[ValidableFileInfo]):
-    def __init__(
-        self,
-        header_bytes: bytes,
-        types: list[FileType],
-        error_message: str,
-        error_code: ErrorCodes,
-    ) -> None:
-        super().__init__()
-        self.header_bytes = header_bytes
-        self.types = types
-        self.error_message = error_message
-        self.error_code = error_code
+
+    HEADERS: list[bytes]
+    EXTENSIONS: list[str]
+    TYPES: list[FileType]
+    EXC_CODE: ErrorCodes
+    EXC_MSG: str
 
     def validable(self, info: ValidableFileInfo) -> bool:
-        return info.type in self.types
+        return info.type in self.TYPES and info.path.suffix in self.EXTENSIONS
 
     def validate(self, info: ValidableFileInfo) -> None:
-        if info.content[: len(self.header_bytes)] != self.header_bytes:
+        matched = False
+
+        for header in self.HEADERS:
+            if info.content[: len(header)] == header:
+                matched = True
+                break
+
+        if not matched:
             raise UserException(
-                self.error_code,
-                self.error_message,
+                self.EXC_CODE,
+                self.EXC_MSG,
             )
 
 
@@ -134,22 +140,66 @@ class AlreadyExistsValidator(ChainableValidator[FileInfo]):
             )
 
 
-def app_validator() -> CheckFirstBytesValidator:
-    return CheckFirstBytesValidator(
-        bytes(AOT_XTENSA_HEADER),
-        [FileType.APP, FileType.APP_RAW],
-        "Invalid App!",
-        ErrorCodes.EXTERNAL_FIRMWARE_INVALID_APP_FILE,
-    )
+class PythonAppValidator(ChainableValidator[ValidableFileInfo]):
+    def validable(self, info: ValidableFileInfo) -> bool:
+        return (
+            info.type == FileType.APP
+            and info.path.suffix == ModuleExtension.PY.as_suffix
+        )
+
+    def validate(self, info: ValidableFileInfo) -> None:
+        if not is_valid_python_script(info.path, info.content):
+            raise UserException(
+                ErrorCodes.EXTERNAL_FIRMWARE_INVALID_APP_FILE,
+                "Invalid application object!",
+            )
 
 
-def model_validator() -> CheckFirstBytesValidator:
-    return CheckFirstBytesValidator(
-        bytes(IMX500_MODEL_HEADER),
-        [FileType.MODEL, FileType.MODEL_RAW],
-        "Invalid Model!",
-        ErrorCodes.EXTERNAL_FIRMWARE_INVALID_MODEL_FILE,
-    )
+class WASMAppValidator(ChainableValidator[ValidableFileInfo]):
+    def validable(self, info: ValidableFileInfo) -> bool:
+        return (
+            info.type == FileType.APP
+            and info.path.suffix == ModuleExtension.WASM.as_suffix
+        )
+
+    def validate(self, info: ValidableFileInfo) -> None:
+        if not is_valid_wasm_binary(info.path, info.content):
+            raise UserException(
+                ErrorCodes.EXTERNAL_FIRMWARE_INVALID_APP_FILE,
+                "Invalid application object!",
+            )
+
+
+class AOTAppValidator(CheckFirstBytesValidator):
+    HEADERS = [
+        bytes(AOT_HEADER),
+    ]
+    EXTENSIONS = [
+        ModuleExtension.AOT.as_suffix,
+    ]
+    TYPES = [FileType.APP, FileType.APP_RAW]
+    EXC_CODE = ErrorCodes.EXTERNAL_FIRMWARE_INVALID_APP_FILE
+    EXC_MSG = "Invalid AoT application object!"
+
+
+class IMX500ModelPkgValidator(CheckFirstBytesValidator):
+    HEADERS = [
+        bytes(IMX500_MODEL_PKG_HEADER),
+    ]
+    EXTENSIONS = [AiModelExtension.PKG.as_suffix]
+    TYPES = [
+        FileType.MODEL,
+        FileType.MODEL_RAW,
+    ]
+    EXC_MSG = "Invalid Model!"
+    EXC_CODE = ErrorCodes.EXTERNAL_FIRMWARE_INVALID_MODEL_FILE
+
+
+class IMX500ModelRpkValidator(IMX500ModelPkgValidator):
+    HEADERS = [
+        bytes(IMX500_MODEL_RPK_HEADER),
+    ]
+    EXTENSIONS = [AiModelExtension.RPK.as_suffix]
 
 
 def save_validator() -> ChainOfValidators:
@@ -158,7 +208,10 @@ def save_validator() -> ChainOfValidators:
             NoneEmptyValidator(),
             AlreadyExistsValidator(),
             FirmwareValidator(),
-            model_validator(),
-            app_validator(),
+            IMX500ModelPkgValidator(),
+            IMX500ModelRpkValidator(),
+            AOTAppValidator(),
+            PythonAppValidator(),
+            WASMAppValidator(),
         ]
     )

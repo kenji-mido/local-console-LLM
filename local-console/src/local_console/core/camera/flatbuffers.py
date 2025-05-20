@@ -89,7 +89,7 @@ def get_output_from_inference_results(raw_data: bytes) -> bytes:
 
     inferences = data["Inferences"]
     if len(inferences) > 1:
-        logger.warn("More than 1 inference at a time. Using index 0.")
+        logger.warning("More than 1 inference at a time. Using index 0.")
     output_tensor = inferences[0]["O"]
     return b64decode(output_tensor)
 

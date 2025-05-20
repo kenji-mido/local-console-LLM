@@ -16,5 +16,7 @@
  SPDX-License-Identifier: Apache-2.0
 -->
 
-<img [src]="iconUrl" />
+@if (iconUrl) {
+  <img [src]="iconUrl" />
+}
 <span data-testid="text" [title]="text"> {{ text }} </span>

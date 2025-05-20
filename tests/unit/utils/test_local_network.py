@@ -14,26 +14,17 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 import logging
-import re
 import socket
 from socket import AddressFamily
 from unittest.mock import MagicMock
 from unittest.mock import patch
 
 import pytest
-from local_console.utils.local_network import get_mqtt_ip
-from local_console.utils.local_network import get_my_ip_by_routing
 from local_console.utils.local_network import get_network_ifaces
-from local_console.utils.local_network import get_webserver_ip
 from local_console.utils.local_network import is_localhost
 from local_console.utils.local_network import is_port_open
-
-# For some reason, pycln removes this import, but obviously
-# pytest fails when running the tests!
-from tests.fixtures.debugging import debug_log  # noreorder # noqa
-from tests.strategies.samplers.configs import DeviceConnectionSampler
-from psutil._common import snicstats
 from psutil._common import snicaddr
+from psutil._common import snicstats
 
 logger = logging.getLogger(__name__)
 
@@ -56,51 +47,15 @@ def mock_psutil():
                 )
             ]
         }
-        yield
+        yield mock
 
 
-def test_detect_interfaces(debug_log):
+def test_detect_interfaces():
     interfaces = get_network_ifaces()
 
     assert "lo" not in interfaces
     assert all("docker" not in iface for iface in interfaces)
     assert all("ppp" not in iface for iface in interfaces)
-
-
-def test_get_my_ip_by_routing(mock_psutil):
-    # Ensure we get an IPv4 address
-    local_ip = get_my_ip_by_routing()
-    assert re.match(r"\d+\.\d+\.\d+\.\d+", local_ip)
-
-
-def test_get_mqtt_ip_localhost(mock_psutil):
-    gconf = DeviceConnectionSampler().sample()
-    gconf.mqtt.host = "localhost"
-    ip = get_mqtt_ip(gconf)
-    assert ip != "localhost"
-    assert ip == get_my_ip_by_routing()
-
-
-def test_get_mqtt_ip(mock_psutil):
-    gconf = DeviceConnectionSampler().sample()
-    gconf.mqtt.host = "192.168.1.13"
-    ip = get_mqtt_ip(gconf)
-    assert ip == "192.168.1.13"
-
-
-def test_get_webserver_ip_localhost(mock_psutil):
-    gconf = DeviceConnectionSampler().sample()
-    gconf.webserver.host = "localhost"
-    ip = get_webserver_ip(gconf)
-    assert ip != "localhost"
-    assert ip == get_my_ip_by_routing()
-
-
-def test_get_webserver_ip(mock_psutil):
-    gconf = DeviceConnectionSampler().sample()
-    gconf.webserver.host = "192.168.1.13"
-    ip = get_webserver_ip(gconf)
-    assert ip == "192.168.1.13"
 
 
 def test_is_localhost(mock_psutil):

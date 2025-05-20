@@ -16,13 +16,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import {
-  DeployHistoryOut,
   DeployHistoriesOut,
-  DeployHistoryEdgeSystemOut,
-  DeploymentStatusOut,
-  DeployHistoryModelsOut,
-  DeployHistoryEdgeAppsOut,
   DeployHistoryDevicesOut,
+  DeployHistoryEdgeAppsOut,
+  DeployHistoryEdgeSystemOut,
+  DeployHistoryModelsOut,
+  DeployHistoryOut,
+  DeploymentStatusOut,
 } from '@app/core/deployment/deployment';
 import { LocalDevice } from '@app/core/device/device';
 import { Device } from '@samplers/device';
@@ -48,7 +48,7 @@ export module DeployHistoriesOutList {
   export function sampleHistoryList(
     devices?: LocalDevice[],
   ): DeployHistoryOut[] {
-    devices ||= [Device.sampleLocal()];
+    devices ||= [Device.sample()];
     return devices.map((device, index) => {
       const id = index + '';
       return <DeployHistoryOut>{

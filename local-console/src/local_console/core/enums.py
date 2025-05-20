@@ -13,12 +13,17 @@
 # limitations under the License.
 #
 # SPDX-License-Identifier: Apache-2.0
+import logging
 import os
 import platform
+from enum import IntEnum
 from pathlib import Path
 
-import platformdirs
+from local_console.core.camera.enums import UnitScale
+from local_console.core.schemas.schemas import Persist
 from local_console.utils.enums import StrEnum
+
+logger = logging.getLogger(__name__)
 
 
 class Config:
@@ -41,6 +46,9 @@ class Config:
         self._home = Path(value).expanduser().resolve()
 
 
+DEFAULT_PERSIST_SETTINGS = Persist(size=100, unit=UnitScale.MB)
+
+
 def get_default_home() -> Path:
     app_subdir = Path("local-console")
     os_name = platform.system()
@@ -58,10 +66,6 @@ def get_default_home() -> Path:
         return Path.home() / "Library/Application Support" / app_subdir
     else:
         raise OSError(f"Unsupported runtime: {os_name}")
-
-
-def get_default_files_dir() -> Path:
-    return Path(platformdirs.user_documents_dir())
 
 
 config_paths = Config()
@@ -87,9 +91,23 @@ class Target(StrEnum):
 
 
 class ModuleExtension(StrEnum):
+    PY = "py"
     WASM = "wasm"
     AOT = "aot"
     SIGNED = "signed"
+
+    @property
+    def as_suffix(self) -> str:
+        return f".{self}"
+
+
+class AiModelExtension(StrEnum):
+    PKG = "pkg"
+    RPK = "rpk"
+
+    @property
+    def as_suffix(self) -> str:
+        return f".{self}"
 
 
 class ApplicationConfiguration:
@@ -108,3 +126,14 @@ class ApplicationSchemaFilePath:
     DETECTION = (
         ApplicationConfiguration.FB_SCHEMA_PATH / ApplicationSchemaFile.DETECTION
     )
+
+
+class Frame(IntEnum):
+    """
+    This follows the file naming convention used by the
+    camera firmware for its image upload modes.
+
+    Example: 20250207122800999.jpg
+    """
+
+    TIMESTAMP_SIZE = 17

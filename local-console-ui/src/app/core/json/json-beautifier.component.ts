@@ -13,6 +13,16 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  *
+ * This file incorporates material from a Stack Overflow answer licensed under
+ * the Creative Commons Attribution-ShareAlike 3.0 Unported (CC BY-SA 3.0) license:
+ *
+ *     CC BY-SA 3.0
+ *     https://creativecommons.org/licenses/by-sa/3.0/
+ *
+ * Source: https://stackoverflow.com/a/7220510
+ * Created by : https://stackoverflow.com/users/27862/user123444555621
+ * Minor modifications have been made to formatting and structure.
+ *
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -32,7 +42,7 @@ import {
 })
 export class StringSplitterPipe implements PipeTransform {
   transform(value: string, splitter: string = '\n') {
-    return value.split(splitter);
+    return value ? value.split(splitter) : [];
   }
 }
 

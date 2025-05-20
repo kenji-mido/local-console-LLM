@@ -14,7 +14,6 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 import base64
-from datetime import datetime
 from datetime import timedelta
 from io import BytesIO
 
@@ -23,6 +22,7 @@ from fastapi import Depends
 from fastapi import status
 from local_console.core.camera.qr.schema import QRInfo
 from local_console.fastapi.dependencies.devices import InjectDeviceServices
+from local_console.utils.timing import now
 from pydantic import BaseModel
 
 router = APIRouter(prefix="/provisioning", tags=["Project"])
@@ -45,7 +45,6 @@ async def get_qr_code_for_provisioning_func(
 ) -> QrCodeResponse:
 
     qr = device_service.qr.generate(dto)
-
     img = qr.make_image(fill="black", back_color="white")
 
     img_byte_arr = BytesIO()
@@ -54,7 +53,7 @@ async def get_qr_code_for_provisioning_func(
 
     # Encode the image to base64
     contents = base64.b64encode(img_byte_arr.getvalue()).decode("utf-8")
-    expiration_date = datetime.now() + timedelta(days=1)
+    expiration_date = now() + timedelta(days=1)
 
     return QrCodeResponse(
         contents=contents, expiration_date=expiration_date.astimezone().isoformat()

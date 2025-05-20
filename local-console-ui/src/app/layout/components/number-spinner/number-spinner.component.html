@@ -20,7 +20,7 @@
   <div *ngIf="label" class="spinner-label">
     <span>{{ label }}</span>
   </div>
-  <div class="spinner-body">
+  <div class="spinner-body disableable" [class.disabled]="disabled">
     <button
       class="spinner-component spinner-prefix"
       [disabled]="minusPlusDisabled"
@@ -39,6 +39,7 @@
       type="number"
       [(ngModel)]="data"
       [disabled]="editableDisabled"
+      [style.width]="width === 'auto' ? width : width + 'px'"
       (ngModelChange)="onInputChange($event)"
     />
     <button

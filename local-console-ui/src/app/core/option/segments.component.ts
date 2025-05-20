@@ -16,20 +16,24 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { Component, forwardRef, Input } from '@angular/core';
-import { ControlValueAccessor, NG_VALUE_ACCESSOR } from '@angular/forms';
+import {
+  Component,
+  EventEmitter,
+  HostBinding,
+  Input,
+  Output,
+} from '@angular/core';
+
+export interface Segment {
+  display: string;
+  disabled?: boolean;
+  tooltip?: string;
+}
 
 @Component({
   selector: 'app-segments',
   standalone: true,
   imports: [],
-  providers: [
-    {
-      provide: NG_VALUE_ACCESSOR,
-      useExisting: forwardRef(() => SegmentsComponent),
-      multi: true,
-    },
-  ],
   styles: `
     :host {
       display: flex;
@@ -49,43 +53,36 @@ import { ControlValueAccessor, NG_VALUE_ACCESSOR } from '@angular/forms';
     }
   `,
   template: `
-    @for (option of options; track option; let index = $index) {
+    @for (option of _options; track option.display; let index = $index) {
       <button
-        [class]="option === value ? 'normal-hub-btn' : 'weak-hub-btn'"
+        [class]="option.display === value ? 'normal-hub-btn' : 'weak-hub-btn'"
         [attr.data-testid]="'option-' + index"
-        (click)="onInput(option)"
-        [disabled]="disabled"
+        (click)="valueChange.emit(option.display)"
+        [disabled]="option.disabled || disabled"
+        [attr.title]="option.tooltip || null"
       >
-        {{ option }}
+        {{ option.display }}
       </button>
     }
   `,
 })
-export class SegmentsComponent implements ControlValueAccessor {
-  @Input() options: string[] = [];
+export class SegmentsComponent {
+  protected _options: Segment[] = [];
   @Input() disabled: boolean = false;
 
-  value: string = '';
-
-  private onChange: (value: string) => void = () => {};
-
-  private onTouched: () => void = () => {};
-
-  onInput(value: string) {
-    this.value = value;
-    this.onChange(value);
-    this.onTouched();
+  @Input() value: string = '';
+  @Output() valueChange = new EventEmitter<string>();
+  @HostBinding('attr.aria-disabled') get disabledAttr() {
+    return this.disabled ? true : null;
   }
+  @HostBinding('attr.role') role = 'radiogroup';
 
-  writeValue(value: string): void {
-    this.value = value;
-  }
-
-  registerOnChange(fn: (value: string) => void): void {
-    this.onChange = fn;
-  }
-
-  registerOnTouched(fn: () => void): void {
-    this.onTouched = fn;
+  @Input() set options(opts: Array<Segment | string>) {
+    this._options = opts.map((opt) => {
+      if (typeof opt === 'string') {
+        return <Segment>{ display: opt };
+      }
+      return opt;
+    });
   }
 }

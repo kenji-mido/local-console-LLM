@@ -16,30 +16,39 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { Injectable } from '@angular/core';
-import {
-  DeployConfigApplyOut,
-  DeployConfigApplyIn,
-  DeployConfigsIn,
-  DeployHistoryOut,
-  DeployHistoriesOut,
-} from './deployment';
-import { environment } from '../../../environments/environment';
-import { HttpApiClient } from '../common/http/http';
-import { ReplaySubject } from 'rxjs';
 import { HttpParams } from '@angular/common/http';
+import { Injectable } from '@angular/core';
+import { ReplaySubject } from 'rxjs';
+import { EnvService } from '../common/environment.service';
+import { HttpApiClient } from '../common/http/http';
+import {
+  DeployConfigApplyIn,
+  DeployConfigApplyOut,
+  DeployConfigsIn,
+  DeployHistoriesOut,
+  DeployHistoryOut,
+} from './deployment';
 
 @Injectable({
   providedIn: 'root',
 })
 export class DeploymentService {
-  private deployConfigurationV2Path = `${environment.apiV2Url}/deploy_configs`;
-  private deployHistoryPathV2 = `${environment.apiV2Url}/deploy_history`;
   private deploymentSubject = new ReplaySubject<DeployHistoriesOut>(1);
   private defaultLimit: number = 256;
   public deployment$ = this.deploymentSubject.asObservable();
 
-  constructor(private http: HttpApiClient) {}
+  constructor(
+    private http: HttpApiClient,
+    private envService: EnvService,
+  ) {}
+
+  get deployConfigurationV2Path() {
+    return `${this.envService.getApiUrl()}/deploy_configs`;
+  }
+
+  get deployHistoryPathV2() {
+    return `${this.envService.getApiUrl()}/deploy_history`;
+  }
 
   createDeploymentConfigV2(payload: DeployConfigsIn) {
     return this.http.post(this.deployConfigurationV2Path, payload);

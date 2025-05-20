@@ -1,0 +1,8 @@
+#!/bin/sh
+set -e
+
+systemctl stop system-stub.service || true
+systemctl disable system-stub.service || true
+
+rm /usr/bin/system-stub
+rm -r /opt/system-stub/

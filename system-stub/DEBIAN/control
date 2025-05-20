@@ -1,0 +1,12 @@
+Source: system-stub
+Maintainer: Console Experience team <engineering@midokura.com>
+Section: python
+Priority: optional
+Build-Depends: python3-venv, python3-setuptools, python3-all
+Standards-Version: 3.9.6
+Homepage: None
+Package: system-stub
+Architecture: all
+Depends: python3-picamera2
+Description: RPi System App system-stub
+Version: 0.0.0

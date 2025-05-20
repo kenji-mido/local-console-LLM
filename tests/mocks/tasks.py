@@ -62,12 +62,12 @@ class WaitingTasks(Task):
             )  # simulate long running task
         self.task_state.set(Status.SUCCESS)
 
-    def stop(self) -> None:
+    async def stop(self) -> None:
         self.stopped = True
 
     def errored(self, error: BaseException) -> None:
         self.task_state.error_notification(str(error))
-        self.stop()
+        self.stopped = True
 
     def id(self) -> str:
         id = random_id()
@@ -93,7 +93,9 @@ def mocked_firmware_tasks(firmware=FirmwareSampler().sample()) -> FirmwareTask:
 
 
 def mocked_app_tasks(app=EdgeAppSampler().sample()) -> AppTask:
-    task = AppTask(AsyncMock(), app)
+    state = AsyncMock()
+    state._deploy_fsm.stop = MagicMock()
+    task = AppTask(state, app)
     task.run = AsyncMock(side_effect=task.run)
     task.stop = AsyncMock(side_effect=task.stop)
     return task

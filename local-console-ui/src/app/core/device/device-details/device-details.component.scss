@@ -26,10 +26,14 @@
   align-items: center;
 }
 
-.actions {
-  display: flex;
+app-device-visualizer {
+  max-width: 100%;
 }
 
-app-device-visualizer {
-  height: 300px;
+.grid {
+  grid-template-columns: 160px min-content min-content;
+
+  & > div {
+    white-space: nowrap;
+  }
 }

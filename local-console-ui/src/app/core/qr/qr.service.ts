@@ -17,7 +17,7 @@
  */
 
 import { Injectable } from '@angular/core';
-import { environment } from '../../../environments/environment';
+import { EnvService } from '../common/environment.service';
 import { HttpApiClient } from '../common/http/http';
 import { makeUrlQuery } from '../common/http/http.utils';
 import { QrCode } from './qr';
@@ -26,9 +26,14 @@ import { QrCode } from './qr';
   providedIn: 'root',
 })
 export class QrService {
-  private qrCodePath = `${environment.apiV2Url}/provisioning/qrcode`;
+  constructor(
+    private http: HttpApiClient,
+    private envService: EnvService,
+  ) {}
 
-  constructor(private http: HttpApiClient) {}
+  get qrCodePath() {
+    return `${this.envService.getApiUrl()}/provisioning/qrcode`;
+  }
 
   generateQrCode(payload: {}) {
     const url = makeUrlQuery(this.qrCodePath, payload);

@@ -13,12 +13,16 @@
 # limitations under the License.
 #
 # SPDX-License-Identifier: Apache-2.0
+from local_console.core.schemas.schemas import DeviceID
 from pydantic import BaseModel
+from pydantic import ConfigDict
 
 
 class Model(BaseModel):
     model_id: str
     model_version_number: str
+
+    model_config = ConfigDict(protected_namespaces=())
 
 
 class EdgeSystemSwPackage(BaseModel):
@@ -42,5 +46,5 @@ class ConfigFileRequestDTO(BaseModel):
 
 
 class DeployByConfigurationDTO(BaseModel):
-    device_ids: list[int]
+    device_ids: list[DeviceID]
     description: str

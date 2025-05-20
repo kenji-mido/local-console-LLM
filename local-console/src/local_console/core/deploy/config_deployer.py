@@ -14,7 +14,7 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 from local_console.core.camera.enums import OTAUpdateModule
-from local_console.core.camera.state import CameraState
+from local_console.core.camera.schemas import PropertiesReport
 from local_console.core.deploy.tasks.config_task import ConfigTask
 from local_console.core.deploy.tasks.task_executors import TaskEntity
 from local_console.core.deploy.tasks.task_executors import TaskExecutor
@@ -24,6 +24,7 @@ from local_console.core.error.base import UserException
 from local_console.core.error.code import ErrorCodes
 from local_console.core.firmwares import Firmware
 from local_console.core.schemas.schemas import DeploymentConfig
+from local_console.core.schemas.schemas import DeviceID
 
 
 class ConfigDeployer:
@@ -39,23 +40,16 @@ class ConfigDeployer:
         self.tasks = tasks
         self.params = params
 
-    def _validate_firmware(self, state: CameraState, firmware: Firmware) -> None:
+    def _validate_firmware(self, current: PropertiesReport, firmware: Firmware) -> None:
         if firmware.info.firmware_type == OTAUpdateModule.SENSORFW:
-            if state.device_config.value and (
-                firmware.info.version
-                == state.device_config.value.Version.SensorFwVersion
-            ):
+            if firmware.info.version == current.sensor_fw_version:
                 raise UserException(
                     ErrorCodes.EXTERNAL_FIRMWARE_SAME_VERSION,
                     "Already same Firmware version is available",
                 )
 
         if firmware.info.firmware_type == OTAUpdateModule.APFW:
-            if (
-                state.device_config.value
-                and firmware.info.version
-                == state.device_config.value.Version.ApFwVersion
-            ):
+            if firmware.info.version == current.cam_fw_version:
                 raise UserException(
                     ErrorCodes.EXTERNAL_FIRMWARE_SAME_VERSION,
                     "Already same Firmware version is available",
@@ -63,15 +57,15 @@ class ConfigDeployer:
 
     def _validate(self, task: ConfigTask) -> None:
         for firmware in task._config.firmwares:
-            self._validate_firmware(task._camera_state, firmware)
+            self._validate_firmware(task._camera._common_properties.reported, firmware)
 
-    async def deploy(self, device_id: int, config_id: str) -> TaskEntity:
-        camera_state = self.devices.get_state(device_id)
-        if not camera_state:
+    async def deploy(self, device_id: DeviceID, config_id: str) -> TaskEntity:
+        camera = self.devices.get_camera(device_id)
+        if not camera:
             raise FileNotFoundError(f"Device with id {device_id} not found.")
         config = self.configs.get_by_id(config_id)
         if not config:
             raise FileNotFoundError(f"Config with id {config_id} not found.")
-        task = ConfigTask(camera_state, config, self.params)
+        task = ConfigTask(camera, config, self.params)
         self._validate(task)
         return await self.tasks.add_task(task)

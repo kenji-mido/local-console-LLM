@@ -16,69 +16,87 @@
  SPDX-License-Identifier: Apache-2.0
 -->
 
-<form [formGroup]="qrcodeFormGroup">
-  <div class="hub-section minimal rows">
-    <div class="section-column">
-      <div class="section-header">
-        <span class="header-title">Network Time Server</span>
+<form [formGroup]="qrcodeFormGroup" class="stack">
+  <div class="row">
+    <div class="stack gap-1 grow">
+      <div class="line align-center text-18">
+        <span>Network Time Server</span>
+        <app-infotip
+          [size]="20"
+          tip="(Optional) Enter the NTP server's address"
+        ></app-infotip>
       </div>
-      <div class="section-body">
+      <div>
         <app-text-input
           *ngFor="let item of qrcodeTimeFormItems"
           [type]="item.type ? item.type : 'text'"
           [formName]="item.name"
           [maxLength]="item.maxLength"
           [placeholder]="item.placeholder ? item.placeholder : ''"
+          [attr.data-testid]="item.name"
         >
         </app-text-input>
       </div>
     </div>
-    <div class="section-column" *ngIf="features.device_registration.mqtt_port">
-      <div class="section-header">
-        <span class="header-title">MQTT Broker</span>
+    <div class="stack gap-1 grow">
+      <div class="line align-center text-18">
+        <div class="line gap-half">
+          <span>MQTT Broker</span>
+          <i class="required"></i>
+        </div>
+        <app-infotip
+          [size]="20"
+          tip="Select Network Interface Card for communication with device"
+        ></app-infotip>
       </div>
-      <div class="section-body">
-        <app-text-input
-          type="text"
+      <div data-testid="nics">
+        @if (availableNics.loading()) {
+        <mat-spinner
+          diameter="30"
+          class="mt-2 ml-2"
+          data-testid="loading-spinner"
+        ></mat-spinner>
+        } @else if (availableNics.error()) {
+        <div class="line align-center gap-1 mt-2">
+          <img src="images/light/status-error.svg" class="ws-1" />
+          <span class="text-14">Error loading Network Interface Cards.</span>
+        </div>
+        } @else {
+        <app-search-input
+          data-testid="nics-input"
           formName="mqtt_host"
-          placeholder="198.168.10.10"
+          [items]="availableNics.data()"
         >
-        </app-text-input>
+          <ng-template let-nic as NIC>
+            <div class="line gap-0">
+              @if(nic) {
+              <div class="ws-4 ellipsis overflow-hidden">{{ nic.name }}</div>
+              <div class="nic-ip">{{ nic.ip }}</div>
+              } @else {
+              <span style="color: gray">Select Network Interface Card.</span>
+              }
+            </div>
+          </ng-template>
+        </app-search-input>
+        }
       </div>
-    </div>
-  </div>
-
-  <!-- proxy server -->
-  <div class="hub-section" *ngIf="features.device_registration.proxy_settings">
-    <div class="section-header">
-      <span class="header-title">Proxy Server</span>
-    </div>
-    <div class="section-body">
-      <app-text-input
-        *ngFor="let item of qrcodeProxyFormItems"
-        [type]="item.type ? item.type : 'text'"
-        [label]="item.label"
-        labelPos="top"
-        [formName]="item.name"
-        [maxLength]="item.maxLength"
-        [placeholder]="item.placeholder ? item.placeholder : ''"
-      >
-      </app-text-input>
     </div>
   </div>
 
   <!-- config IP settings toggle -->
-  <div class="card-belt">
-    <span style="margin-right: 5px">Static IP</span>
-    <app-infotip
-      tip="Click the toggle button to fill the IP values and include them in the QR when generated"
-    />
+  <div class="row align-center text-18">
+    <div class="line gap-1">
+      <span>Static IP</span>
+      <app-infotip
+        tip="(Optional) Configure Static IP parameters for the device"
+      />
+    </div>
     <app-toggle
       [toggleStatus]="networkConfigure"
       (click)="onNetworkConfigToggle()"
+      data-testid="toggle_static_ip"
     ></app-toggle>
   </div>
-  <div break></div>
 
   <!-- config IP settings section -->
   <ng-container *ngIf="networkConfigure">
@@ -91,7 +109,8 @@
           labelPos="top"
           [formName]="item.name"
           [maxLength]="item.maxLength"
-          [placeholder]="item.placeholder ? item.placeholder : ''"
+          [placeholder]="item.placeholder ? 'ex: ' + item.placeholder : ''"
+          [attr.data-testid]="item.name"
         >
         </app-text-input>
       </div>
@@ -99,32 +118,35 @@
   </ng-container>
 
   <!-- config IP settings toggle -->
-  <div class="card-belt">
-    <span style="margin-right: 5px">Wi-Fi SSID</span>
-    <app-infotip
-      tip="Click the toggle button to fill the SSID values and include them in the QR when generated"
-    />
+  <div class="row align-center text-18">
+    <div class="line gap-1">
+      <span>Wi-Fi SSID</span>
+      <app-infotip
+        tip="(Optional) Add Wi-Fi connection credentials for Wi-Fi enabled devices"
+      />
+    </div>
     <app-toggle
       [toggleStatus]="wifiSettings"
       (click)="onWifiSettingsToggle()"
+      data-testid="toggle_wifi_ssid"
     ></app-toggle>
   </div>
 
   <ng-container *ngIf="wifiSettings">
     <!-- WIFI SSID-->
-    <div class="hub-section">
-      <div class="section-body rows">
-        <app-text-input
-          *ngFor="let item of qrcodeWifiFormItems"
-          [type]="item.type ? item.type : 'text'"
-          [label]="item.label"
-          labelPos="top"
-          [formName]="item.name"
-          [maxLength]="item.maxLength"
-          [placeholder]="item.placeholder ? item.placeholder : ''"
-        >
-        </app-text-input>
-      </div>
+    <div class="field-box row">
+      <app-text-input
+        class="grow"
+        *ngFor="let item of qrcodeWifiFormItems"
+        [type]="item.type ? item.type : 'text'"
+        [label]="item.label"
+        labelPos="top"
+        [formName]="item.name"
+        [maxLength]="item.maxLength"
+        [placeholder]="item.placeholder ? item.placeholder : ''"
+        [attr.data-testid]="item.name"
+      >
+      </app-text-input>
     </div>
   </ng-container>
 </form>

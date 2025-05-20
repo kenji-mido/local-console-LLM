@@ -21,41 +21,47 @@ import {
   DeviceFrame,
   DeviceListV2,
   DeviceStatus,
-  DeviceV2,
+  DeviceType,
   LocalDevice,
 } from '@app/core/device/device';
-import {
-  SysAppModuleNetworkSettingV2,
-  SysAppModuleEndpointSettingV2,
-  SysAppModuleWirelessSettingV2,
-} from '@app/core/module/sysapp';
+import { EdgeAppModuleEdgeAppCustomSettingsV2 } from '@app/core/module/edgeapp';
 import { DeviceModuleV2 } from '@app/core/module/module';
 import {
-  Classification,
-  ClassificationItem,
-  Detection,
-} from '@app/core/inference/inference';
+  SysAppModuleEndpointSettingV2,
+  SysAppModuleNetworkSettingV2,
+  SysAppModuleWirelessSettingV2,
+} from '@app/core/module/sysapp';
 import { Inferences, InferenceType } from './inferences';
 import { SMALLEST_VALID_PNG } from './qr';
 
-export module DeviceList {
+export namespace DeviceList {
   export function sample(): DeviceListV2 {
     return {
       continuation_token: '',
       devices: [
-        Device.sample('first_device', '001', DeviceStatus.Connected),
-        Device.sample('second_device', '002', DeviceStatus.Disconnected),
-        Device.sample('third_device', '003', DeviceStatus.Periodic),
+        Device.sample({
+          device_name: 'first_device',
+          device_id: '1884',
+          connection_state: DeviceStatus.Connected,
+        }),
+        Device.sample({
+          device_name: 'second_device',
+          device_id: '1885',
+          connection_state: DeviceStatus.Disconnected,
+        }),
+        Device.sample({
+          device_name: 'third_device',
+          device_id: '1886',
+          connection_state: DeviceStatus.Connecting,
+        }),
+        Device.sample({
+          device_name: 'raspi',
+          device_id: '1887',
+          connection_state: DeviceStatus.Connected,
+          device_type: DeviceType.RASPI,
+        }),
       ],
     };
-  }
-
-  export function sampleLocal(): DeviceListV2 {
-    const list = sample();
-    list.devices = list.devices.map((device, i) => {
-      return Device.sampleLocal(device, 1884 + i);
-    });
-    return list;
   }
 
   export function sampleEmpty(): DeviceListV2 {
@@ -66,32 +72,19 @@ export module DeviceList {
   }
 }
 
-export module Device {
-  export function sample(
-    device_name: string = 'device_xyz',
-    device_id: string = '000',
-    state: DeviceStatus = DeviceStatus.Connected,
-  ): DeviceV2 {
+export namespace Device {
+  export function sample(values: Partial<LocalDevice> = {}): LocalDevice {
     return {
-      device_name,
-      device_id: device_id,
+      device_name: 'device_xyz',
+      device_id: '1883',
+      device_type: 'SZP123S-001',
       description: 'Mocked device',
-      internal_device_id: '000',
       inactivity_timeout: 0,
-      device_groups: [],
-      connection_state: state,
+      connection_state: DeviceStatus.Connected,
       modules: [DeviceModule.sampleSystem()],
+      last_known_roi: DEFAULT_ROI,
+      ...values,
     };
-  }
-
-  export function sampleLocal(): LocalDevice;
-  export function sampleLocal(device: DeviceV2, port: number): LocalDevice;
-  export function sampleLocal(device?: DeviceV2, port?: number): LocalDevice {
-    if (device && port) {
-      return <LocalDevice>{ ...device, port, last_known_roi: DEFAULT_ROI };
-    } else {
-      return sampleLocal(sample(), 1234);
-    }
   }
 
   export function sampleFrame(type: InferenceType = 'classification') {
@@ -103,15 +96,26 @@ export module Device {
 }
 
 export module DeviceModule {
+  export function sampleEdgeAppPropertyCustomConfig(): {
+    custom_settings: EdgeAppModuleEdgeAppCustomSettingsV2;
+  } {
+    return {
+      custom_settings: {
+        ai_models: {
+          one_pass_model: {
+            parameters: {
+              max_detections: 3,
+            },
+          },
+        },
+      },
+    };
+  }
   export function sampleSystem(): DeviceModuleV2 {
     return {
-      module_name: 'SYSTEM',
-      module_id: '$system',
       property: {
-        state: {
+        configuration: {
           network_settings: NetworkSettings.sampleSettings(),
-          wireless_setting: WirelessSettings.sampleSettings(),
-          PRIVATE_endpoint_settings: EndpointSettings.sampleSettings(),
           device_info: {
             sensors: [{ firmware_version: '020000', name: 'IMX500' }],
             processors: [{ firmware_version: 'D52408' }],
@@ -128,6 +132,10 @@ export module DeviceModule {
               },
             ],
           },
+        },
+        state: {
+          wireless_setting: WirelessSettings.sampleSettings(),
+          PRIVATE_endpoint_settings: EndpointSettings.sampleSettings(),
           PRIVATE_reserved: {},
         },
       },

@@ -17,21 +17,24 @@
  */
 
 import { Injectable } from '@angular/core';
-import { FirmwareV2 } from './firmware';
-import { environment } from '../../../environments/environment';
+import { EnvService } from '../common/environment.service';
 import { HttpApiClient } from '../common/http/http';
 import { FilesService } from '../file/files.service';
+import { FirmwareV2 } from './firmware';
 
 @Injectable({
   providedIn: 'root',
 })
 export class FirmwareService {
-  private firmwaresV2Path = `${environment.apiV2Url}/firmwares`;
-
   constructor(
     private http: HttpApiClient,
     private fileService: FilesService,
+    private envService: EnvService,
   ) {}
+
+  get firmwaresV2Path() {
+    return `${this.envService.getApiUrl()}/firmwares`;
+  }
 
   async createFirmwareV2(payload: FirmwareV2) {
     try {

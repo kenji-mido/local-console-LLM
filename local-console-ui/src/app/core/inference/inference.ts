@@ -16,10 +16,22 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { OkColor } from '../drawing/color';
+
+export enum ExtendedMode {
+  Preview = 3,
+}
+
 export enum Mode {
   ImageOnly = 0,
   ImageAndInferenceResult = 1,
   InferenceResult = 2,
+}
+
+export enum TaskType {
+  ObjectDetection = 'OD',
+  Classification = 'CL',
+  Custom = 'Custom',
 }
 
 /* Inference example:
@@ -36,7 +48,8 @@ export enum Mode {
         "Inferences": [
           {
             "T": "20241025170515813",
-            "O": "AAAwvgAAID4AAOA9AAAAvQAA4D0AAEC+AACwvgAAkD4AADA+AACAvg=="
+            "O": "AAAwvgAAID4AAOA9AAAAvQAA4D0AAEC+AACwvgAAkD4AADA+AACAvg==",
+            "F": 0
           }
         ]
       }
@@ -48,6 +61,8 @@ export enum Mode {
 export interface InferenceDataResultInference {
   T: string;
   O: string;
+  F: 0 | 1 | undefined;
+  P: TaskType | undefined;
 }
 export interface InferenceDataResult {
   DeviceID: string;
@@ -61,7 +76,7 @@ export interface InferenceData {
   model_version_id: string;
   inference_result: InferenceDataResult;
 }
-export interface Inference {
+export interface Inferences {
   data: InferenceData[];
   continuation_token: string | null;
 }
@@ -70,8 +85,7 @@ export interface InferenceItem {
   class_id: number;
   score: number;
   label: string;
-  // new
-  color: [number, number, number];
+  color: OkColor;
 }
 
 /* Example of JSON classification,
@@ -129,11 +143,38 @@ export interface Detection {
   perception: DetectionPerception;
 }
 
+export interface ErrorInference {
+  errorLabel: string;
+}
+
+export interface CustomInference {}
+
+export type InferenceLike =
+  | Classification
+  | Detection
+  | CustomInference
+  | ErrorInference;
+
 export function isClassificationInference(
-  inference: Classification | Detection,
+  inference: InferenceLike,
 ): inference is Classification {
   return (
-    !!inference.perception &&
+    !!(<Classification>inference).perception &&
     !!(<Classification>inference).perception.classification_list
   );
+}
+
+export function isDetectionInference(
+  inference: InferenceLike,
+): inference is Detection {
+  return (
+    !!(<Detection>inference).perception &&
+    !!(<Detection>inference).perception.object_detection_list
+  );
+}
+
+export function isErrorInference(
+  inference: InferenceLike,
+): inference is ErrorInference {
+  return 'errorLabel' in inference;
 }

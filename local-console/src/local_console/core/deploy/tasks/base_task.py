@@ -20,6 +20,7 @@ from datetime import datetime
 from typing import Any
 
 from local_console.utils.enums import StrEnum
+from local_console.utils.timing import now
 from local_console.utils.trio import DEFAULT_TASK_TIMEOUT
 from local_console.utils.trio import TimeoutConfig
 from pydantic import BaseModel
@@ -41,7 +42,7 @@ class Status(StrEnum):
 
 class TaskState(BaseModel):
     status: Status = Status.INITIALIZING
-    started_at: datetime = Field(default_factory=datetime.now)
+    started_at: datetime = Field(default_factory=now)
     error: str | None = None
 
     def __eq__(self, other: Any) -> bool:

@@ -16,63 +16,44 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { Injectable, Output } from '@angular/core';
+import { Dialog } from '@angular/cdk/dialog';
+import { HttpParams } from '@angular/common/http';
+import { Injectable } from '@angular/core';
+import {
+  DeviceSelectionPopupComponent,
+  DeviceSelectionPopupData,
+} from '@app/core/device/device-selector/device-selector-popup.component';
+import { firstValueFrom, ReplaySubject } from 'rxjs';
 import { CommandService } from '../command/command.service';
-import { HttpErrorResponse, HttpParams } from '@angular/common/http';
+import { EnvService } from '../common/environment.service';
 import { HttpApiClient } from '../common/http/http';
+import { Configuration } from './configuration';
 import {
   DEFAULT_ROI,
-  DeviceFrame,
   DeviceListV2,
-  DeviceV2,
-  isLocalDevice,
   LocalDevice,
   ModuleConfigurationV2,
   ROI,
-  SENSOR_SIZE,
   UpdateModuleConfigurationPayloadV2,
 } from './device';
-import { environment } from '../../../environments/environment';
-import { ExecuteCommandPayloadV2, InferenceCommand } from '../command/command';
-import { ReplaySubject, Subject } from 'rxjs';
-import { EdgeAppModuleConfigurationV2 } from '../module/edgeapp';
-import { Configuration } from './configuration';
-import { Point2D } from '../drawing/drawing';
-import { Mode } from '../inference/inference';
 
 @Injectable({
   providedIn: 'root',
 })
 export class DeviceService {
   private __lastKnownROICache = new Map<string, ROI>();
-  private devicePathV2 = `${environment.apiV2Url}/devices`;
-  private deviceSelectedSubject = new ReplaySubject<DeviceV2>(1);
-  private devicesSubject = new ReplaySubject<DeviceV2[]>(1);
-  public deviceSelected$ = this.deviceSelectedSubject.asObservable();
+  private devicesSubject = new ReplaySubject<LocalDevice[]>(1);
   public devices$ = this.devicesSubject.asObservable();
 
   constructor(
     private commands: CommandService,
     private http: HttpApiClient,
+    private dialog: Dialog,
+    private envService: EnvService,
   ) {}
 
-  getPreviewImageV2(
-    deviceId: string,
-    roiOffset: Point2D = new Point2D(0, 0),
-    roiSize: Point2D = SENSOR_SIZE,
-  ) {
-    const moduleName = '$system';
-    const payload: ExecuteCommandPayloadV2 = {
-      command_name: 'direct_get_image',
-      parameters: {
-        sensor_name: 'IMX500',
-        CropHOffset: roiOffset.x,
-        CropVOffset: roiOffset.y,
-        CropHSize: roiSize.x,
-        CropVSize: roiSize.y,
-      },
-    };
-    return this.commands.executeCommandV2(deviceId, moduleName, payload);
+  get devicePathV2() {
+    return `${this.envService.getApiUrl()}/devices`;
   }
 
   async getDevicesV2(
@@ -93,8 +74,10 @@ export class DeviceService {
     }
   }
 
-  getDeviceV2(id: string) {
-    return this.http.get<DeviceV2>(`${this.devicePathV2}/${id}`);
+  getDevice(id: string, silent = false) {
+    return this.http
+      .get<LocalDevice>(`${this.devicePathV2}/${id}`, {}, !silent)
+      .then(this.patchLocalDeviceCachedROI.bind(this));
   }
 
   async updateDeviceName(device_id: string, device_name: string) {
@@ -105,74 +88,9 @@ export class DeviceService {
     return updateResp;
   }
 
-  async updateModuleConfigurationV2(
-    device_id: string,
-    module_id: string,
-    payload: UpdateModuleConfigurationPayloadV2,
-  ) {
-    const moduleResp = await this.http.patch<ModuleConfigurationV2>(
-      `${this.devicePathV2}/${device_id}/modules/${module_id}`,
-      payload,
-    );
-    return moduleResp;
-  }
-
-  async stopUploadInferenceResultV2(deviceId: string, edgeAppModuleId: string) {
-    return this.uploadInferenceResultV2(
-      deviceId,
-      edgeAppModuleId,
-      InferenceCommand.STOP,
-    );
-  }
-
-  async uploadInferenceResultV2(
-    deviceId: string,
-    edgeAppModuleId: string,
-    cmd: InferenceCommand,
-  ) {
-    const payload: UpdateModuleConfigurationPayloadV2 = {
-      property: {
-        configuration: {},
-      },
-    };
-    await this.getModuleV2(deviceId, edgeAppModuleId).then((data) => {
-      let config: EdgeAppModuleConfigurationV2 = data.property
-        .configuration as EdgeAppModuleConfigurationV2;
-      if (
-        !config.edge_app ||
-        !config.edge_app.common_settings ||
-        !config.edge_app.common_settings.process_state
-      ) {
-        config = {
-          ...config,
-          edge_app: {
-            ...config.edge_app,
-            common_settings: {
-              ...config.edge_app?.common_settings,
-              process_state: cmd,
-            },
-          },
-        };
-      } else {
-        config.edge_app.common_settings.process_state = cmd;
-      }
-      payload.property.configuration = {
-        ...config,
-      };
-    });
-    return this.updateModuleConfigurationV2(deviceId, edgeAppModuleId, payload);
-  }
-
-  async getModuleV2(device_id: string, module_id: string) {
-    const moduleResp = await this.http.get<ModuleConfigurationV2>(
-      `${this.devicePathV2}/${device_id}/modules/${module_id}`,
-    );
-    return moduleResp;
-  }
-
   async deleteDevice(device: LocalDevice) {
     const result = await this.http.delete(
-      `${this.devicePathV2}/${device.port}`,
+      `${this.devicePathV2}/${device.device_id}`,
     );
     await this.loadDevices();
     return result;
@@ -183,7 +101,7 @@ export class DeviceService {
     try {
       result = await this.http.post(`${this.devicePathV2}`, {
         device_name,
-        mqtt_port,
+        id: mqtt_port,
       });
     } catch (err) {
       console.error('Could not register the device', err);
@@ -191,26 +109,6 @@ export class DeviceService {
     }
     await this.loadDevices();
     return result;
-  }
-
-  async getDeviceNextImage(
-    device: LocalDevice,
-    roiOffset: Point2D = new Point2D(0, 0),
-    roiSize: Point2D = SENSOR_SIZE,
-  ): Promise<string> {
-    const result = await this.getPreviewImageV2(
-      device.port.toString(),
-      roiOffset,
-      roiSize,
-    );
-    if (result.result !== 'SUCCESS') {
-      throw new Error();
-    }
-    return `data:image/png;base64,${result.command_response['image']}`;
-  }
-
-  setSelectedDevice(device: DeviceV2) {
-    if (!!device) this.deviceSelectedSubject.next(device);
   }
 
   async loadDevices() {
@@ -226,82 +124,37 @@ export class DeviceService {
     }
   }
 
-  getDeviceStream(
-    device: LocalDevice,
-    roiOffset: Point2D,
-    roiSize: Point2D,
-    interval: number,
-  ) {
-    const stream = new Subject<DeviceFrame | Error>();
-    let running = true;
-    const tick = (async () => {
-      let result: DeviceFrame | Error;
-      if (!running) return;
-      try {
-        const image = await this.getDeviceNextImage(device, roiOffset, roiSize);
-        result = <DeviceFrame>{
-          image,
-        };
-      } catch (error) {
-        result = new Error('Cannot get device frame', error as Error);
-      }
-      if (running) {
-        stream.next(result);
-        window.setTimeout(tick, interval);
-      }
-    }).bind(this);
-    tick();
-    return {
-      stream: stream.asObservable(),
-      stopStream: () => {
-        stream.complete();
-        running = false;
-      },
+  async askForDeviceSelection(selectedDevice?: LocalDevice) {
+    const data = <DeviceSelectionPopupData>{
+      selectedDevice,
     };
+    const dRef = this.dialog.open(DeviceSelectionPopupComponent, {
+      data,
+      panelClass: 'extended',
+    });
+    return (await firstValueFrom(dRef.closed)) as LocalDevice | undefined;
   }
 
-  startUploadInferenceData(
-    deviceId: string,
-    roiOffset: Point2D,
-    roiSize: Point2D,
-    mode: Mode,
+  async updateModuleConfigurationV2(
+    device_id: string,
+    module_id: string,
+    payload: UpdateModuleConfigurationPayloadV2,
   ) {
-    const moduleName = '$system';
-    const payload: ExecuteCommandPayloadV2 = {
-      command_name: 'StartUploadInferenceData',
-      parameters: {
-        CropHOffset: roiOffset.x,
-        CropVOffset: roiOffset.y,
-        CropHSize: roiSize.x,
-        CropVSize: roiSize.y,
-        Mode: mode,
-      },
-    };
-    const result = this.commands.executeCommandV2(
-      deviceId,
-      moduleName,
+    const moduleResp = await this.http.patch<ModuleConfigurationV2>(
+      `${this.devicePathV2}/${device_id}/modules/${module_id}/property`,
       payload,
     );
-    // If successful
-    this.__lastKnownROICache.set(deviceId, {
-      offset: roiOffset.clone(),
-      size: roiSize.clone(),
-    });
-    return result;
-  }
-  stopUploadInferenceData(deviceId: string) {
-    const moduleName = '$system';
-    const payload: ExecuteCommandPayloadV2 = {
-      command_name: 'StopUploadInferenceData',
-      parameters: {},
-    };
-    return this.commands.executeCommandV2(deviceId, moduleName, payload);
+    return moduleResp;
   }
 
-  async patchConfiguration(device_id: string, configuration: Configuration) {
+  async patchConfiguration(
+    device_id: string,
+    configuration: Configuration,
+    dry_run: boolean = false,
+  ): Promise<Configuration> {
     // TODO: handle error
-    await this.http.patch(
-      `${this.devicePathV2}/${device_id}/configuration`,
+    return await this.http.patch(
+      `${this.devicePathV2}/${device_id}/configuration?dry_run=${dry_run}`,
       configuration,
     );
   }
@@ -312,11 +165,16 @@ export class DeviceService {
     );
   }
 
-  private patchLocalDeviceCachedROI(device: DeviceV2) {
-    if (isLocalDevice(device)) {
-      device.last_known_roi =
-        this.__lastKnownROICache.get(device.device_id) || DEFAULT_ROI;
-    }
+  setLastKnownRoiCache(deviceId: string, roi: ROI) {
+    this.__lastKnownROICache.set(deviceId, roi);
+  }
+
+  getLastKnownRoiCache(deviceId: string) {
+    return this.__lastKnownROICache.get(deviceId) || DEFAULT_ROI;
+  }
+
+  private patchLocalDeviceCachedROI(device: LocalDevice) {
+    device.last_known_roi = this.getLastKnownRoiCache(device.device_id);
     return device;
   }
 }

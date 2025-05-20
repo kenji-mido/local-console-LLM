@@ -16,17 +16,17 @@
  SPDX-License-Identifier: Apache-2.0
 -->
 
-<div class="stack">
+<div class="stack fullheight fullwidth">
   <app-drawing
-    class="p-0 border-box aspect-square"
+    class="p-0 border-box fullheight fullwidth"
     [drawing]="currentDrawing"
     (roi)="onROISelected($event)"
     [mode]="surfaceMode"
-    [enabled]="streaming"
+    [state]="drawingState()"
   ></app-drawing>
 
   @if (surfaceMode === "capture") {
-    <div class="row gap-0">
+    <div class="row gap-2">
       <button class="weak-hub-btn button" (click)="surfaceMode = 'render'">
         Cancel
       </button>

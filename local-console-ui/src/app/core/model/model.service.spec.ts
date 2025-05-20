@@ -17,9 +17,9 @@
  */
 
 import { TestBed } from '@angular/core/testing';
-import { ModelService } from './model.service';
+import { EnvService } from '../common/environment.service';
 import { HttpApiClient } from '../common/http/http';
-import { environment } from '../../../environments/environment';
+import { ModelService } from './model.service';
 
 class MockHttpApiClient {
   post = jest.fn();
@@ -53,7 +53,8 @@ describe('ModelService', () => {
   describe('createModel', () => {
     const modelId = 'model-123';
     const fileId = 'file-456';
-    const apiUrl = `${environment.apiV2Url}/models`;
+    const envService = new EnvService();
+    const apiUrl = `${envService.getApiUrl()}/models`;
 
     it('should return model_id on successful model creation', async () => {
       const mockResponse = {

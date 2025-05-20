@@ -27,7 +27,7 @@ from local_console.core.files.files import FilesManager
 from local_console.core.files.files import FileType
 from local_console.core.files.files import temporary_files_manager
 from local_console.core.files.files import ZipInfo
-from local_console.utils.validation import AOT_XTENSA_HEADER
+from local_console.utils.validation.aot import AOT_HEADER
 
 from tests.strategies.samplers.files import app_content
 from tests.strategies.samplers.files import model_content
@@ -56,7 +56,7 @@ def test_create_app_file(type: FileType) -> None:
         if type in [FileType.MODEL, FileType.MODEL_RAW]:
             file_content = model_content()
         if type in [FileType.APP, FileType.APP_RAW]:
-            file_content = bytes(AOT_XTENSA_HEADER)
+            file_content = bytes(AOT_HEADER)
 
         file_name = "app.bin"
         base_path = Path(temporary_dir)
@@ -68,20 +68,20 @@ def test_create_app_file(type: FileType) -> None:
         assert file_info.type == type
 
 
-@patch("local_console.core.files.files.random_id")
-def test_overwrite_file_content(random_id: MagicMock) -> None:
+@patch("local_console.core.files.files.file_hash")
+def test_overwrite_file_content(mocked_file_hash: MagicMock) -> None:
     with TemporaryDirectory(
         prefix="dropthis", ignore_cleanup_errors=True
     ) as temporary_dir:
         file_id = "1"
-        random_id.return_value = file_id
+        mocked_file_hash.return_value = file_id
         type = FileType.APP
         base_path = Path(temporary_dir)
         file_name = "app.zip"
         expected_path: Path = base_path / type / file_id / "file" / file_name
         expected_path.parent.mkdir(parents=True)
         expected_path.write_text("Previous content")
-        file_content = bytes(AOT_XTENSA_HEADER) + b"new content"
+        file_content = bytes(AOT_HEADER) + b"new content"
 
         manager = FilesManager(base_path=base_path)
         manager.validate_before_saving = lambda x: None
@@ -89,6 +89,28 @@ def test_overwrite_file_content(random_id: MagicMock) -> None:
 
         assert file_info.path.read_bytes() == file_content
         assert file_info.id == file_id
+
+
+def test_file_id(tmp_path) -> None:
+    """
+    This behavior is a stop-gap. See the note in the implementation
+    of `add_file()` for a better solution.
+    """
+    same_type = FileType.APP
+    same_content = bytes(AOT_HEADER)
+
+    file_A_name = "app_A.bin"
+    file_B_name = "app_B.bin"
+
+    manager = FilesManager(base_path=tmp_path)
+    file_A_info: FileInfo = manager.add_file(same_type.value, file_A_name, same_content)
+    file_B_info: FileInfo = manager.add_file(same_type.value, file_B_name, same_content)
+
+    # Despite the two files having the same content...
+    assert file_A_info.path.read_bytes() == file_B_info.path.read_bytes()
+
+    # ... the two get different ids because they are named differently
+    assert file_A_info.id != file_B_info.id
 
 
 def test_temporal_file_manager() -> None:
@@ -148,34 +170,6 @@ def test_get_file_not_found() -> None:
         result = manager.get_file(file_type=FileType.APP, file_id="my_id")
 
         assert result is None
-
-
-def test_get_file_two_files() -> None:
-    with TemporaryDirectory(
-        prefix="dropthis", ignore_cleanup_errors=True
-    ) as temporary_dir:
-        base_path = Path(temporary_dir)
-
-        manager = FilesManager(base_path=base_path)
-        file_info: FileInfo = manager.add_file(
-            raw_type=FileType.FIRMWARE,
-            file_name="firmware1.bin",
-            file_content=b"firmware_content",
-        )
-
-        dir_path = manager.get_file_rootdir(
-            file_type=FileType.FIRMWARE, file_id=file_info.id
-        )
-        with open(dir_path / "firmware2.bin", "w") as f:
-            f.write("firmware_content")
-
-        with pytest.raises(ValueError) as error:
-            manager.get_file(file_type=FileType.FIRMWARE, file_id=file_info.id)
-
-        assert (
-            str(error.value)
-            == f"There is more than one file with type {FileType.FIRMWARE} and id {file_info.id}."
-        )
 
 
 def test_get_file_no_file():

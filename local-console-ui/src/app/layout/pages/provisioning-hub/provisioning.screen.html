@@ -16,109 +16,136 @@
  SPDX-License-Identifier: Apache-2.0
 -->
 
-<div class="hub-page">
-  <div class="page-header">
-    <div class="page-header-title">
-      <img src="images/{{ theme }}/provisioning_hub.svg" alt="" />
-      <span>Provisioning</span>
-    </div>
-  </div>
-  <div class="text-2 my-2 row align-center">
-    <span>Device Identity</span>
-    <app-infotip
-      tip="Choose 'Register' to register a new devices, or 'Connect' to generate a QR code for an existing device and getting a preview"
+<div class="hub">
+  <div class="row gap-1 align-center">
+    <img
+      class="page-title-icon"
+      src="images/{{ theme }}/provisioning_hub.svg"
     />
+    <span class="text-28 bold">Edge Provisioning</span>
+  </div>
+  <div class="row align-center">
+    <div class="line">
+      <span class="text-24">Device Identity</span>
+      <app-infotip
+        tip="Choose 'Register' to register a new devices, or 'Connect' to generate a QR code for an existing device and getting a preview"
+      />
+    </div>
     <app-segments
       data-testid="hub-mode-selector"
-      [(ngModel)]="hubMode"
+      [(value)]="hubMode"
       [options]="['Register', 'Connect']"
     />
   </div>
 
-  <div class="page-body">
-    <app-card
-      [title]="'Register Device Identity'"
-      subtitle="Register your device to Local Console with device name and MQTT port number to be used."
-      *ngIf="hubMode === 'Register'"
-      infoTip="Click 'Register' to register a new device and 'Reset' to empty the fields"
-    >
+  <div class="stack">
+    @if(hubMode === 'Register') {
+    <div class="card-box">
+      <div class="stack gap-0">
+        <div class="line">
+          <span class="text-24">Register Device Identity</span>
+          <app-infotip
+            tip="Click 'Register' to register a new device and 'Reset' to empty the fields"
+          ></app-infotip>
+        </div>
+        <span class="text-14 sub"
+          >Register your device to Local Console with device name and MQTT port
+          number to be used.</span
+        >
+      </div>
       <form [formGroup]="createDeviceGroup" card-body>
-        <div class="hub-section minimal rows">
-          <div class="section-column">
-            <div class="section-header">
-              <div class="header-title">
+        <div class="row">
+          <div class="stack grow gap-0">
+            <div class="line align-center text-18">
+              <div class="line gap-half">
                 <span>Device Name</span>
+                <i class="required"></i>
               </div>
+              <app-infotip
+                [size]="20"
+                tip="Name given to the device for ease of management"
+              ></app-infotip>
             </div>
-            <div class="section-body flex-break">
-              <app-text-input
-                data-testid="device-register-name"
-                type="text"
-                formName="device_name"
-                placeholder="My Device"
-              >
-              </app-text-input>
-            </div>
+            <app-text-input
+              data-testid="device-register-name"
+              type="text"
+              formName="device_name"
+              placeholder="ex: MyDevice"
+            >
+            </app-text-input>
           </div>
-          <div class="section-column">
-            <div class="section-header">
-              <div class="header-title">
+          <div class="stack grow gap-0">
+            <div class="line align-center text-18">
+              <div class="line gap-half">
                 <span>MQTT Port</span>
+                <i class="required"></i>
               </div>
+              <app-infotip
+                [size]="20"
+                tip="Specify an unused port number for your device to use"
+              ></app-infotip>
             </div>
-            <div class="section-body flex-break">
-              <app-text-input
-                data-testid="device-register-port"
-                type="number"
-                formName="mqtt_port"
-                placeholder="1883"
-              >
-              </app-text-input>
-            </div>
+            <app-text-input
+              data-testid="device-register-port"
+              type="number"
+              formName="mqtt_port"
+              placeholder="ex: 1883"
+            >
+            </app-text-input>
           </div>
         </div>
       </form>
-      <!-- footer buttons -->
-      <button
-        card-footer
-        data-testid="device-reset"
-        mat-button
-        class="weak-hub-btn qrcode-btn"
-        [disabled]="!createDeviceGroup.dirty"
-        (click)="clearDeviceCreation()"
-      >
-        Reset
-      </button>
-      <button
-        card-footer
-        data-testid="device-register"
-        mat-button
-        class="normal-hub-btn qrcode-btn"
-        [disabled]="!createDeviceGroup.valid"
-        (click)="createDevice()"
-      >
-        Register
-      </button>
-    </app-card>
-
+      <div class="row" card-footer>
+        <!-- footer buttons -->
+        <button
+          data-testid="device-reset"
+          mat-button
+          class="weak-hub-btn qrcode-btn"
+          [disabled]="!createDeviceGroup.dirty"
+          (click)="clearDeviceCreation()"
+        >
+          Reset
+        </button>
+        <button
+          data-testid="device-register"
+          mat-button
+          class="normal-hub-btn qrcode-btn"
+          [disabled]="!createDeviceGroup.valid"
+          (click)="createDevice()"
+        >
+          Register
+        </button>
+      </div>
+    </div>
+    }@else {
     <!-- network settings pane -->
-    <app-card
-      [hidden]="hubMode === 'Register'"
-      title="Connect with QR Code"
-      subtitle="Configure network settings through QR code to start provisioning device"
-      infoTip="Select a device at 'Device Name', fill the fields with the desired setting values and click 'Generate' to obtain the QR"
-    >
+    <div class="card-box">
+      <div class="stack gap-0">
+        <div class="line gap-1 align-center">
+          <span class="text-24"> Connect with QR Code </span>
+          <app-infotip
+            tip="Select a device at 'Device Name', fill the fields with the desired setting values and click 'Generate' to obtain the QR. All fields are optional"
+          ></app-infotip>
+        </div>
+        <span class="text-14 sub"
+          >Configure network settings through QR code to start provisioning
+          device.</span
+        >
+      </div>
       <div card-body class="w-6 pr-2 border-box">
-        <div class="text-3">Device Name</div>
-        <mat-form-field class="fullwidth">
-          <mat-select [(ngModel)]="selectedDevice">
-            @for (device of (deviceService.devices$ | async) | localDevices;
-            track device.port) {
+        <div class="text-18">Device Name</div>
+        <mat-form-field class="fullwidth common-drop-down-list text-14">
+          <mat-select
+            disableRipple
+            hideSingleSelectionIndicator
+            [(ngModel)]="selectedDevice"
+            panelClass="common-drop-down-list-panel"
+          >
+            @for (device of (deviceService.devices$ | async); track
+            device.device_id) {
             <mat-option [value]="device"
               >{{device.device_name}}
-              <span style="color: #696969; font-size: 13px"
-                >(MQTT port: {{device.port}})</span
-              ></mat-option
+              <span>(MQTT port: {{device.device_id}})</span></mat-option
             >
             }
           </mat-select>
@@ -128,31 +155,32 @@
         card-body
         #networkSettings
         (qrCode)="onGenerateQrCode($event)"
-        [mqttPort]="selectedDevice?.port"
+        [mqttPort]="Number(selectedDevice?.device_id)"
         id="NetworkSettings"
       ></app-network-settings>
-
-      <!-- footer buttons -->
-      <button
-        card-footer
-        mat-button
-        class="weak-hub-btn qrcode-btn"
-        [disabled]="!networkSettings.qrcodeFormGroup || !networkSettings.qrcodeFormGroup.dirty"
-        (click)="networkSettings.clearAll()"
-      >
-        Reset
-      </button>
-      <button
-        card-footer
-        data-testid="qr-generate"
-        mat-button
-        class="normal-hub-btn qrcode-btn"
-        (click)="networkSettings.generateQRCode()"
-      >
-        Generate
-      </button>
-    </app-card>
-
+      <div class="row" card-footer>
+        <!-- footer buttons -->
+        <button
+          mat-button
+          data-testid="qr-reset"
+          class="weak-hub-btn qrcode-btn"
+          [disabled]="!networkSettings.qrcodeFormGroup || !networkSettings.qrcodeFormGroup.dirty"
+          (click)="networkSettings.clearAll()"
+        >
+          Reset
+        </button>
+        <button
+          data-testid="qr-generate"
+          mat-button
+          class="normal-hub-btn qrcode-btn"
+          (click)="networkSettings.generateQRCode()"
+          [disabled]="!networkSettings.qrcodeFormGroup.value.mqtt_host"
+        >
+          Generate
+        </button>
+      </div>
+    </div>
+    }
     <app-device-details
       *ngIf="hubMode !== 'Register'"
       [selectedDevice]="selectedDevice"

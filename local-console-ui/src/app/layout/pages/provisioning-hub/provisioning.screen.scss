@@ -17,34 +17,4 @@
  */
 
 @import "../../../stylesheets/hub.scss";
-
-// TODO: This is blanketing flex behaviour EVERYWHERE, to every
-// single child element. This MUST be more specific, as ng-deep
-// is generally seen as a bad practice.
-// But I don't have the time right now to go over every
-// single instance that needs this, so it stays here.
-:host ::ng-deep {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  justify-self: start;
-}
-
-.refresh-btn {
-  margin: 0;
-
-  .btn-span {
-    margin-left: 10px;
-  }
-}
-
-[card-header-right] {
-  display: flex;
-  gap: 10px;
-  align-items: center;
-}
-
-.span-refresh {
-  color: rgba(77, 77, 77, 1);
-  font-size: 14px;
-}
+@import "../../../stylesheets/dropdown-list.scss";

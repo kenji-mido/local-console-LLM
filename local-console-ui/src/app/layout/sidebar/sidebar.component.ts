@@ -16,11 +16,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { CommonModule } from '@angular/common';
 import { Component } from '@angular/core';
-import { ROUTER_LINKS } from '../../core/config/routes';
 import { MatListModule } from '@angular/material/list';
 import { RouterModule } from '@angular/router';
-import { CommonModule } from '@angular/common';
+import { ROUTER_LINKS } from '../../core/config/routes';
 
 @Component({
   selector: 'app-sidebar',

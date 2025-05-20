@@ -16,10 +16,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { DIALOG_DATA, DialogRef } from '@angular/cdk/dialog';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { UserPromptDialog, UserPromptDialogData } from './user-prompt.dialog';
-import { DialogRef, DIALOG_DATA } from '@angular/cdk/dialog';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
+import { action } from './action';
+import { UserPromptDialog, UserPromptDialogData } from './user-prompt.dialog';
 
 describe('UserPromptDialog', () => {
   let component: UserPromptDialog;
@@ -29,8 +30,9 @@ describe('UserPromptDialog', () => {
     title: 'Test Title',
     message: 'Test message',
     type: 'info',
-    actionButtons: [{ text: 'Test', id: 'test', variant: 'primary' }],
+    actionButtons: [action.normal('Test', 'test')],
     closeButtonText: 'Close',
+    showCancelButton: true,
   };
 
   beforeEach(async () => {

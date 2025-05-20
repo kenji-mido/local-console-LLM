@@ -25,6 +25,12 @@ from pathlib import Path
 from typing import Callable
 
 from local_console.core.camera.enums import UnitScale
+from local_console.core.camera.streaming import image_dir_for
+from local_console.core.camera.streaming import inference_dir_for
+from local_console.core.error.base import UserException
+from local_console.core.error.code import ErrorCodes
+from local_console.core.schemas.schemas import DeviceID
+from local_console.core.schemas.schemas import Persist
 from watchdog.events import DirDeletedEvent
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
@@ -84,13 +90,13 @@ class FileInfoContainer:
     def _resolve_duplicate(self, prev: FileInfo, new: FileInfo) -> FileInfo:
         if prev.age < new.age:
             logger.error(
-                f"File {new.age} already registered. It will be replaced as new file age is {new.age} and previous is {prev.age}"
+                f"File {new.path} already registered. It will be replaced as new file age is {new.age} and previous is {prev.age}"
             )
             self._replace_by_newer(new)
             return prev
         else:
             logger.error(
-                f"File {new.age} duplicated. But is ignored as is not newer than {prev.age}"
+                f"File {new.path} duplicated. But is ignored as is not newer than {prev.age}"
             )
             return new
 
@@ -127,13 +133,22 @@ class FileInfoContainer:
         self.size = 0
 
 
+OnDeleteCallable = Callable[[Path], None]
+
+
 class StorageSizeWatcher:
     class State(enum.Enum):
-        Start = enum.auto()
+        Initialized = enum.auto()
+        Configured = enum.auto()
         Accumulating = enum.auto()
         Checking = enum.auto()
 
-    def __init__(self, size_limit: int, check_frequency: int = 50) -> None:
+    def __init__(
+        self,
+        config: Persist,
+        check_frequency: int = 50,
+        on_delete_cb: OnDeleteCallable = lambda dir: None,
+    ) -> None:
         """
         Class for watching a directory for incoming files while maintaining
         the total storage usage within the directory under a given limit size,
@@ -144,17 +159,49 @@ class StorageSizeWatcher:
         files.
 
         Args:
+                config: (Persist) size limit settings ('unit' and 'size' must be set)
                 check_frequency (int, optional): check consistency after this many new files. Defaults to 50.
         """
-        self.check_frequency = check_frequency
+        assert isinstance(config.size, int)
+        assert config.unit
+
         self._paths: set[Path] = set()
-        self.state = self.State.Start
-        self._size_limit = size_limit
+        self._size_limit = size_unit_to_bytes(config.size, config.unit)
+        self.check_frequency = check_frequency
         self.content = FileInfoContainer()
         self._remaining_before_check = self.check_frequency
+        self.monitor = DirectoryMonitor(on_delete_cb)
+        self.state = self.State.Initialized
 
-    def set_path(self, path: Path) -> None:
-        assert path.is_dir()
+    def apply(self, config: Persist, device_id: DeviceID) -> None:
+        assert isinstance(config.size, int)
+        assert config.unit
+
+        for path in self._paths:
+            self.monitor.unwatch(path)
+        self._paths.clear()
+        self._size_limit = size_unit_to_bytes(config.size, config.unit)
+
+        if config.device_dir_path:
+            image_dir = image_dir_for(device_id, config.device_dir_path)
+            assert image_dir
+            self._set_path(image_dir)
+
+            inference_dir = inference_dir_for(device_id, config.device_dir_path)
+            assert inference_dir
+            self._set_path(inference_dir)
+
+        self.state = self.State.Configured
+        logger.debug("New configuration applied to storage size watcher")
+
+    def gather(self, prune_enabled: bool = True) -> None:
+        self._consistency_check()
+        if prune_enabled:
+            self._prune()
+        self.state = self.State.Accumulating
+
+    def _set_path(self, path: Path) -> None:
+        check_and_create_directory(path)
 
         p = path.resolve()
         if p in self._paths:
@@ -162,25 +209,9 @@ class StorageSizeWatcher:
 
         logger.debug(f"Including path {p} in size limiting watchlist.")
         self._paths.add(p)
+        self.monitor.watch(path)
 
-        # Execute regardless of current state
-        self._build_content_list(path)
-
-    def unwatch_path(self, path: Path) -> None:
-        assert path.is_dir()
-        logger.debug(f"Removing path {path} from size limiting watchlist.")
-        self._paths.discard(path.resolve())
-        self._consistency_check()
-
-    def set_storage_limit(self, limit: int) -> None:
-        logger.debug(f"Setting storage limit to {limit} bytes")
-        assert limit >= 0
-
-        self._size_limit = limit
-        if self.state == self.State.Accumulating:
-            self._prune()
-
-    def incoming(self, path: Path) -> None:
+    def incoming(self, path: Path, prune_enabled: bool = True) -> None:
         assert path.is_file()
 
         if not self._paths:
@@ -191,6 +222,11 @@ class StorageSizeWatcher:
                 f"Incoming file {path} does not belong to either of {self._paths}"
             )
 
+        # If necessary, perform the required state transition
+        if self.state == self.State.Configured:
+            self.gather(prune_enabled)
+
+        # Steady-state operation occurs in Accumulating state
         if self.state == self.State.Accumulating:
             self._register_file(path)
 
@@ -199,11 +235,33 @@ class StorageSizeWatcher:
                 self._consistency_check()
                 self._remaining_before_check = self.check_frequency
 
-            self._prune()
+            if prune_enabled:
+                self._prune()
         else:
             logger.warning(
                 f"Deferring update of size statistic for incoming file {path} during state {self.state}"
             )
+
+    def size(self) -> int:
+        # NOTE: consider performance
+        self._consistency_check()
+        return self.content.size
+
+    @property
+    def current_limit(self) -> int:
+        return self._size_limit
+
+    def can_accept(self) -> bool:
+        """
+        Checks if the current storage content size is within the allowed limit.
+        """
+        return self.content.size <= self._size_limit
+
+    def start(self) -> None:
+        self.monitor.start()
+
+    def stop(self) -> None:
+        self.monitor.stop()
 
     def _register_file(self, path: Path) -> None:
         entry = walk_entry(path)
@@ -211,20 +269,7 @@ class StorageSizeWatcher:
 
         self.content.add(entry)
 
-    def _build_content_list(self, root: Path) -> None:
-        """
-        Adds to `self.content` the FileInfo of files under `root` directory.
-        """
-        assert self._paths
-        self.state = self.State.Accumulating
-
-        for file in list(walk_files(root)):
-            self.content.add(file)
-
     def _prune(self) -> None:
-        if self._size_limit is None:
-            return
-
         # In order to make this class thread-safe,
         # the following would be required:
         # self.state == self.State.Checking
@@ -249,22 +294,22 @@ class StorageSizeWatcher:
 
         if has_been_pruned:
             logger.debug(
-                f"Prune has been applied current storage is {self.content.size}"
+                f"Prune has been applied. Current storage usage is {self.content.size}"
             )
         # In order to make this class thread-safe,
         # the following would be required:
         # self.state == self.State.Accumulating
 
     def _consistency_check(self) -> bool:
-        assert self._paths
         in_memory = self.content.paths()
-        files_in_paths = [p for root in self._paths for p in walk_files(root)]
+        valid_paths = (root for root in self._paths if root.is_dir())
+        files_in_paths = [p for root in valid_paths for p in walk_files(root)]
         in_storage = {p.path for p in files_in_paths}
 
         missing_in_memory = in_storage - in_memory
         orphaned_in_memory = in_memory - in_storage
         if missing_in_memory or orphaned_in_memory:
-            if orphaned_in_memory:
+            if missing_in_memory:
                 logger.warning(
                     f"File bookkeeping inconsistency: new files on disk are: {missing_in_memory}"
                 )
@@ -287,7 +332,7 @@ def entry_from_stats(path: Path, stats: os.stat_result) -> FileInfo:
 
 
 def walk_entry(path: Path) -> FileInfo:
-    path = path.absolute()
+    path = path.resolve()
     return entry_from_stats(path, os.stat(path))
 
 
@@ -304,15 +349,28 @@ def walk_files(root: Path) -> Iterator[FileInfo]:
             yield from walk_files(Path(entry.path))
 
 
+def folders_setup_validation(selected_dir: Path) -> None:
+
+    # Cross-platform file write smoke test
+    test_f = selected_dir / "__lctestfile"
+    test_f.write_text("1")
+    test_f.unlink()
+
+
 def check_and_create_directory(directory: Path) -> None:
-    if not directory.exists():
-        logger.warning(f"{directory} does not exist. Creating directory...")
-        directory.mkdir(exist_ok=True, parents=True)
+    try:
+        if not directory.exists():
+            logger.warning(f"{directory} does not exist. Creating directory...")
+            directory.mkdir(exist_ok=True, parents=True)
 
-    assert directory.is_dir()
-
-
-OnDeleteCallable = Callable[[Path], None]
+        assert directory.is_dir()
+        folders_setup_validation(directory)
+    except Exception as e:
+        raise UserException(
+            code=ErrorCodes.EXTERNAL_CANNOT_USE_DIRECTORY,
+            # FIXME improve this
+            message=str(e),
+        )
 
 
 class DirectoryMonitor:
@@ -325,17 +383,18 @@ class DirectoryMonitor:
             if event.is_directory:
                 self._on_delete_cb(event)
 
-    def __init__(self) -> None:
+    def __init__(self, on_delete_cb: OnDeleteCallable = lambda dir: None) -> None:
         self._obs = Observer()
         self._watches: dict[Path, ObservedWatch] = dict()
+        self.on_delete_cb = on_delete_cb
 
     def start(self) -> None:
         self._obs.start()
 
-    def watch(self, directory: Path, on_delete_cb: OnDeleteCallable) -> None:
+    def watch(self, directory: Path) -> None:
         assert directory.is_dir()
         resolved = directory.resolve()
-        handler = self.EventHandler(self._watch_decorator(on_delete_cb))
+        handler = self.EventHandler(self._watch_decorator(self.on_delete_cb))
         watch = self._obs.schedule(
             handler,
             str(resolved),

@@ -16,11 +16,16 @@
  SPDX-License-Identifier: Apache-2.0
 -->
 
-<div class="file-input-layout">
+<div class="stack gap-1">
   <div>{{ title }}</div>
-  <div class="row gap-1 align-center">
-    <app-icon-text [text]="folderPath"></app-icon-text>
+  <div class="row gap-1 align-center disableable" [class.disabled]="disabled">
+    <app-icon-text
+      data-testid="folder"
+      [text]="folderPath"
+      iconUrl="{{ iconUrl }}"
+    ></app-icon-text>
     <button
+      data-testid="actuator"
       (click)="openFolderPicker()"
       class="stack center align-center bg-edgeaipf round-1 ws-1 hs-1"
     >

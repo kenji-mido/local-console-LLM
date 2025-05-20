@@ -15,7 +15,6 @@
 # SPDX-License-Identifier: Apache-2.0
 from io import BytesIO
 from pathlib import Path
-from tempfile import TemporaryDirectory
 from unittest.mock import MagicMock
 
 import pytest
@@ -28,7 +27,6 @@ from local_console.fastapi.routes.files import FileInfoDTO
 from local_console.fastapi.routes.files import FileOutDTO
 from local_console.fastapi.routes.files import upload_file
 
-from tests.fixtures.fastapi import fa_client
 from tests.strategies.samplers.files import model_content
 
 
@@ -54,25 +52,24 @@ async def test_upload_file_with_file_manager() -> None:
     )
 
 
-def test_upload_file(fa_client: TestClient) -> None:
-    with TemporaryDirectory() as tmp:
-        file_info = FileInfo(
-            id="1234", path=Path("/root/to/sample/wasm.zip"), type=FileType.MODEL
-        )
-        fa_client.app.state.file_manager = FilesManager(Path(tmp))
-        file_content = model_content(b"converted_wasm_application")
-        files = {"file": ("wasm.zip", file_content, "application/octet-stream")}
+def test_upload_file(fa_client: TestClient, tmp_path) -> None:
+    file_info = FileInfo(
+        id="1234", path=Path("/root/to/sample/wasm.zip"), type=FileType.MODEL
+    )
+    fa_client.app.state.file_manager = FilesManager(tmp_path)
+    file_content = model_content(b"converted_wasm_application")
+    files = {"file": ("wasm.zip", file_content, "application/octet-stream")}
 
-        # Form data
-        data = {"type_code": "converted_model"}
+    # Form data
+    data = {"type_code": "converted_model"}
 
-        response = fa_client.post("/files", files=files, data=data)
+    response = fa_client.post("/files", files=files, data=data)
 
-        assert response.status_code == 200
+    assert response.status_code == 200
 
-        assert response.json()["result"] == "SUCCESS"
-        file_info = response.json()["file_info"]
-        assert int(file_info["file_id"])
-        assert file_info["name"] == "wasm.zip"
-        assert file_info["type_code"] == "converted_model"
-        assert file_info["size"] == 30
+    assert response.json()["result"] == "SUCCESS"
+    file_info = response.json()["file_info"]
+    assert file_info["file_id"]
+    assert file_info["name"] == "wasm.zip"
+    assert file_info["type_code"] == "converted_model"
+    assert file_info["size"] == 30

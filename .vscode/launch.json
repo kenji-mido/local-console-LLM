@@ -12,6 +12,31 @@
 			"webRoot": "${workspaceFolder}/local-console-ui"
 		},
 		{
+			"name": "Electron: Debug Renderer Process",
+			"type": "chrome",
+			"request": "attach",
+			"port": 9223,
+			"webRoot": "${workspaceFolder}/local-console-ui/dist/local-console-ui/browser",
+			"sourceMaps": true,
+			"sourceMapPathOverrides": {
+				"src/*": "${workspaceFolder}/local-console-ui/src/*"
+			}
+		},
+		{
+            "name": "Debug Jest Tests",
+            "type": "node",
+            "request": "launch",
+            "runtimeArgs": [
+				"--inspect-brk",
+				"${workspaceRoot}/local-console-ui/node_modules/.bin/jest",
+				"--runInBand",
+				"--config", "${workspaceRoot}/local-console-ui/jest.config.ts",
+				"${file}"
+			],
+            "console": "integratedTerminal",
+            "internalConsoleOptions": "neverOpen"
+        },
+		{
 			"name": "Web start",
 			"type": "debugpy",
 			"request": "launch",
@@ -21,6 +46,15 @@
 			],
 			"justMyCode": true
 		},
+		{
+            "name": "Mocked device",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "mocked_device",
+			"args": [
+				"--version", "2"
+			],
+        },
 		{
 			"name": "Debug tests",
 			"type": "debugpy",
@@ -150,27 +184,17 @@
 			"request": "launch",
 			"module": "local_console",
 			"args": [
-				"broker", "-v"
-			],
-			"cwd": "${workspaceFolder}",
-			"justMyCode": true
-		},
-		{
-			"name": "CLI GUI",
-			"type": "debugpy",
-			"request": "launch",
-			"module": "local_console",
-			"args": [
-				"--verbose", "gui"
+				"-v",
+				"broker",
 			],
 			"cwd": "${workspaceFolder}",
 			"justMyCode": false
 		},
 		{
-            "name": "Mocked device",
-            "type": "debugpy",
-            "request": "launch",
-            "program": "mocked-device/mocked_device/main.py"
-        }
+			"name": "System stub",
+			"type": "debugpy",
+			"request": "launch",
+			"program": "system-stub/src/system_stub/__main__.py"
+		}
 	]
 }

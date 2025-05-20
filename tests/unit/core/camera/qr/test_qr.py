@@ -13,17 +13,15 @@
 # limitations under the License.
 #
 # SPDX-License-Identifier: Apache-2.0
-from unittest.mock import call
-from unittest.mock import MagicMock
-from unittest.mock import patch
-
 from local_console.commands import qr
 from local_console.core.camera.qr.qr import QRService
 from local_console.core.camera.qr.schema import QRInfo
+from local_console.core.camera.states.v1.common import populate_properties
+from local_console.core.config import Config
 from local_console.core.schemas.edge_cloud_if_v1 import DeviceConfiguration
 from local_console.core.schemas.schemas import GlobalConfiguration
 
-from tests.mocks.mock_configs import config_without_io
+from tests.mocks.config import set_configuration
 from tests.strategies.samplers.configs import GlobalConfigurationSampler
 from tests.strategies.samplers.device_config import DeviceConfigurationSampler
 from tests.strategies.samplers.device_config import NetworkSampler
@@ -40,18 +38,14 @@ def test_qr_code_generation() -> None:
     assert qr.data_list[1].data == values.encode("utf-8")
 
 
-@patch(
-    "local_console.utils.local_network.get_my_ip_by_routing", return_value="192.168.1.2"
-)
-def test_qr_code_translate_ips(local_ip_function: MagicMock) -> None:
+def test_qr_code_translate_ips() -> None:
 
     service = QRService()
     info = QRInfoSampler(mqtt_host="localhost", ntp="localhost").sample()
 
     qr = service.generate(info)
-    values = f"==N=11;E=192.168.1.2;H={info.mqtt_port};t=1;S={info.wifi_ssid};P={info.wifi_pass};I={info.ip_address};K={info.subnet_mask};G={info.gateway};D={info.dns};T=192.168.1.2;U1FS"
+    values = f"==N=11;E={info.mqtt_host};H={info.mqtt_port};t=1;S={info.wifi_ssid};P={info.wifi_pass};I={info.ip_address};K={info.subnet_mask};G={info.gateway};D={info.dns};T={info.ntp};U1FS"
     assert qr.data_list[1].data == values.encode("utf-8")
-    local_ip_function.assert_has_calls([call(), call()])
 
 
 def qr_from(device_config: GlobalConfiguration) -> QRInfo:
@@ -66,52 +60,95 @@ def qr_from(device_config: GlobalConfiguration) -> QRInfo:
     ).sample()
 
 
-def test_consolidation() -> None:
-    configuration = GlobalConfigurationSampler(num_of_devices=1).sample()
-    device = configuration.devices[0]
+def test_consolidation(single_device_config) -> None:
     service = QRService()
-    with config_without_io(configuration) as config:
-        device_config = DeviceConfigurationSampler().sample()
-        assert not config.config.devices[0].qr
+    device = single_device_config.devices[0]
+    device_config = DeviceConfigurationSampler().sample()
+    assert not single_device_config.devices[0].qr
 
-        qr_info = qr_from(device_config)
-        device_config.Network.ProxyPort = 0
-        device_config.Network.ProxyURL = ""
+    qr_info = qr_from(device_config)
+    device_config.Network.ProxyPort = 0
+    device_config.Network.ProxyURL = ""
 
-        service.generate(qr_info)
+    service.generate(qr_info)
+    service.persist_to(device.mqtt.port, populate_properties(device_config))
 
-        service.persist_to(device.mqtt.port, device_config, None)
-
-        assert config.config.devices[0].qr == qr_info
+    assert Config().data.devices[0].qr == qr_info
 
 
-def test_consolidation_choose_if_all_match() -> None:
-    configuration = GlobalConfigurationSampler(num_of_devices=1).sample()
-    device = configuration.devices[0]
+def test_consolidation_choose_if_all_match(single_device_config) -> None:
     service = QRService()
-    with config_without_io(configuration) as config:
-        device_config = DeviceConfigurationSampler().sample()
-        assert not config.config.devices[0].qr
+    device = single_device_config.devices[0]
+    device_config = DeviceConfigurationSampler().sample()
+    assert not single_device_config.devices[0].qr
 
-        qr_info = qr_from(device_config)
-        device_config.Network.ProxyPort = 0
-        device_config.Network.ProxyURL = ""
-        qr_info.gateway = f"DifferentFrom{device_config.Network.Gateway}"
+    qr_info = qr_from(device_config)
+    device_config.Network.ProxyPort = 0
+    device_config.Network.ProxyURL = ""
+    qr_info.gateway = f"DifferentFrom{device_config.Network.Gateway}"
 
-        service.generate(qr_info)
+    service.generate(qr_info)
+    service.persist_to(device.mqtt.port, populate_properties(device_config))
 
-        service.persist_to(device.mqtt.port, device_config, None)
-
-        assert not config.config.devices[0].qr
+    assert not Config().data.devices[0].qr
 
 
-def test_consolidate_choose_the_newest() -> None:
-    configuration = GlobalConfigurationSampler(num_of_devices=1).sample()
-    device = configuration.devices[0]
+def test_consolidate_choose_the_newest(single_device_config) -> None:
     service = QRService()
-    with config_without_io(configuration) as config:
+    device = single_device_config.devices[0]
+    device_config = DeviceConfigurationSampler().sample()
+    assert not single_device_config.devices[0].qr
+
+    qr_info1 = qr_from(device_config)
+    qr_info1.wifi_ssid = "WIFI1"
+    qr_info2 = qr_from(device_config)
+    qr_info2.wifi_ssid = "WIFI2"
+    device_config.Network.ProxyPort = 0
+    device_config.Network.ProxyURL = ""
+
+    service.generate(qr_info1)
+    service.generate(qr_info2)
+    service.persist_to(device.mqtt.port, populate_properties(device_config))
+
+    assert Config().data.devices[0].qr == qr_info2
+
+
+def test_consolidate_clean_after_each_consolidation(single_device_config) -> None:
+    service = QRService()
+    device = single_device_config.devices[0]
+    device_config = DeviceConfigurationSampler().sample()
+    assert not single_device_config.devices[0].qr
+
+    qr_info = qr_from(device_config)
+    device_config.Network.ProxyPort = 0
+    device_config.Network.ProxyURL = ""
+
+    service.generate(qr_info)
+    device_config.Network.IPAddress = "force-consolidation-to-fail"
+
+    # This consolidation forgets all the elements that have the device port
+    service.persist_to(device.mqtt.port, populate_properties(device_config))
+    assert not Config().data.devices[0].qr
+
+    # This consolidation should work but will not consolidate as the previous one remove all previous ones
+    device_config.Network.IPAddress = qr_info.ip_address
+    service.persist_to(device.mqtt.port, populate_properties(device_config))
+    assert not Config().data.devices[0].qr
+
+
+def test_work_with_multiple_devices() -> None:
+    configuration = GlobalConfigurationSampler(num_of_devices=5).sample()
+    set_configuration(configuration)
+
+    service = QRService()
+    for device in configuration.devices:
+
         device_config = DeviceConfigurationSampler().sample()
-        assert not config.config.devices[0].qr
+        device_config.Network.ProxyPort = device.mqtt.port
+        stored_device = [
+            dev for dev in Config().data.devices if dev.mqtt.port == device.mqtt.port
+        ][0]
+        assert not stored_device.qr
 
         qr_info1 = qr_from(device_config)
         qr_info1.wifi_ssid = "WIFI1"
@@ -123,66 +160,9 @@ def test_consolidate_choose_the_newest() -> None:
         service.generate(qr_info1)
         service.generate(qr_info2)
 
-        service.persist_to(device.mqtt.port, device_config, None)
+        service.persist_to(device.mqtt.port, populate_properties(device_config))
 
-        assert config.config.devices[0].qr == qr_info2
-
-
-def test_consolidate_clean_after_each_consolidation() -> None:
-    configuration = GlobalConfigurationSampler(num_of_devices=1).sample()
-    device = configuration.devices[0]
-    service = QRService()
-    with config_without_io(configuration) as config:
-        device_config = DeviceConfigurationSampler().sample()
-        assert not config.config.devices[0].qr
-
-        qr_info = qr_from(device_config)
-        device_config.Network.ProxyPort = 0
-        device_config.Network.ProxyURL = ""
-
-        service.generate(qr_info)
-        device_config.Network.IPAddress = "force-consolidation-to-fail"
-
-        # This consolidation forgets all the elements that have the device port
-        service.persist_to(device.mqtt.port, device_config, None)
-
-        assert not config.config.devices[0].qr
-        device_config.Network.IPAddress = qr_info.ip_address
-
-        # This consolidation should work but will not consolidate as the previous one remove all previous ones
-        service.persist_to(device.mqtt.port, device_config, None)
-
-        assert not config.config.devices[0].qr
-
-
-def test_work_with_multiple_devices() -> None:
-    configuration = GlobalConfigurationSampler(num_of_devices=5).sample()
-    service = QRService()
-    with config_without_io(configuration) as config:
-        for device in configuration.devices:
-
-            device_config = DeviceConfigurationSampler().sample()
-            device_config.Network.ProxyPort = device.mqtt.port
-            stored_device = [
-                dev
-                for dev in config.config.devices
-                if dev.mqtt.port == device.mqtt.port
-            ][0]
-            assert not stored_device.qr
-
-            qr_info1 = qr_from(device_config)
-            qr_info1.wifi_ssid = "WIFI1"
-            qr_info2 = qr_from(device_config)
-            qr_info2.wifi_ssid = "WIFI2"
-            device_config.Network.ProxyPort = 0
-            device_config.Network.ProxyURL = ""
-
-            service.generate(qr_info1)
-            service.generate(qr_info2)
-
-            service.persist_to(device.mqtt.port, device_config, None)
-
-            assert stored_device.qr == qr_info2
+        assert stored_device.qr == qr_info2
 
 
 def empty_config() -> DeviceConfiguration:
@@ -228,50 +208,25 @@ def dynamic_ip(port: int, ssid: str, password: str) -> QRInfo:
     )
 
 
-def test_consolidation_dynamic_ip() -> None:
-    configuration = GlobalConfigurationSampler(num_of_devices=1).sample()
-    device = configuration.devices[0]
+def test_consolidation_dynamic_ip(single_device_config) -> None:
+    service = QRService()
+    device = single_device_config.devices[0]
     port = device.mqtt.port
-    service = QRService()
-    with config_without_io(configuration) as config:
-        assert not config.config.devices[0].qr
+    device_config = DeviceConfigurationSampler().sample()
+    assert not single_device_config.devices[0].qr
 
-        device_config = empty_config()
-        qr_static = static_ip(port)
-        qr_dyn_1 = dynamic_ip(port, "ssid-1", "pass-1")
-        qr_dyn_2 = dynamic_ip(port, "ssid-2", "pass-3")
+    device_config = empty_config()
+    qr_static = static_ip(port).sample()
+    qr_dyn_1 = dynamic_ip(port, "ssid-1", "pass-1").sample()
+    qr_dyn_2 = dynamic_ip(port, "ssid-2", "pass-3").sample()
 
-        device_config.Network.ProxyPort = 0
-        device_config.Network.ProxyURL = ""
+    device_config.Network.ProxyPort = 0
+    device_config.Network.ProxyURL = ""
 
-        service.generate(qr_dyn_1)
-        service.generate(qr_static)
-        service.generate(qr_dyn_2)
+    service.generate(qr_dyn_1)
+    service.generate(qr_static)
+    service.generate(qr_dyn_2)
 
-        service.persist_to(device.mqtt.port, device_config, None)
+    service.persist_to(device.mqtt.port, populate_properties(device_config))
 
-        assert config.config.devices[0].qr == qr_dyn_2
-
-
-@patch(
-    "local_console.utils.local_network.get_my_ip_by_routing",
-    MagicMock(return_value="1.2.3.4"),
-)
-def test_consolidation_keeps_mqtt_host() -> None:
-    configuration = GlobalConfigurationSampler(num_of_devices=1).sample()
-    device = configuration.devices[0]
-    service = QRService()
-    with config_without_io(configuration) as config:
-        assert config.config.devices[0].mqtt.host != "1.2.3.4"
-        assert not config.config.devices[0].qr
-        mqtt_host = config.config.devices[0].mqtt.host
-
-        device_config = DeviceConfigurationSampler().sample()
-        qr_info = qr_from(device_config)
-        qr_info.mqtt_host = "localhost"
-
-        service.generate(qr_info)
-        service.persist_to(device.mqtt.port, device_config, None)
-
-        assert config.config.devices[0].mqtt.host != "1.2.3.4"
-        assert config.config.devices[0].mqtt.host == mqtt_host
+    assert Config().data.devices[0].qr == qr_dyn_2

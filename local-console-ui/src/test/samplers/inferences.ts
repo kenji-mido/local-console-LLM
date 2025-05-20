@@ -20,9 +20,10 @@ import {
   Classification,
   ClassificationItem,
   Detection,
+  ErrorInference,
 } from '@app/core/inference/inference';
 
-export type InferenceType = 'classification' | 'detection';
+export type InferenceType = 'classification' | 'detection' | 'error';
 
 export namespace Inferences {
   export function sample(type: InferenceType) {
@@ -42,6 +43,10 @@ export namespace Inferences {
             ),
           },
         };
+      case 'error':
+        return <ErrorInference>{
+          errorLabel: 'Error message',
+        };
     }
   }
 
@@ -52,7 +57,7 @@ export namespace Inferences {
       class_id,
       label: 'Class ' + class_id,
       score: score,
-      color: [col * 0.6, col * 0.8, col],
+      color: { l: 0.8391, c: 0.1622, h: 121.45 }, // ~ #bada55
     };
   }
 }

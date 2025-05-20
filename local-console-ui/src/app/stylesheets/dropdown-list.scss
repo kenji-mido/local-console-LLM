@@ -1,0 +1,122 @@
+/**
+ * Copyright 2024 Sony Semiconductor Solutions Corp.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+::ng-deep .mat-mdc-form-field-focus-overlay {
+  display: none;
+}
+
+:host ::ng-deep .common-drop-down-list {
+  --mat-form-field-container-vertical-padding: 0px;
+  --mat-form-field-container-height: 46px;
+
+  display: flex;
+  // flex-direction: row;
+  box-sizing: border-box;
+  align-items: center;
+  height: 46px;
+  border: 1px solid var(--color-border-text-field);
+  border-radius: 8px;
+
+  &:hover {
+    border-color: var(--color-main);
+  }
+
+  &.mat-focused {
+    border-color: var(--color-main);
+  }
+
+  .mat-mdc-text-field-wrapper {
+    display: flex;
+    align-items: center;
+  }
+
+  .mdc-line-ripple {
+    display: none;
+  }
+
+  .mdc-text-field--filled {
+    background-color: transparent !important;
+  }
+
+  .mat-mdc-form-field-infix {
+    display: flex;
+    align-items: center;
+    min-height: 22px;
+  }
+
+  mat-select {
+    --mat-select-trigger-text-size: 14px;
+    --mat-select-trigger-text-line-height: 22px;
+    --mat-select-enabled-trigger-text-color: var(--color-main);
+
+    .mat-mdc-select-arrow {
+      visibility: hidden;
+    }
+
+    .mat-mdc-select-arrow-wrapper {
+      width: 32px;
+      height: 32px;
+      background-image: url("/images/light/chevron_down.svg");
+    }
+
+    &[aria-expanded="true"] {
+      .mat-mdc-select-arrow-wrapper {
+        transform: rotate(180deg);
+      }
+    }
+  }
+}
+
+::ng-deep .common-drop-down-list-panel {
+  --mat-option-label-text-size: 14px;
+  --mat-option-label-text-line-height: 22px;
+
+  &.mat-mdc-select-panel {
+    font-size: 14px;
+    line-height: 22px;
+    box-sizing: border-box;
+    padding: 0;
+    background: var(--color-white);
+    box-shadow: 0px 2px 4px rgba(0, 0, 0, 0.5);
+    border-radius: 8px !important;
+    border: none;
+    margin: 4px 0;
+
+    .mdc-list-item__primary-text {
+      color: var(--color-main);
+    }
+  }
+}
+
+::ng-deep {
+  .mat-mdc-option:hover:not(.mat-option-disabled):not(.mat-active) {
+    background: rgba(62, 69, 92, 0.05);
+  }
+
+  .mat-mdc-option:focus:not(.mat-option-disabled):not(.mat-active) {
+    background: rgba(62, 69, 92, 0.08);
+  }
+
+  .mat-mdc-option.mdc-list-item--selected:not(.mdc-list-item--disabled) {
+    background-color: rgba(62, 69, 92, 0.1) !important;
+
+    .mdc-list-item__primary-text {
+      color: var(--color-primary-blue) !important;
+    }
+  }
+}

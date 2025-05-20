@@ -16,9 +16,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { DialogModule, DialogRef } from '@angular/cdk/dialog';
 import { Component } from '@angular/core';
-import { TestBed, ComponentFixture } from '@angular/core/testing';
-import { DialogRef, DialogModule } from '@angular/cdk/dialog';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { DialogCloseDirective } from './dialog.close.directive';
 

@@ -16,10 +16,11 @@
 import logging
 import signal
 from typing import Annotated
+from typing import Optional
 
 import trio
 import typer
-from local_console.core.config import config_obj
+from local_console.commands.utils import find_device_config
 from local_console.core.schemas.schemas import DeviceConnection
 from local_console.plugin import PluginBase
 from local_console.servers.broker import BrokerException
@@ -40,9 +41,23 @@ def broker(
         bool,
         typer.Option("--verbose", "-v", help="Starts the broker in verbose mode"),
     ] = False,
+    device: Annotated[
+        Optional[str],
+        typer.Option(
+            "--device",
+            "-d",
+            help="The name of the device used to fetch the corresponding port from the configuration to start the broker.",
+        ),
+    ] = None,
+    port: Annotated[
+        Optional[int],
+        typer.Option(
+            help="TCP port on which the MQTT broker is listening. Ignored if the --device option is provided."
+        ),
+    ] = None,
 ) -> None:
     logger.setLevel(logging.DEBUG if verbose else logging.INFO)
-    device_config = config_obj.get_active_device_config()
+    device_config = find_device_config(device, port)
     retcode = trio.run(broker_task, device_config, verbose)
     raise typer.Exit(code=retcode)
 

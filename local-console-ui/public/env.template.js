@@ -21,7 +21,6 @@
 
   // Environment variables
   window["env"]["apiUrl"] = "${API_URL}";
-  window["env"]["apiV2Url"] = "${APIV2_URL}";
   window["env"]["version"] = "${VERSION}";
   window["env"]["redirectUri"] = "${REDIRECT_URI}";
   window["env"]["apiVersion"] = "${API_VERSION}";

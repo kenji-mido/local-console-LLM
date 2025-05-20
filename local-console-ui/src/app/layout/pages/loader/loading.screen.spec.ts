@@ -16,19 +16,16 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { ComponentFixture, TestBed } from '@angular/core/testing';
-import {
-  HttpTestingController,
-  provideHttpClientTesting,
-} from '@angular/common/http/testing';
 import { provideHttpClient } from '@angular/common/http';
+import { provideHttpClientTesting } from '@angular/common/http/testing';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
 
-import { HttpApiClient } from '../../../core/common/http/http';
-import { LoadingScreen } from './loading.screen';
+import { NoopAnimationsModule } from '@angular/platform-browser/animations';
+import { LocalDevice } from '@app/core/device/device';
 import { DeviceService } from '@app/core/device/device.service';
 import { Subject } from 'rxjs';
-import { LocalDevice } from '@app/core/device/device';
-import { NoopAnimationsModule } from '@angular/platform-browser/animations';
+import { HttpApiClient } from '../../../core/common/http/http';
+import { LoadingScreen } from './loading.screen';
 
 class MockDeviceService {
   devices$ = new Subject<LocalDevice[]>();

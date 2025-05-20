@@ -17,13 +17,14 @@ import json
 import logging
 from typing import Annotated
 from typing import Callable
+from typing import Optional
 
 import trio
 import typer
 from local_console.clients.agent import Agent
+from local_console.commands.utils import find_device_config
 from local_console.core.camera.enums import MQTTTopics
-from local_console.core.config import config_obj
-from local_console.core.schemas.schemas import OnWireProtocol
+from local_console.core.helpers import read_only_loop
 from local_console.plugin import PluginBase
 
 logger = logging.getLogger(__name__)
@@ -34,12 +35,26 @@ app = typer.Typer(
 
 
 @app.command(help="Get the status of deployment")
-def deployment() -> None:
-    config = config_obj.get_config()
-    device_config = config_obj.get_active_device_config()
-    schema = OnWireProtocol.from_iot_spec(config.evp.iot_platform)
-    agent = Agent(device_config.mqtt.host, device_config.mqtt.port, schema)
-    agent.read_only_loop(
+def deployment(
+    device: Annotated[
+        Optional[str],
+        typer.Option(
+            "--device",
+            "-d",
+            help="The name of the device to listen to deployment updates.",
+        ),
+    ] = None,
+    port: Annotated[
+        Optional[int],
+        typer.Option(
+            help="An alternative to --device, using the port to identify the device instead of its name. Ignored if the --device option is specified."
+        ),
+    ] = None,
+) -> None:
+    device_config = find_device_config(device, port)
+    agent = Agent(device_config.mqtt.port)
+    read_only_loop(
+        agent,
         subs_topics=[MQTTTopics.ATTRIBUTES.value],
         message_task=on_message_print_payload,
     )
@@ -57,12 +72,26 @@ async def on_message_print_payload(cs: trio.CancelScope, agent: Agent) -> None:
 
 
 @app.command(help="Get telemetries being sent from the application")
-def telemetry() -> None:
-    config = config_obj.get_config()
-    device_config = config_obj.get_active_device_config()
-    schema = OnWireProtocol.from_iot_spec(config.evp.iot_platform)
-    agent = Agent(device_config.mqtt.host, device_config.mqtt.port, schema)
-    agent.read_only_loop(
+def telemetry(
+    device: Annotated[
+        Optional[str],
+        typer.Option(
+            "--device",
+            "-d",
+            help="The name of the device for which to display telemetries.",
+        ),
+    ] = None,
+    port: Annotated[
+        Optional[int],
+        typer.Option(
+            help="An alternative to --device, using the port to identify the device instead of its name. Ignored if the --device option is specified."
+        ),
+    ] = None,
+) -> None:
+    device_config = find_device_config(device, port)
+    agent = Agent(device_config.mqtt.port)
+    read_only_loop(
+        agent,
         subs_topics=[MQTTTopics.TELEMETRY.value],
         message_task=on_message_telemetry,
     )
@@ -85,13 +114,26 @@ def instance(
     instance_id: Annotated[
         str,
         typer.Argument(help="Target instance of the RPC"),
-    ]
+    ],
+    device: Annotated[
+        Optional[str],
+        typer.Option(
+            "--device",
+            "-d",
+            help="The name of the device to listen to instance updates.",
+        ),
+    ] = None,
+    port: Annotated[
+        Optional[int],
+        typer.Option(
+            help="An alternative to --device, using the port to identify the device instead of its name. Ignored if the --device option is specified."
+        ),
+    ] = None,
 ) -> None:
-    config = config_obj.get_config()
-    device_config = config_obj.get_active_device_config()
-    schema = OnWireProtocol.from_iot_spec(config.evp.iot_platform)
-    agent = Agent(device_config.mqtt.host, device_config.mqtt.port, schema)
-    agent.read_only_loop(
+    device_config = find_device_config(device, port)
+    agent = Agent(device_config.mqtt.port)
+    read_only_loop(
+        agent,
         subs_topics=[MQTTTopics.ATTRIBUTES.value],
         message_task=on_message_instance(instance_id),
     )

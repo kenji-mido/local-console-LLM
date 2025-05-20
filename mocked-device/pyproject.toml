@@ -5,26 +5,36 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "mocked-device"
 description = "Local Console for offline camera operation"
-license = {file = "LICENSE"}
-dynamic = ["version"]
+license = "Apache-2.0"
+version = "0.0.0"
 authors = [
-	{name = "DevTools and SDKs team", email = "engineering@midokura.com"}
+  {name = "Console Experience team", email = "engineering@midokura.com"}
 ]
 classifiers = [
-    "License :: OSI Approved :: Apache Software License",
-	"Natural Language :: English",
-	"Framework :: Trio",
-    "Operating System :: OS Independent",
-	"Topic :: Scientific/Engineering :: Artificial Intelligence",
-	"Topic :: Scientific/Engineering :: Image Recognition",
-  	"Programming Language :: Python :: 3.10",
-  	"Programming Language :: Python :: 3.11",
+  "Natural Language :: English",
+  "Operating System :: OS Independent",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+  "Topic :: Scientific/Engineering :: Image Recognition",
+  "Programming Language :: Python :: 3.11",
 ]
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 dependencies = [
-    "paho-mqtt==1.6.1",
-	"local-console"
+  "annotated-types==0.7.0",
+  "certifi==2024.8.30",
+  "charset-normalizer==3.4.0",
+  "idna==3.7",
+  "paho-mqtt==1.6.1",
+  "pillow==10.4.0",
+  "pydantic==2.10.6",
+  "pydantic_core==2.27.2",
+  "requests==2.32.3",
+  "typing-inspection==0.4.0",
+  "typing_extensions==4.13.2",
+  "urllib3==2.0.7",
 ]
 
 [tool.setuptools.packages.find]
-where = ["."]
+where = ["src"]
+
+[project.scripts]
+mocked-device = "mocked_device.__main__:main"

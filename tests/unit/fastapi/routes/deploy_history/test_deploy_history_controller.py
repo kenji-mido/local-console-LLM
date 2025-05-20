@@ -15,14 +15,16 @@
 # SPDX-License-Identifier: Apache-2.0
 from collections.abc import Generator
 from datetime import datetime
+from datetime import timezone
 from typing import Any
 from unittest.mock import MagicMock
+from unittest.mock import patch
 
 import pytest
 import trio
 from fastapi import status
 from fastapi.testclient import TestClient
-from local_console.core.camera.state import CameraState
+from local_console.core.camera.machine import Camera
 from local_console.core.deploy.tasks.app_task import AppTask
 from local_console.core.deploy.tasks.base_task import Status
 from local_console.core.deploy.tasks.base_task import Task
@@ -41,8 +43,9 @@ from local_console.fastapi.routes.deploy_history.dependencies import (
 )
 from local_console.fastapi.routes.deploy_history.dto import DeployHistory
 from local_console.fastapi.routes.deploy_history.dto import DeployHistoryList
+from local_console.servers.webserver import AsyncWebserver
+from local_console.servers.webserver import FileInbox
 
-from tests.fixtures.fastapi import fa_client
 from tests.strategies.samplers.deploy import DeployHistorySampler
 from tests.strategies.samplers.deploy import TaskEntitySampler
 from tests.strategies.samplers.files import DeployConfigSampler
@@ -50,14 +53,14 @@ from tests.strategies.samplers.files import EdgeAppSampler
 from tests.strategies.samplers.files import FirmwareSampler
 from tests.strategies.samplers.files import ModelSampler
 
-earliest = datetime(1970, 1, 1, 0, 0, 0)
+earliest = datetime(1970, 1, 1, 0, 0, 0).astimezone(timezone.utc)
 
 
 def task_to_deployhistory() -> Generator[Task, DeployHistory]:
-    state = MagicMock()
+    camera = MagicMock()
     deploy_config = DeployConfigSampler(num_apps=1, num_models=1).sample()
     deploy_task = ConfigTask(
-        state=state, config=deploy_config, params=DeploymentConfig()
+        camera=camera, config=deploy_config, params=DeploymentConfig()
     )
     deploy_task._tasks[0].get_state().started_at = earliest
     expected = DeployHistorySampler(
@@ -74,7 +77,7 @@ def task_to_deployhistory() -> Generator[Task, DeployHistory]:
 
     deploy_config = DeployConfigSampler(num_apps=3, num_models=3).sample()
     deploy_task = ConfigTask(
-        state=state, config=deploy_config, params=DeploymentConfig()
+        camera=camera, config=deploy_config, params=DeploymentConfig()
     )
     expected = DeployHistorySampler(
         deploy_type="ConfigTask",
@@ -100,18 +103,19 @@ def task_to_deployhistory() -> Generator[Task, DeployHistory]:
 
     expected.edge_system_sw_package[0].status = Status.SUCCESS
 
-    for edge_app, stat in zip(
-        expected.edge_apps, task_status[1 : 1 + len(expected.edge_apps)]
-    ):
-        edge_app.status = stat
-
-    for model, stat in zip(expected.models, task_status[1 + len(expected.edge_apps) :]):
+    task_pos = len(expected.edge_system_sw_package)
+    for model, stat in zip(expected.models, task_status[task_pos:]):
         model.status = stat
+        task_pos += 1
+
+    for edge_app, stat in zip(expected.edge_apps, task_status[task_pos:]):
+        edge_app.status = stat
+        task_pos += 1
 
     yield (deploy_task, expected)
     deploy_config = DeployConfigSampler(num_apps=3, num_models=3).sample()
     deploy_task = ConfigTask(
-        state=state, config=deploy_config, params=DeploymentConfig()
+        camera=camera, config=deploy_config, params=DeploymentConfig()
     )
     for task in deploy_task._tasks:
         task._task_state.set(Status.SUCCESS)
@@ -131,7 +135,7 @@ def task_to_deployhistory() -> Generator[Task, DeployHistory]:
 
     yield (deploy_task, expected)
     input = FirmwareSampler().sample()
-    task = FirmwareTask(state=state, firmware=input)
+    task = FirmwareTask(camera=camera, firmware=input)
     task.get_state().started_at = earliest
     expected = DeployHistorySampler(
         deploy_type="FirmwareTask",
@@ -141,7 +145,7 @@ def task_to_deployhistory() -> Generator[Task, DeployHistory]:
     ).sample()
     yield (task, expected)
     app = EdgeAppSampler().sample()
-    task = AppTask(camera_state=state, app=app)
+    task = AppTask(camera=camera, app=app)
     task.get_state().started_at = earliest
     task._task_state.set(Status.SUCCESS)
     expected = DeployHistorySampler(
@@ -150,7 +154,7 @@ def task_to_deployhistory() -> Generator[Task, DeployHistory]:
     ).sample()
     yield (task, expected)
     input = ModelSampler().sample()
-    task = ModelTask(state=state, model=input)
+    task = ModelTask(camera=camera, model=input)
     task.get_state().started_at = earliest
     task._task_state.set(Status.SUCCESS)
     expected = DeployHistorySampler(
@@ -183,19 +187,27 @@ def test_deploy_history_datetime(fa_client: TestClient) -> None:
     assert datetime.fromisoformat(from_datetime_str) == element.from_datetime
 
 
-def test_pagination(fa_client: TestClient) -> None:
-    async def initialize() -> None:
-        task_executor: TrioBackgroundTasks = fa_client.app.state.deploy_background_task
+@pytest.mark.trio
+async def test_pagination(fa_client: TestClient) -> None:
+    task_executor: TrioBackgroundTasks = fa_client.app.state.deploy_background_task
+    with patch("local_console.core.camera.machine.StorageSizeWatcher"):
         for i in range(10):
-            state = CameraState(MagicMock(), MagicMock())
-            state.mqtt_port.value = 1883 + i
-            deploy_config = DeployConfigSampler(config_id=f"{state.mqtt_port}").sample()
+            config = MagicMock()
+            config.id = 1883 + i
+            camera = Camera(
+                config,
+                MagicMock(spec=AsyncWebserver),
+                MagicMock(spec=FileInbox),
+                MagicMock(spec=trio.MemorySendChannel),
+                MagicMock(spec=trio.lowlevel.TrioToken),
+                lambda x: x,
+            )
+
+            deploy_config = DeployConfigSampler(config_id=f"{config.id}").sample()
             deploy_task = ConfigTask(
-                state=state, config=deploy_config, params=DeploymentConfig()
+                camera=camera, config=deploy_config, params=DeploymentConfig()
             )
             await task_executor.add_task(deploy_task)
-
-    trio.run(initialize)
 
     result = fa_client.get("/deploy_history?limit=2")
     assert result.status_code == status.HTTP_200_OK
@@ -218,22 +230,29 @@ def test_pagination(fa_client: TestClient) -> None:
     assert result.json()["continuation_token"] == "config_task_for_device_1886"
 
 
-def test_task_running() -> None:
-    task_executor: TrioBackgroundTasks = TrioBackgroundTasks()
+@pytest.mark.trio
+async def test_task_running(fa_client: TestClient) -> None:
+    task_executor: TrioBackgroundTasks = fa_client.app.state.deploy_background_task
+    with patch("local_console.core.camera.machine.StorageSizeWatcher"):
+        config = MagicMock()
+        config.id = 1883
+        camera = Camera(
+            config,
+            MagicMock(spec=trio.MemorySendChannel),
+            MagicMock(spec=AsyncWebserver),
+            MagicMock(spec=FileInbox),
+            MagicMock(spec=trio.lowlevel.TrioToken),
+            lambda x: x,
+        )
 
-    async def initialize() -> None:
-        state = CameraState(MagicMock(), MagicMock())
-        state.mqtt_port.value = 1883
-        deploy_config = DeployConfigSampler(config_id=f"{state.mqtt_port}").sample()
+        deploy_config = DeployConfigSampler(config_id=f"{config.id}").sample()
         deploy_task = ConfigTask(
-            state=state, config=deploy_config, params=DeploymentConfig()
+            camera=camera, config=deploy_config, params=DeploymentConfig()
         )
         await task_executor.add_task(deploy_task)
         with pytest.raises(UserException) as e:
             await task_executor.add_task(deploy_task)
         assert str(e.value) == "Another task is already running on the device"
-
-    trio.run(initialize)
 
     deploy_history_controller = DeployHistoryController(
         tasks=task_executor, deployment_manager=MagicMock()

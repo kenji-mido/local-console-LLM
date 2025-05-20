@@ -19,10 +19,24 @@
 /// <reference types="@angular/localize" />
 /// <reference types="@stdlib/utils-circular-buffer" />
 
+import { mergeApplicationConfig } from '@angular/core';
+import { MAT_FORM_FIELD_DEFAULT_OPTIONS } from '@angular/material/form-field';
 import { bootstrapApplication } from '@angular/platform-browser';
-import { appConfig } from './app/app.config';
 import { AppComponent } from './app/app.component';
+import { appConfig } from './app/app.config';
 
-bootstrapApplication(AppComponent, appConfig).catch((err) =>
-  console.error(err),
-);
+bootstrapApplication(
+  AppComponent,
+  mergeApplicationConfig(appConfig, {
+    providers: [
+      {
+        provide: MAT_FORM_FIELD_DEFAULT_OPTIONS,
+        useValue: {
+          // appearance: 'outline',
+          floatLabel: 'auto',
+          subscriptSizing: 'dynamic',
+        },
+      },
+    ],
+  }),
+).catch((err) => console.error(err));

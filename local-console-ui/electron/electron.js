@@ -19,28 +19,38 @@ const { spawn } = require("child_process");
 const circularBuffer = require("@stdlib/utils-circular-buffer");
 const { app, BrowserWindow, screen, ipcMain, dialog } = require("electron");
 const path = require("path");
+const { readFile } = require("node:fs/promises");
+
+// force `$USERDATA/local-console` instead of `$USERDATA/local-console-ui`
+// https://www.electronjs.org/docs/latest/api/app#appgetpathname:
+// - userData is by default appData appended by app name
+app.setPath("userData", path.resolve(app.getPath("appData"), "local-console"));
 
 const log = require("electron-log");
+
 log.initialize();
 log.transports.console.level = false;
 log.transports.file.level = "debug";
 log.eventLogger.startLogging();
 log.errorHandler.startCatching();
-
-let mainWindow;
-let backend;
-
-// Backend process management objects
-let shutdownIsOrderly = false;
-const errorLogQueueCapacity = 100;
-let errorLogQueue = new circularBuffer(errorLogQueueCapacity);
-
 log.info("platform:", process.platform);
 log.info("exe:", app.getPath("exe"));
 log.info("appData:", app.getPath("appData"));
 log.info("userData:", app.getPath("userData"));
 log.info("module:", app.getPath("module"));
 log.info("environ:", process.env);
+
+let mainWindow;
+let backend;
+let backendIsClosedResolve;
+let backendIsClosed = new Promise((resolve) => {
+  backendIsClosedResolve = resolve;
+});
+
+// Backend process management objects
+let shutdownIsOrderly = false;
+const errorLogQueueCapacity = 100;
+let errorLogQueue = new circularBuffer(errorLogQueueCapacity);
 
 const getRunPath = () => {
   let backendPath;
@@ -55,14 +65,27 @@ const getRunPath = () => {
     }
     backendPath = path.join(process.env["VIRTUAL_ENV"], "bin", "local-console");
   } else if (process.platform === "win32") {
-    let installPath = path.dirname(app.getPath("exe"));
+    if (process.env["VIRTUAL_ENV"]) {
+      backendPath = path.join(
+        process.env["VIRTUAL_ENV"],
+        "Scripts",
+        "local-console.exe",
+      );
+    } else {
+      let installPath = path.dirname(app.getPath("exe"));
 
-    // This matches the directory layout created by:
-    // - ./inno-setup.iss at line 38
-    // - ./local-console/windows/utils.ps1 at line 140
-    // - ./local-console/windows/steps/app.ps1 at line 41
-    let base = path.resolve(path.dirname(installPath));
-    backendPath = path.join(base, "virtualenv", "Scripts", "local-console.exe");
+      // This matches the directory layout created by:
+      // - ./inno-setup.iss at line 38
+      // - ./local-console/windows/utils.ps1 at line 140
+      // - ./local-console/windows/steps/app.ps1 at line 41
+      let base = path.resolve(path.dirname(installPath));
+      backendPath = path.join(
+        base,
+        "virtualenv",
+        "Scripts",
+        "local-console.exe",
+      );
+    }
   } else {
     throw new Error("Unsupported platform", process.platform);
   }
@@ -71,9 +94,19 @@ const getRunPath = () => {
 };
 
 const startBackend = () => {
-  const backendPath = getRunPath();
-  log.info(backendPath);
-  const backendProcess = spawn(backendPath, ["-v", "serve"]);
+  const bypassBackend = "_LC_NO_BACKEND" in process.env;
+  log.warn("Bypass Backend? " + bypassBackend ? "yes" : "no");
+  let backendProcess;
+
+  if (!bypassBackend) {
+    const backendPath = getRunPath();
+    log.info(backendPath);
+    backendProcess = spawn(backendPath, ["-v", "serve"]);
+  } else {
+    const shell = process.platform === "win32" ? "powershell.exe" : "/bin/sh";
+    const command = process.platform === "win32" ? "sleep" : "sleep 100000";
+    backendProcess = spawn(command, { shell });
+  }
 
   backendProcess.stdout.on("data", (data) => {
     log.log(`stdout:\n${data}`);
@@ -100,10 +133,9 @@ const startBackend = () => {
 function createWindow() {
   const size = screen.getPrimaryDisplay().workAreaSize;
   const mainWindow = new BrowserWindow({
-    x: 0,
-    y: 0,
-    width: size.width,
-    height: size.height,
+    center: true,
+    width: Math.max(1000, Math.round(0.7 * size.width)),
+    height: Math.max(800, Math.round(0.7 * size.height)),
     webPreferences: {
       nodeIntegration: true,
       preload: path.resolve(app.getAppPath(), "electron/setupBridge.js"),
@@ -114,7 +146,6 @@ function createWindow() {
       `/dist/local-console-ui/browser/icon.png`,
     ),
   });
-  mainWindow.maximize();
 
   mainWindow.loadFile(
     path.join(app.getAppPath(), `/dist/local-console-ui/browser/index.html`),
@@ -149,16 +180,50 @@ function createWindow() {
 }
 
 // Handle the 'select-folder' event
-ipcMain.on("select-folder", async (event) => {
-  const result = await dialog.showOpenDialog({
+ipcMain.on("select-folder", async (event, operationId) => {
+  // Attach dialog to window gives focus:
+  // https://github.com/electron/electron/issues/10723#issuecomment-450304974
+  const result = await dialog.showOpenDialog(mainWindow, {
     properties: ["openDirectory"],
   });
-
   if (!result.canceled) {
-    event.sender.send("selected-folder", result.filePaths[0]);
+    event.sender.send(`selected-folder-${operationId}`, {
+      path: result.filePaths[0],
+    });
   } else {
-    event.sender.send("selected-folder", null);
+    event.sender.send(`selected-folder-${operationId}`, { path: null });
   }
+});
+
+// Handle the 'select-file' event
+ipcMain.on(
+  "select-file",
+  async (event, filterName, acceptedExtensions, operationId) => {
+    controller = new AbortController();
+    const result = await dialog.showOpenDialog(mainWindow, {
+      properties: ["openFile"],
+      filters: [{ name: filterName, extensions: acceptedExtensions }],
+    });
+    const filepath = result.canceled ? null : result.filePaths[0];
+    const name = result.canceled ? null : path.basename(filepath);
+    const content = result.canceled ? null : await readFile(filepath);
+    event.sender.send(`selected-file-${operationId}`, {
+      path: filepath,
+      basename: name,
+      data: content,
+    });
+  },
+);
+
+// Handle the 'read-file' event
+ipcMain.on("read-file", async (event, filepath) => {
+  const name = path.basename(filepath);
+  const content = await readFile(filepath);
+  event.sender.send("read-file-return", {
+    path: filepath,
+    basename: name,
+    data: content,
+  });
 });
 
 app.whenReady().then(() => {
@@ -167,6 +232,7 @@ app.whenReady().then(() => {
 
   backend.on("close", (code, signal) => {
     log.log(`child process close'd with code ${code} and signal ${signal}`);
+    backendIsClosedResolve();
 
     if (!shutdownIsOrderly) {
       const path_page = path.join(
@@ -185,8 +251,10 @@ app.whenReady().then(() => {
   });
 });
 
-app.on("window-all-closed", () => {
+app.on("window-all-closed", async () => {
   log.info("Electron is quitting...");
+  await backendIsClosed;
+  log.info("Backend is closed");
   if (process.platform !== "darwin") {
     app.quit();
   }

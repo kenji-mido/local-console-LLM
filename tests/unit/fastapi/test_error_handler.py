@@ -80,6 +80,7 @@ def test_local_console_exception():
         [ErrorCodes.EXTERNAL_DEPLOYMENT_ALREADY_RUNNING, 409],
         [ErrorCodes.EXTERNAL_ONE_DEVICE_NEEDED, 416],
         [ErrorCodes.EXTERNAL_DEVICE_NOT_FOUND, 404],
+        [ErrorCodes.EXTERNAL_CONFIG_UNITSIZE, 422],
     ],
 )
 def test_business_status(code: ErrorCodes, status: int) -> None:

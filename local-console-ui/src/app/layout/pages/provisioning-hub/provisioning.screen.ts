@@ -16,14 +16,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { CommonModule } from '@angular/common';
 import { Component, Inject, LOCALE_ID, ViewChild } from '@angular/core';
-import { NetworkSettingsPane } from './network-settings/network-settings.pane';
-import { isLocalDevice, LocalDevice } from '../../../core/device/device';
-import { CardComponent } from '../../components/card/card.component';
-import { FeaturesService } from '@app/core/common/features.service';
-import { CommonModule, formatDate } from '@angular/common';
-import { DeviceDetailsComponent } from '../../../core/device/device-details/device-details.component';
-import { DeviceListComponent } from '@app/layout/components/device-list/device-list.component';
 import {
   FormControl,
   FormGroup,
@@ -31,14 +25,16 @@ import {
   ReactiveFormsModule,
   Validators,
 } from '@angular/forms';
-import { TextInputComponent } from '@app/layout/components/text-input/text-input.component';
-import { DeviceService } from '@app/core/device/device.service';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { MatSelectModule } from '@angular/material/select';
+import { DeviceService } from '@app/core/device/device.service';
+import { TextInputComponent } from '@app/layout/components/text-input/text-input.component';
 import { firstValueFrom } from 'rxjs';
+import { LocalDevice } from '../../../core/device/device';
+import { DeviceDetailsComponent } from '../../../core/device/device-details/device-details.component';
 import { InfotipDirective } from '../../../core/feedback/infotip.component';
 import { SegmentsComponent } from '../../../core/option/segments.component';
-import { MatSelectModule } from '@angular/material/select';
-import { DevicePipesModule } from '@app/core/device/device.pipes';
+import { NetworkSettingsPane } from './network-settings/network-settings.pane';
 
 type HubMode = 'Register' | 'Connect';
 
@@ -49,8 +45,6 @@ type HubMode = 'Register' | 'Connect';
   standalone: true,
   imports: [
     NetworkSettingsPane,
-    CardComponent,
-    DeviceListComponent,
     CommonModule,
     DeviceDetailsComponent,
     TextInputComponent,
@@ -60,13 +54,11 @@ type HubMode = 'Register' | 'Connect';
     InfotipDirective,
     SegmentsComponent,
     MatSelectModule,
-    DevicePipesModule,
   ],
 })
 export class ProvisioningScreen {
   theme = 'light';
   isLoading = false;
-  refresh_datetime: string = '';
   qrCode!: string;
   qrCreatedDate?: Date;
   qrExpiredDate?: Date;
@@ -93,32 +85,24 @@ export class ProvisioningScreen {
 
   @ViewChild(NetworkSettingsPane) networkSettings!: NetworkSettingsPane;
 
-  get features() {
-    return this.featuresService.getFeatures();
-  }
-
   constructor(
-    private featuresService: FeaturesService,
     protected deviceService: DeviceService,
     @Inject(LOCALE_ID) private locale: string,
   ) {
     this.deviceService.loadDevices();
-    firstValueFrom(this.deviceService.devices$).then((device) => {
-      this.selectedDevice = device.filter(isLocalDevice)[0];
-    });
     this.intervalHandler = window.setInterval(
       () => this.deviceService.loadDevices(),
       3000,
     );
 
-    this.deviceService.devices$.subscribe(() => {
+    this.deviceService.devices$.subscribe((devices) => {
       if (this.selectedDevice !== undefined) {
-        const current_port = this.selectedDevice.port;
-        firstValueFrom(this.deviceService.devices$).then((device) => {
-          this.selectedDevice = device
-            .filter(isLocalDevice)
-            .filter((device) => device.port === current_port)[0];
-        });
+        const current_port = this.selectedDevice.device_id;
+        this.selectedDevice = devices.filter(
+          (device) => device.device_id === current_port,
+        )[0];
+      } else {
+        this.selectedDevice = devices[0];
       }
     });
   }
@@ -135,11 +119,6 @@ export class ProvisioningScreen {
   async refresh() {
     this.isLoading = true;
     await this.deviceService.loadDevices();
-    this.refresh_datetime = formatDate(
-      new Date(),
-      'yy.MM.dd HH:mm',
-      this.locale,
-    );
     this.isLoading = false;
   }
 
@@ -161,9 +140,7 @@ export class ProvisioningScreen {
         if (result !== null) {
           this.selectedDevice = (
             await firstValueFrom(this.deviceService.devices$)
-          )
-            .filter(isLocalDevice)
-            .find((d) => d.port === intPort);
+          ).find((d) => d.device_id === intPort.toString());
           this.hubMode = 'Connect';
         }
         this.isLoading = false;
@@ -183,4 +160,6 @@ export class ProvisioningScreen {
   ngOnDestroy() {
     this.stopInterval();
   }
+
+  protected readonly Number = Number;
 }

@@ -64,6 +64,8 @@ class LocalConsoleErrorHandler:
             return status.HTTP_416_REQUESTED_RANGE_NOT_SATISFIABLE
         if code == ErrorCodes.EXTERNAL_DEVICE_NOT_FOUND:
             return status.HTTP_404_NOT_FOUND
+        if code == ErrorCodes.EXTERNAL_CONFIG_UNITSIZE:
+            return status.HTTP_422_UNPROCESSABLE_ENTITY
         return status.HTTP_400_BAD_REQUEST
 
     def _internal_status(self) -> Any:

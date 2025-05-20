@@ -17,8 +17,8 @@
  */
 
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { FolderPickerComponent } from './folder-picker.component';
 import { IconTextComponent } from '../icon-text/icon-text.component';
+import { FolderPickerComponent } from './folder-picker.component';
 
 describe('FolderPickerComponent', () => {
   let component: FolderPickerComponent;
@@ -47,21 +47,23 @@ describe('FolderPickerComponent', () => {
 
   it('should emit folderSelected when a folder is selected in Electron', async () => {
     const testPath = '/test/path';
+    const payload = { path: testPath };
     const spy = jest.spyOn(component.folderSelected, 'emit');
 
     (window as any).appBridge = {
       isElectron: true,
-      selectFolder: jest.fn().mockResolvedValue(testPath),
+      selectFolder: jest.fn().mockResolvedValue(payload),
     };
 
     await component.openFolderPicker();
 
     expect(component.folderPath).toBe(testPath);
-    expect(spy).toHaveBeenCalledWith(testPath);
+    expect(spy).toHaveBeenCalledWith(payload);
   });
 
   it('should emit folderSelected when a folder is selected in browser', async () => {
     const testFolderName = 'testFolder';
+    const payload = { path: testFolderName };
     const spy = jest.spyOn(component.folderSelected, 'emit');
 
     (window as any).appBridge = undefined;
@@ -72,7 +74,7 @@ describe('FolderPickerComponent', () => {
     await component.openFolderPicker();
 
     expect(component.folderPath).toBe(testFolderName);
-    expect(spy).toHaveBeenCalledWith(testFolderName);
+    expect(spy).toHaveBeenCalledWith(payload);
   });
 
   it('should handle error when folder selection fails in browser', async () => {
@@ -96,7 +98,7 @@ describe('FolderPickerComponent', () => {
 
     (window as any).appBridge = {
       isElectron: true,
-      selectFolder: jest.fn().mockResolvedValue(undefined),
+      selectFolder: jest.fn().mockResolvedValue({ path: null }),
     };
 
     await component.openFolderPicker();

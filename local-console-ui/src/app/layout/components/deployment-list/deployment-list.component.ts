@@ -16,28 +16,28 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { Component } from '@angular/core';
-import { CommonModule } from '@angular/common';
-import {
-  TableVirtualScrollDataSource,
-  TableVirtualScrollModule,
-} from 'ng-table-virtual-scroll';
 import { ScrollingModule } from '@angular/cdk/scrolling';
+import { CommonModule } from '@angular/common';
+import { Component } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
+import { MatButtonModule } from '@angular/material/button';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatTableModule } from '@angular/material/table';
-import { MatButtonModule } from '@angular/material/button';
-import { FirmwarePipesModule } from '@app/core/firmware/firmware.pipes';
-import { DevicePipesModule } from '@app/core/device/device.pipes';
-import { DeploymentService } from '@app/core/deployment/deployment.service';
-import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { ModelService } from '@app/core/model/model.service';
-import { FirmwareService } from '@app/core/firmware/firmware.service';
-import { IconTextComponent } from '@app/core/file/icon-text/icon-text.component';
 import {
   DeployHistoriesOut,
   DeploymentStatusOut,
 } from '@app/core/deployment/deployment';
+import { DeploymentService } from '@app/core/deployment/deployment.service';
+import { DevicePipesModule } from '@app/core/device/device.pipes';
+import { IconTextComponent } from '@app/core/file/icon-text/icon-text.component';
+import { FirmwarePipesModule } from '@app/core/firmware/firmware.pipes';
+import { FirmwareService } from '@app/core/firmware/firmware.service';
+import { ModelService } from '@app/core/model/model.service';
+import {
+  TableVirtualScrollDataSource,
+  TableVirtualScrollModule,
+} from 'ng-table-virtual-scroll';
 
 enum ArtifactType {
   EdgeApp = 'Edge App',
@@ -106,7 +106,7 @@ export class DeploymentListComponent {
       return 'images/' + this.theme + '/status-success.svg';
     if (value === DeploymentStatusOut.Error)
       return 'images/' + this.theme + '/status-error.svg';
-    return 'images/' + this.theme + '/reload_icon_grey.svg';
+    return 'images/' + this.theme + '/deployment_status_deploying.svg';
   }
 
   getIconType(value: ArtifactType) {

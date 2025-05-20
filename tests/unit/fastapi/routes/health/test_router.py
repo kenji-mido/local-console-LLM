@@ -13,26 +13,28 @@
 # limitations under the License.
 #
 # SPDX-License-Identifier: Apache-2.0
+import pytest
 from fastapi import status
-from fastapi.testclient import TestClient
+from httpx import AsyncClient
 
-from tests.fixtures.configs import stored_devices
-from tests.fixtures.fastapi import fa_client
+from tests.fixtures.devices import stored_devices
 from tests.strategies.samplers.configs import DeviceConnectionSampler
 
 
-def test_health_check(fa_client: TestClient) -> None:
+@pytest.mark.trio
+async def test_health_check(fa_client_async: AsyncClient) -> None:
 
+    device_service = fa_client_async._transport.app.state.device_service
     # State prior to the call to DeviceServices.init_devices()
     # by the lifespan implementation
-    assert not fa_client.app.state.device_service.started
-    result = fa_client.get("/health")
+    assert not device_service.started
+    result = await fa_client_async.get("/health")
     assert result.status_code == status.HTTP_425_TOO_EARLY
 
     expected_devices = DeviceConnectionSampler().list_of_samples()
-    with stored_devices(expected_devices, fa_client.app.state.device_service):
+    async with stored_devices(expected_devices, device_service):
 
         # After the lifespan has initialized all devices
-        assert fa_client.app.state.device_service.started
-        result = fa_client.get("/health")
+        assert device_service.started
+        result = await fa_client_async.get("/health")
         assert result.status_code == status.HTTP_200_OK

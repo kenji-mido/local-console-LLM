@@ -13,12 +13,16 @@
 # limitations under the License.
 #
 # SPDX-License-Identifier: Apache-2.0
+import json
 from unittest.mock import patch
 
 from hypothesis import given
 from local_console.commands.rpc import app
+from local_console.core.config import Config
+from local_console.core.schemas.schemas import OnWireProtocol
 from typer.testing import CliRunner
 
+from tests.mocks.config import set_configuration
 from tests.strategies.configs import generate_text
 
 runner = CliRunner()
@@ -29,13 +33,20 @@ runner = CliRunner()
     generate_text(),
     generate_text(),
 )
-def test_rpc_command(instance_id: str, method: str, params: str):
+def test_v1_rpc_command(instance_id: str, method: str, params: str):
+    set_configuration()
+    Config().get_first_device_config().onwire_schema = OnWireProtocol.EVP1
     with (
-        patch("local_console.commands.rpc.Agent"),
-        patch("local_console.commands.rpc.rpc_task") as mock_rpc,
+        patch(
+            "local_console.core.camera.states.v1.common.run_rpc_with_response"
+        ) as mock_v1_run_rpc_with_response,
     ):
-        result = runner.invoke(app, [instance_id, method, params])
-        mock_rpc.assert_called_with(instance_id, method, params)
+        # Format params to be a valid JSON
+        params = {"key": params}
+        result = runner.invoke(app, [instance_id, method, json.dumps(params)])
+        mock_v1_run_rpc_with_response.assert_called_with(
+            Config().get_first_device_config().id, instance_id, method, params
+        )
         assert result.exit_code == 0
 
 
@@ -44,12 +55,11 @@ def test_rpc_command(instance_id: str, method: str, params: str):
     generate_text(),
     generate_text(),
 )
-def test_rpc_command_exception(instance_id: str, method: str, params: str):
-    with (
-        patch("local_console.commands.rpc.Agent") as mock_agent,
-        patch("local_console.commands.rpc.Agent.mqtt_scope") as mock_mqtt,
-    ):
-        mock_mqtt.side_effect = ConnectionError
+def test_v1_rpc_command_exception(instance_id: str, method: str, params: str):
+    set_configuration()
+    Config().get_first_device_config().onwire_schema = OnWireProtocol.EVP1
+    with (patch("local_console.core.camera.states.v1.common.run_rpc_with_response"),):
+        # Format params not to be a valid JSON
+        params = params + "}"
         result = runner.invoke(app, [instance_id, method, params])
-        mock_agent.assert_called()
         assert result.exit_code == 1

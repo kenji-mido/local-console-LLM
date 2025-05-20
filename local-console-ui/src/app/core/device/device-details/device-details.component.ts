@@ -16,29 +16,65 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { Component, Input, OnDestroy } from '@angular/core';
-import { DeviceFrame, LocalDevice } from '../device';
-import { DeviceService } from '../device.service';
 import { CommonModule } from '@angular/common';
-import { DialogService } from '@app/layout/dialogs/dialog.service';
-import { CardComponent } from '@app/layout/components/card/card.component';
-import { DevicePipesModule } from '../device.pipes';
-import { DrawingSurfaceComponent } from '../../drawing/drawing-surface.component';
+import { Component, Input, OnDestroy, viewChild } from '@angular/core';
+import { ExtendedMode } from '@app/core/inference/inference';
+import { DeviceStatus, LocalDevice } from '../device';
+import { DeviceStatusBadgeComponent } from '../device-status/device-status-badge.component';
+import { DeviceStreamingService } from '../device-visualizer/device-streaming.service';
 import { DeviceVisualizerComponent } from '../device-visualizer/device-visualizer.component';
+import { DevicePipesModule } from '../device.pipes';
 
 @Component({
   selector: 'app-device-details',
   standalone: true,
   imports: [
     CommonModule,
-    CardComponent,
     DevicePipesModule,
-    DrawingSurfaceComponent,
     DeviceVisualizerComponent,
+    DeviceStatusBadgeComponent,
   ],
   templateUrl: './device-details.component.html',
   styleUrl: './device-details.component.scss',
 })
-export class DeviceDetailsComponent {
-  @Input() selectedDevice?: LocalDevice;
+export class DeviceDetailsComponent implements OnDestroy {
+  visualizer = viewChild(DeviceVisualizerComponent);
+  private __device?: LocalDevice;
+  get selectedDevice() {
+    return this.__device;
+  }
+  @Input()
+  set selectedDevice(device: LocalDevice | undefined) {
+    if (device?.device_id !== this.__device?.device_id) {
+      this.stopStreamIfPreviewing();
+    }
+    this.__device = device;
+  }
+  DeviceStatus = DeviceStatus;
+  ExtendedMode = ExtendedMode;
+
+  constructor(private streams: DeviceStreamingService) {}
+
+  deviceIsBusy() {
+    const deviceId = this.selectedDevice?.device_id;
+    if (!deviceId) return false;
+    return (
+      this.streams.isDeviceStreaming(deviceId) &&
+      this.streams.getStreamingMode(deviceId) !== ExtendedMode.Preview
+    );
+  }
+
+  ngOnDestroy(): void {
+    this.stopStreamIfPreviewing();
+  }
+
+  stopStreamIfPreviewing() {
+    const deviceId = this.selectedDevice?.device_id;
+    if (!deviceId) return;
+    if (
+      this.streams.isDeviceStreaming(deviceId) &&
+      this.streams.getStreamingMode(deviceId) === ExtendedMode.Preview
+    )
+      this.visualizer()?.stopInferenceStream();
+  }
 }

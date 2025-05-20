@@ -13,12 +13,14 @@
 # limitations under the License.
 #
 # SPDX-License-Identifier: Apache-2.0
-from local_console.core.config import Config
+from local_console.core.enums import DEFAULT_PERSIST_SETTINGS
 from local_console.core.schemas.schemas import DeviceConnection
+from local_console.core.schemas.schemas import DeviceID
 from local_console.core.schemas.schemas import DeviceListItem
-from local_console.core.schemas.schemas import EVPParams
 from local_console.core.schemas.schemas import GlobalConfiguration
+from local_console.core.schemas.schemas import LocalConsoleConfig
 from local_console.core.schemas.schemas import MQTTParams
+from local_console.core.schemas.schemas import OnWireProtocol
 from local_console.core.schemas.schemas import WebserverParams
 from local_console.fastapi.routes.devices.dto import PropertyInfo
 
@@ -43,7 +45,7 @@ class MQTTParamsSampler:
 
 
 class WebserverParamsSampler:
-    def __init__(self, host: str = "web.server", port: int = 80) -> None:
+    def __init__(self, host: str = "0.0.0.0", port: int = 8000) -> None:
         self.host = host
         self.port = port
 
@@ -51,78 +53,79 @@ class WebserverParamsSampler:
         return WebserverParams(host=self.host, port=self.port)
 
 
+class OnWireProtocolSampler:
+    def __init__(self, protocol: OnWireProtocol = OnWireProtocol.EVP1) -> None:
+        self.protocol = protocol
+
+    def sample(self) -> OnWireProtocol:
+        return self.protocol
+
+
 class DeviceConnectionSampler:
     def __init__(
         self,
         name: str = random_alphanumeric(),
         mqtt_sampler: MQTTParamsSampler = MQTTParamsSampler(),
-        web_sampler: WebserverParamsSampler = WebserverParamsSampler(),
+        ows_sampler: OnWireProtocolSampler = OnWireProtocolSampler(),
     ) -> None:
         self.name = name
         self.mqtt = mqtt_sampler
-        self.web = web_sampler
+        self.ows = ows_sampler
 
     def sample(self) -> DeviceConnection:
         return DeviceConnection(
-            mqtt=self.mqtt.sample(), webserver=self.web.sample(), name=self.name
+            mqtt=self.mqtt.sample(),
+            name=self.name,
+            id=DeviceID(self.mqtt.port),
+            persist=DEFAULT_PERSIST_SETTINGS.model_copy(),
+            onwire_schema=self.ows.sample(),
         )
 
     def list_of_samples(self, length: int = 10) -> list[DeviceConnection]:
         list_of_samples = [self.sample() for _ in range(length)]
         for index, dev in enumerate(list_of_samples):
             dev.name = f"{dev.name}_{index}"
-            dev.mqtt.port = dev.mqtt.port + index
-            dev.webserver.port = dev.webserver.port + index
+            mqtt_port = dev.mqtt.port + index
+            dev.mqtt.port = mqtt_port
+            dev.id = DeviceID(mqtt_port)
         return list_of_samples
-
-
-class EVPParamsSampler:
-    def __init__(self, platform: str = "EVP1") -> None:
-        self.platform = platform
-
-    def sample(self) -> EVPParams:
-        return EVPParams(iot_platform=self.platform)
 
 
 class GlobalConfigurationSampler:
     def __init__(
         self,
-        evp: EVPParamsSampler = EVPParamsSampler(),
         devices: DeviceConnectionSampler = DeviceConnectionSampler(),
+        web_sampler: WebserverParamsSampler = WebserverParamsSampler(),
         num_of_devices: int = 10,
     ) -> None:
-        self.evp = evp
         self.devices = devices
+        self.web = web_sampler
         self.num_of_devices = num_of_devices
 
     def sample(self) -> GlobalConfiguration:
         devices = self.devices.list_of_samples(self.num_of_devices)
-        return GlobalConfiguration(
-            evp=self.evp.sample(), devices=devices, active_device=devices[0].mqtt.port
-        )
-
-
-class ConfigSampler:
-    def __init__(self, config: GlobalConfigurationSampler) -> None:
-        self.config = config
-
-    def sample(self) -> Config:
-        config = Config()
-        config._config = self.config.sample()
-        return config
+        lc_conf = LocalConsoleConfig(webserver=self.web.sample())
+        return GlobalConfiguration(devices=devices, config=lc_conf)
 
 
 class DeviceListItemSampler:
     def __init__(
         self,
         name: str = random_alphanumeric(),
-        port: int = 1883 + random_int(max=100),
+        port: int = 1883 + random_int(min=1, max=100),
+        onwire_schema: OnWireProtocol = OnWireProtocol.EVP1,
     ) -> None:
         self.name = name
         self.port = port
+        self.onwire_schema = onwire_schema
 
     def sample(self) -> DeviceListItem:
-        return DeviceListItem(name=self.name, port=self.port)
+        return DeviceListItem(
+            name=self.name,
+            port=self.port,
+            id=DeviceID(self.port),
+            onwire_schema=self.onwire_schema,
+        )
 
 
 class PropertySampler:

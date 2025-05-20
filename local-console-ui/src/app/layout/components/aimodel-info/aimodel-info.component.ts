@@ -18,11 +18,10 @@
 
 import { CommonModule } from '@angular/common';
 import { Component, Input, SimpleChanges } from '@angular/core';
-import { CardComponent } from '../card/card.component';
-import { DeviceV2 } from '@app/core/device/device';
+import { LocalDevice } from '@app/core/device/device';
 import {
   SysAppModuleStateAiModelV2,
-  isSysModuleState,
+  isSysModuleConfig,
 } from '@app/core/module/sysapp';
 
 interface AIModelInfoTabItems {
@@ -36,26 +35,27 @@ interface AIModelInfoTabItems {
   templateUrl: './aimodel-info.component.html',
   styleUrls: ['./aimodel-info.component.scss'],
   standalone: true,
-  imports: [CommonModule, CardComponent],
+  imports: [CommonModule],
 })
 export class AIModelInfo {
   aimodels_info: AIModelInfoTabItems[] = [];
   num_models: number[] = [];
 
-  @Input() device: DeviceV2 | null = null;
+  @Input() device: LocalDevice | null = null;
 
   ngOnChanges(changes: SimpleChanges) {
     this.onDeviceInfoReceived(changes['device'].currentValue);
   }
-  onDeviceInfoReceived(device: DeviceV2 | null) {
+  onDeviceInfoReceived(device: LocalDevice | null) {
     this.aimodels_info = [];
     this.num_models = [];
     let i = 1;
     if (
       device === null ||
       device.modules === null ||
-      !isSysModuleState(device.modules?.[0].property.state!) ||
-      device.modules?.[0].property.state!.device_info?.ai_models === undefined
+      !isSysModuleConfig(device.modules?.[0].property.configuration) ||
+      device.modules?.[0].property.configuration!.device_info?.ai_models ===
+        undefined
     ) {
       this.aimodels_info = [
         {
@@ -69,7 +69,7 @@ export class AIModelInfo {
       return;
     }
     const ai_models: SysAppModuleStateAiModelV2[] =
-      device.modules?.[0].property.state!.device_info?.ai_models;
+      device.modules?.[0].property.configuration!.device_info?.ai_models;
     for (var ai_model of ai_models) {
       this.aimodels_info.push({
         model_id: ai_model.name,

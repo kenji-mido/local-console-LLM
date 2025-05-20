@@ -19,6 +19,7 @@ import zipfile
 from collections.abc import Callable
 from collections.abc import Generator
 from contextlib import contextmanager
+from hashlib import sha256
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -27,7 +28,7 @@ from local_console.core.files.files_validators import ValidableFileInfo
 from local_console.core.files.values import FileInfo
 from local_console.core.files.values import FileType
 from local_console.core.files.values import ZipInfo
-from local_console.utils.random import random_id
+
 
 logger = logging.getLogger(__name__)
 
@@ -55,16 +56,29 @@ class FilesManager:
         return self.base_path / file_type / file_id / "extracted"
 
     def add_file(self, raw_type: str, file_name: str, file_content: bytes) -> FileInfo:
+        # This method is idempotent
         file_type: FileType = FileType(raw_type)
-        file_id = random_id()
-        path = self.get_file_rootdir(file_id=file_id, file_type=file_type) / file_name
+        base_name = Path(file_name).name
+
+        # This is done because `get_file()` uses the ID to look previously
+        # registered files, but it may happen that several files have
+        # identical content but different names. However, the drawback
+        # with the current implementation is that this renders the nice
+        # deduplication feature of this manager ineffective.
+        #
+        # A more adequate solution is to have get_file() include the name
+        # of the file, and keep the ID dependent only on the file hash.
+        file_id = file_hash(file_content + base_name.encode())
+        path = self.get_file_rootdir(file_id=file_id, file_type=file_type) / base_name
         pre_save_info = ValidableFileInfo(
             id=file_id, path=path, type=file_type, content=file_content
         )
-        self.validate_before_saving(pre_save_info)
-        logger.debug(f"File {file_type} will be saved on {path}")
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_bytes(file_content)
+        if not (path.is_file() and path.read_bytes() == file_content):
+            self.validate_before_saving(pre_save_info)
+            logger.debug(f"File {file_type} will be saved on {path}")
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(file_content)
+
         return pre_save_info.to_file_info()
 
     def get_file(self, file_type: FileType, file_id: str) -> None | FileInfo:
@@ -78,16 +92,11 @@ class FilesManager:
         except FileNotFoundError:
             return None
 
-        if len(list_files_type_id) > 1:
-            raise ValueError(
-                f"There is more than one file with type {file_type} and id {file_id}."
-            )
-        elif len(list_files_type_id) == 0:
+        if len(list_files_type_id) == 0:
             raise ValueError(f"There is no file with type {file_type} and id {file_id}")
 
-        file_path = os.path.join(dir_path, list_files_type_id[0])
-
-        return FileInfo(id=file_id, path=Path(file_path), type=file_type)
+        file_path = dir_path / list_files_type_id[0]
+        return FileInfo(id=file_id, path=file_path, type=file_type)
 
     def unzip(self, file_info: FileInfo) -> ZipInfo:
         """
@@ -148,3 +157,9 @@ def temporary_files_manager() -> Generator[FilesManager, None, None]:
     with TemporaryDirectory(prefix="local_console") as temp:
         logger.info(f"New temporal file manager created on {temp}")
         yield create_files_manager(Path(temp))
+
+
+def file_hash(file_content: bytes) -> str:
+    hasher = sha256()
+    hasher.update(file_content)
+    return hasher.hexdigest()

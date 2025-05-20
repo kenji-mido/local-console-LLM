@@ -17,8 +17,8 @@
  */
 
 import { CommonModule } from '@angular/common';
-import { Component, Directive, Input } from '@angular/core';
-import { MatTooltipModule } from '@angular/material/tooltip';
+import { Component, Input } from '@angular/core';
+import { MatTooltipModule, TooltipPosition } from '@angular/material/tooltip';
 
 @Component({
   selector: 'app-infotip',
@@ -28,7 +28,7 @@ import { MatTooltipModule } from '@angular/material/tooltip';
       display: flex;
     }
     :host img {
-      --info-size: 26px;
+      --info-size: 24px;
       width: var(--info-size);
       height: var(--info-size);
     }
@@ -38,11 +38,13 @@ import { MatTooltipModule } from '@angular/material/tooltip';
       src="images/light/info_icon.svg"
       [ngStyle]="{ '--info-size': size + 'px' }"
       [matTooltip]="tip || ''"
+      [matTooltipPosition]="position"
     />
   `,
   standalone: true,
 })
 export class InfotipDirective {
   @Input() tip?: string;
-  @Input() size = 26;
+  @Input() size = 24;
+  @Input() position: TooltipPosition = 'above';
 }

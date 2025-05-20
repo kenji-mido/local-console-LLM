@@ -14,211 +14,98 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 import hashlib
-import json
 import logging
 import uuid
-from abc import ABC
-from abc import abstractmethod
 from collections.abc import Awaitable
 from pathlib import Path
-from pathlib import PurePosixPath
 from typing import Any
 from typing import Callable
 from typing import Optional
 
-import trio
 from local_console.core.camera.enums import DeployStage
+from local_console.core.enums import ModuleExtension
 from local_console.core.schemas.schemas import Deployment
 from local_console.core.schemas.schemas import DeploymentManifest
-from local_console.core.schemas.schemas import DeviceConnection
-from local_console.core.schemas.schemas import OnWireProtocol
+from local_console.core.schemas.schemas import DeviceID
+from local_console.servers.webserver import combine_url_components
 from local_console.servers.webserver import SyncWebserver
-from local_console.utils.local_network import get_webserver_ip
-from local_console.utils.timing import TimeoutBehavior
+from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
 
 
-class DeployFSM(ABC):
-    def __init__(
-        self,
-        deploy_fn: Callable[[DeploymentManifest], Awaitable[None]],
-        stage_callback: Optional[Callable[[DeployStage], Awaitable[None]]] = None,
-        deploy_webserver: bool = True,
-        webserver_port: int = 0,
-        timeout_secs: int = 30,
-    ) -> None:
-        self.deploy_fn = deploy_fn
-        self.stage_callback = stage_callback
-        self.webserver = SyncWebserver(
-            Path(), port=webserver_port, deploy=deploy_webserver
-        )
-        self.webserver.start()  # This secures a listening port for the webserver
+StageNotifyFn = Callable[[DeployStage, DeploymentManifest | None], Awaitable[None]]
 
-        self.done = trio.Event()
-        self._timeout_handler = TimeoutBehavior(timeout_secs, self._on_timeout)
-        self._to_deploy: Optional[DeploymentManifest] = None
-        self.errored: Optional[bool] = None
 
-        self.stage: Optional[DeployStage] = None
-
-    async def _set_new_stage(self, new_stage: DeployStage) -> None:
-        self.stage = new_stage
-        if self.stage_callback:
-            await self.stage_callback(self.stage)
-
-    @abstractmethod
-    async def update(self, deploy_status: dict[str, Any]) -> None:
-        """
-        Updates the FSM as it progresses through its states.
-        """
-        assert self.stage
-        assert self._to_deploy
-
-    @abstractmethod
-    async def start(self, nursery: trio.Nursery) -> None:
-        """
-        To be called for performing actions at FSM entry, once the
-        deployment manifest is set. It must:
-        - call spawn_in() of _timeout_handler
-        - await _set_new_stage() with initial stage
-        """
-
-    def set_manifest(self, to_deploy: DeploymentManifest) -> None:
-        self._to_deploy = to_deploy
-
-    def stop(self) -> None:
-        self._timeout_handler.stop()
-        self.webserver.stop()
-        self.done.set()
-
-    async def check_termination(
-        self, is_finished: bool, matches: bool, is_errored: bool
-    ) -> bool:
-        should_terminate = False
-        next_stage = self.stage
-        if matches:
-            if is_finished:
-                should_terminate = True
-                next_stage = DeployStage.Done
-                self.errored = False
-                logger.info("Deployment complete")
-
-            elif is_errored:
-                should_terminate = True
-                next_stage = DeployStage.Error
-                self.errored = True
-                logger.error("Deployment errored")
-
-        if should_terminate:
-            self.stop()
-            assert next_stage
-            await self._set_new_stage(next_stage)
-
-        return should_terminate
-
-    async def _on_timeout(self) -> None:
-        logger.error("Timeout when sending modules.")
-        self.errored = True
-        self.stop()
-        await self._set_new_stage(DeployStage.Error)
+class DeploymentSpec(BaseModel):
+    modules: dict[str, Path]
+    pre_deployment: Deployment
 
     @classmethod
-    def instantiate(
-        cls,
-        onwire_schema: OnWireProtocol,
-        deploy_fn: Callable[[DeploymentManifest], Awaitable[None]],
-        stage_callback: Optional[Callable[[DeployStage], Awaitable[None]]] = None,
-        deploy_webserver: bool = True,
-        webserver_port_override: int = 0,
-        timeout_secs: int = 30,
-    ) -> "DeployFSM":
-        # This is a factory builder, so only run this from this parent class
-        assert cls is DeployFSM
-
-        if onwire_schema == OnWireProtocol.EVP1:
-            return EVP1DeployFSM(
-                deploy_fn,
-                stage_callback,
-                deploy_webserver,
-                webserver_port_override,
-                timeout_secs,
-            )
-        elif onwire_schema == OnWireProtocol.EVP2:
-            return EVP2DeployFSM(
-                deploy_fn,
-                stage_callback,
-                deploy_webserver,
-                webserver_port_override,
-                timeout_secs,
-            )
-
-
-class EVP2DeployFSM(DeployFSM):
-
-    async def start(self, nursery: trio.Nursery) -> None:
-        """
-        No further start actions required
-        """
-        assert self._to_deploy
-        self._timeout_handler.spawn_in(nursery)
-        await self._set_new_stage(DeployStage.WaitFirstStatus)
-
-    async def update(self, deploy_status: dict[str, Any]) -> None:
-        assert self._to_deploy
-        assert self.stage
-        next_stage = self.stage
-
-        is_finished, matches, is_errored = verify_report(
-            self._to_deploy.deployment.deploymentId, deploy_status
+    def new_empty(cls) -> "DeploymentSpec":
+        empty_raw_deployment = Deployment(
+            deploymentId=str(uuid.uuid4()),
+            instanceSpecs={},
+            modules={},
+            publishTopics={},
+            subscribeTopics={},
         )
-        if await self.check_termination(is_finished, matches, is_errored):
-            return
+        return DeploymentSpec(modules={}, pre_deployment=empty_raw_deployment)
 
-        if self.stage == DeployStage.WaitFirstStatus:
-            logger.debug("Agent can receive deployments. Pushing manifest now.")
-            await self.deploy_fn(self._to_deploy)
-            next_stage = DeployStage.WaitAppliedConfirmation
+    def collect_modules_from_pre(self) -> None:
+        """
+        Populate the `modules` field by reading from
+        `pre_deployment.modules.[*].downloadUrl`, assuming that
+        those values are not actual URLs, but filesystem paths.
+        Such assumption might hold when reading deployment manifests
+        written by hand by the user.
+        """
+        assert not self.modules, f"The `modules` dict is already populated: {self}"
 
-        elif self.stage == DeployStage.WaitAppliedConfirmation:
-            if matches:
-                logger.debug(
-                    "Deployment received, reconcile=%s",
-                    deploy_status.get("reconcileStatus", "<null>"),
+        for name, module in self.pre_deployment.modules.items():
+            maybe_file = Path(module.downloadUrl)
+            if not maybe_file.is_file():
+                raise ValueError(
+                    f"`pre_deployment` might already be a rendered manifest: {self.pre_deployment}"
                 )
-                logger.info("Deployment received, waiting for reconcile completion")
 
-        elif self.stage in (DeployStage.Done, DeployStage.Error):
-            logger.warning(
-                "Should not reach here! (status is %s)",
-                json.dumps(deploy_status),
-            )
+            self.modules[name] = maybe_file
 
-        await self._set_new_stage(next_stage)
+    def render_for_webserver(
+        self, webserver: SyncWebserver, device_id: DeviceID
+    ) -> DeploymentManifest:
+        self.collect_modules_from_pre()
+        url_root = webserver.url_root_at(device_id)
+        dm = self.populate_urls_and_hashes(url_root)
+        make_unique_module_ids(dm)
+        return dm
 
+    def populate_urls_and_hashes(
+        self,
+        url_root: str,
+    ) -> DeploymentManifest:
+        dm = DeploymentManifest(deployment=self.pre_deployment)
 
-class EVP1DeployFSM(DeployFSM):
+        for module, path in self.modules.items():
+            mod_hash = calculate_sha256(path)
+            url_path = SyncWebserver.url_path_for(path)
+            url = combine_url_components(url_root, url_path)
 
-    async def start(self, nursery: trio.Nursery) -> None:
-        assert self._to_deploy
-        # Deploy immediately, without comparing with current status, to speed-up the process.
-        logger.debug("Pushing manifest now.")
-        self._timeout_handler.spawn_in(nursery)
-        await self._set_new_stage(DeployStage.WaitAppliedConfirmation)
-        await self.deploy_fn(self._to_deploy)
+            dm.deployment.modules[module].hash = mod_hash
+            dm.deployment.modules[module].downloadUrl = url
 
-    async def update(self, deploy_status: dict[str, Any]) -> None:
-        """
-        Simplified handshake compared to EVP2:
-        - Sends deployment at beginning.
-        - Checks current is the one to be applied.
-        """
-        assert self._to_deploy
-        is_finished, matches, is_errored = verify_report(
-            self._to_deploy.deployment.deploymentId, deploy_status
-        )
-        if await self.check_termination(is_finished, matches, is_errored):
-            return
+        # DeploymentId based on deployment manifest content
+        deployment_manifest_hash = hashlib.sha256(str(dm.model_dump()).encode("utf-8"))
+        dm.deployment.deploymentId = deployment_manifest_hash.hexdigest()
+        return dm
+
+    def enlist_files_in(self, webserver: SyncWebserver) -> None:
+        for module in self.modules.values():
+            webserver.enlist_file(module)
+
+    def delist_files_in(self, webserver: SyncWebserver) -> None:
+        for module in self.modules.values():
+            webserver.delist_file(module)
 
 
 def verify_report(
@@ -238,17 +125,20 @@ def verify_report(
     return is_finished, matches, is_errored
 
 
+def get_module_impl(module_file: Path) -> str:
+    module_impl = "wasm"
+    if module_file.suffix == ModuleExtension.PY.as_suffix:
+        module_impl = "python"
+
+    return module_impl
+
+
 def single_module_manifest_setup(
     module_name: str,
     module_file: Path,
-    webserver: SyncWebserver,
-    target: DeviceConnection,
-    port_override: Optional[int] = None,
-    host_override: Optional[str] = None,
-) -> DeploymentManifest:
+) -> DeploymentSpec:
     """
-    Generate a single module, single instance deployment manifest,
-    matched to the passed webserver instance.
+    Generate a single module, single instance deployment spec.
     """
     deployment = Deployment.model_validate(
         {
@@ -259,7 +149,7 @@ def single_module_manifest_setup(
             "modules": {
                 module_name: {
                     "entryPoint": "main",
-                    "moduleImpl": "wasm",
+                    "moduleImpl": get_module_impl(module_file),
                     "downloadUrl": "",
                     "hash": "",
                 }
@@ -269,43 +159,9 @@ def single_module_manifest_setup(
         }
     )
     deployment.modules[module_name].downloadUrl = str(module_file)
-    deployment_manifest = DeploymentManifest(deployment=deployment)
+    spec = DeploymentSpec(modules={}, pre_deployment=deployment)
 
-    webserver.set_directory(module_file.parent)
-    return manifest_setup_epilog(
-        module_file.parent,
-        deployment_manifest,
-        webserver,
-        target,
-        port_override,
-        host_override,
-    )
-
-
-def manifest_setup_epilog(
-    files_dir: Path,
-    manifest: DeploymentManifest,
-    webserver: SyncWebserver,
-    target: DeviceConnection,
-    port_override: Optional[int] = None,
-    host_override: Optional[str] = None,
-) -> DeploymentManifest:
-    """
-    Fills in the URLs and hashes of a deployment manifest,
-    and renames modules to ensure a module entry matches the
-    hash of its target file (which ensures that subsequent
-    versions of the same module won't be mistaken by the device's
-    module cache as a cache hit.)
-    """
-    assert files_dir.is_dir()
-
-    dm = manifest.copy(deep=True)
-    host = get_webserver_ip(target) if not host_override else host_override
-    port = webserver.port if not port_override else port_override
-    populate_urls_and_hashes(dm, host, port, files_dir)
-    make_unique_module_ids(dm)
-
-    return dm
+    return spec
 
 
 def make_unique_module_ids(deploy_man: DeploymentManifest) -> None:
@@ -328,42 +184,10 @@ def make_unique_module_ids(deploy_man: DeploymentManifest) -> None:
         instance.moduleId = old_to_new[instance.moduleId]
 
 
-def get_empty_deployment() -> DeploymentManifest:
-    deployment = {
-        "deployment": {
-            "deploymentId": str(uuid.uuid4()),
-            "instanceSpecs": {},
-            "modules": {},
-            "publishTopics": {},
-            "subscribeTopics": {},
-        }
-    }
-    return DeploymentManifest.model_validate(deployment)
-
-
 def calculate_sha256(path: Path) -> str:
     sha256_hash = hashlib.sha256()
     sha256_hash.update(path.read_bytes())
     return sha256_hash.hexdigest()
-
-
-def populate_urls_and_hashes(
-    deployment_manifest: DeploymentManifest,
-    host: str,
-    port: int,
-    root_path: Path,
-) -> None:
-    for module in deployment_manifest.deployment.modules.keys():
-        file = Path(deployment_manifest.deployment.modules[module].downloadUrl)
-        deployment_manifest.deployment.modules[module].hash = calculate_sha256(file)
-        url = f"http://{host}:{port}/{PurePosixPath(file.relative_to(root_path))}"
-        deployment_manifest.deployment.modules[module].downloadUrl = url
-
-    # DeploymentId based on deployment manifest content
-    deployment_manifest_hash = hashlib.sha256(
-        str(deployment_manifest.model_dump()).encode("utf-8")
-    )
-    deployment_manifest.deployment.deploymentId = deployment_manifest_hash.hexdigest()
 
 
 def deploy_status_empty(deploy_status: Optional[dict[str, Any]]) -> bool:

@@ -17,10 +17,10 @@
  */
 
 import { TestBed } from '@angular/core/testing';
-import { FilesService } from './files.service';
-import { HttpApiClient } from '../common/http/http';
-import { environment } from '../../../environments/environment';
 import { Files } from '@samplers/file';
+import { EnvService } from '../common/environment.service';
+import { HttpApiClient } from '../common/http/http';
+import { FilesService } from './files.service';
 
 class MockHttpApiClient {
   post = jest.fn();
@@ -53,6 +53,7 @@ describe('FilesService', () => {
 
   describe('createFiles', () => {
     const mockFileHandle = Files.sample('test-file.txt');
+    const envService = new EnvService();
 
     it('should return file_id on successful upload', async () => {
       httpApiClient.post.mockResolvedValue({
@@ -67,7 +68,7 @@ describe('FilesService', () => {
 
       expect(fileId).toBe('12345');
       expect(httpApiClient.post).toHaveBeenCalledWith(
-        `${environment.apiV2Url}/files`,
+        `${envService.getApiUrl()}/files`,
         expect.any(FormData),
         true,
       );
@@ -97,7 +98,7 @@ describe('FilesService', () => {
 
       expect(fileId).toBeNull();
       expect(httpApiClient.post).toHaveBeenCalledWith(
-        `${environment.apiV2Url}/files`,
+        `${envService.getApiUrl()}/files`,
         expect.any(FormData),
         true,
       );

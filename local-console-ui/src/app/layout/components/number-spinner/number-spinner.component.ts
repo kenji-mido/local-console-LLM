@@ -17,7 +17,13 @@
  */
 
 import { CommonModule } from '@angular/common';
-import { Component, Input, Output, EventEmitter } from '@angular/core';
+import {
+  Component,
+  EventEmitter,
+  HostBinding,
+  Input,
+  Output,
+} from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
 @Component({
@@ -38,7 +44,13 @@ export class NumberSpinnerComponent {
   @Input() step: number = 1;
   @Input() editableDisabled: boolean = true;
   @Input() minusPlusDisabled: boolean = true;
+  @Input() width: number | 'auto' = 'auto';
+  @Input() disabled = false;
   @Output() DataChange = new EventEmitter<number>();
+  @HostBinding('attr.aria-disabled') get disabledAttr() {
+    return this.disabled ? true : null;
+  }
+  @HostBinding('attr.role') role = 'spinbutton';
 
   // timers
   private resetTimer: any | null = null;

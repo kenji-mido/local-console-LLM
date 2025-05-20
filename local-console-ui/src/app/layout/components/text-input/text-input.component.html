@@ -25,10 +25,12 @@
     [placeholder]="placeholder"
     [readonly]="readOnly"
     [maxLength]="maxLength"
+    data-testid="text-input"
   />
   <mat-icon
     *ngIf="rightButtonIcon"
-    class="input-icon action"
+    class="input-icon action disableable"
+    [class.disabled]="disabled()"
     (click)="rightButtonClicked()"
   >
     {{ rightButtonIcon }}

@@ -16,35 +16,37 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { Component, OnDestroy, Signal } from '@angular/core';
+import {
+  CdkDragEnd,
+  CdkDragMove,
+  DragDropModule,
+} from '@angular/cdk/drag-drop';
+import { CdkMenu, CdkMenuItem, CdkMenuTrigger } from '@angular/cdk/menu';
+import { ScrollingModule } from '@angular/cdk/scrolling';
 import { CommonModule } from '@angular/common';
+import { Component, OnDestroy, Signal } from '@angular/core';
+import { toSignal } from '@angular/core/rxjs-interop';
+import { FormsModule } from '@angular/forms';
+import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { MatTableModule } from '@angular/material/table';
+import { DeviceStatus, LocalDevice } from '@app/core/device/device';
+import { DevicePipesModule } from '@app/core/device/device.pipes';
+import { DeviceService } from '@app/core/device/device.service';
+import { IconTextComponent } from '@app/core/file/icon-text/icon-text.component';
+import { AIModelInfo } from '@app/layout/components/aimodel-info/aimodel-info.component';
+import { DeviceInfo } from '@app/layout/components/device-info/device-info.component';
+import { NetworkInfo } from '@app/layout/components/network-info/network-info.component';
+import { DialogService } from '@app/layout/dialogs/dialog.service';
+import { action } from '@app/layout/dialogs/user-prompt/action';
 import {
   TableVirtualScrollDataSource,
   TableVirtualScrollModule,
 } from 'ng-table-virtual-scroll';
-import { ScrollingModule } from '@angular/cdk/scrolling';
-import { FormsModule } from '@angular/forms';
-import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
-import { MatTableModule } from '@angular/material/table';
-import { CardComponent } from '@app/layout/components/card/card.component';
-import { DeviceInfo } from '@app/layout/components/device-info/device-info.component';
+import { DeviceStatusBadgeComponent } from '../../../core/device/device-status/device-status-badge.component';
 import {
-  DragDropModule,
-  CdkDragMove,
-  CdkDragEnd,
-} from '@angular/cdk/drag-drop';
-import { IconTextComponent } from '@app/core/file/icon-text/icon-text.component';
-import { DevicePipesModule } from '@app/core/device/device.pipes';
-import { DeviceStatus, DeviceV2, isLocalDevice } from '@app/core/device/device';
-import { MatRadioButton, MatRadioGroup } from '@angular/material/radio';
-import { DeviceService } from '@app/core/device/device.service';
-import { toSignal } from '@angular/core/rxjs-interop';
-import { CdkMenu, CdkMenuItem, CdkMenuTrigger } from '@angular/cdk/menu';
-import { DialogService } from '@app/layout/dialogs/dialog.service';
-import { UserPromptNameDialog } from './user-prompt-name/user-prompt-name.dialog';
-import { TextInputComponent } from '@app/layout/components/text-input/text-input.component';
-import { AIModelInfo } from '@app/layout/components/aimodel-info/aimodel-info.component';
-import { NetworkInfo } from '@app/layout/components/network-info/network-info.component';
+  UserPromptNameDialog,
+  UserPromptNameDialogData,
+} from './user-prompt-name/user-prompt-name.dialog';
 
 export enum Tab {
   Device = 'Device',
@@ -59,11 +61,8 @@ export enum Tab {
   standalone: true,
   imports: [
     CommonModule,
-    CardComponent,
     TableVirtualScrollModule,
     MatTableModule,
-    MatRadioGroup,
-    MatRadioButton,
     ScrollingModule,
     FormsModule,
     MatProgressSpinnerModule,
@@ -73,10 +72,10 @@ export enum Tab {
     CdkMenuTrigger,
     CdkMenu,
     CdkMenuItem,
-    TextInputComponent,
     DeviceInfo,
     AIModelInfo,
     NetworkInfo,
+    DeviceStatusBadgeComponent,
   ],
 })
 export class DeviceManagementScreen implements OnDestroy {
@@ -85,24 +84,25 @@ export class DeviceManagementScreen implements OnDestroy {
 
   theme = 'light';
   itemSize = 47;
-  infoSize = 56;
-  minInfoSize = this.infoSize;
+  infoSize = 0;
+  minInfoSize = 56;
   initialInfoSize = this.infoSize; // used to control drag movement
 
   displayedColumns: string[] = [
     'device_name',
     'status',
     'port',
+    'type',
     'appFw',
     'sensorFw',
     'selector',
   ];
 
-  devices: Signal<DeviceV2[]>;
-  dataSource: TableVirtualScrollDataSource<DeviceV2> =
-    new TableVirtualScrollDataSource<DeviceV2>([]);
+  devices: Signal<LocalDevice[]>;
+  dataSource: TableVirtualScrollDataSource<LocalDevice> =
+    new TableVirtualScrollDataSource<LocalDevice>([]);
   selectedRowIndex: any;
-  selectedDevice: DeviceV2 | null = null;
+  selectedDevice: LocalDevice | null = null;
   selectedDeviceId: string | null = null;
 
   selectedSection: Tab = Tab.Device;
@@ -114,7 +114,7 @@ export class DeviceManagementScreen implements OnDestroy {
     private dialogs: DialogService,
   ) {
     this.devices = toSignal(this.deviceService.devices$, {
-      initialValue: [] as DeviceV2[],
+      initialValue: [] as LocalDevice[],
     });
 
     this.deviceService.loadDevices();
@@ -137,6 +137,19 @@ export class DeviceManagementScreen implements OnDestroy {
           data.find((device) => device.device_id === this.selectedDeviceId) ||
           null;
         this.selectedDeviceId = this.selectedDevice?.device_id || null;
+      }
+    });
+
+    document.addEventListener('DOMContentLoaded', () => {
+      const deviceDetailsHeader = document.getElementById(
+        'device_details_header_id',
+      );
+      if (deviceDetailsHeader) {
+        this.minInfoSize = parseInt(
+          window
+            .getComputedStyle(deviceDetailsHeader, null)
+            .getPropertyValue('min-height'),
+        );
       }
     });
   }
@@ -165,35 +178,43 @@ export class DeviceManagementScreen implements OnDestroy {
     this.selectedSection = Tab.Model;
   }
 
-  async onDeviceSelected(device: DeviceV2) {
+  async onDeviceSelected(device: LocalDevice) {
     this.selectedDeviceId = device.device_id;
     this.selectedDevice = device;
+    if (this.infoSize === 0) {
+      this.infoSize = 0.33 * window.innerHeight;
+    }
+    this.initialInfoSize = this.infoSize;
   }
 
-  async onDelete(device: DeviceV2) {
+  async onDelete(device: LocalDevice) {
     const result = await this.dialogs.prompt({
       message: `'${device.device_name}' will be removed from Local Console.  Existing image and metadata will not be removed.`,
       title: 'Are you sure you want to delete the device?',
-      actionButtons: [{ id: 'delete', text: 'Delete', variant: 'primary' }],
+      actionButtons: [action.negative('delete', 'Delete')],
       type: 'warning',
+      showCancelButton: true,
     });
     if (result?.id === 'delete') {
-      if (isLocalDevice(device)) {
-        if (this.selectedDeviceId === device.device_id) {
-          this.selectedDevice = null;
-          this.selectedDeviceId = null;
-        }
-        await this.deviceService.deleteDevice(device);
-      } else console.error('Delete not implemented for Online device');
+      if (this.selectedDeviceId === device.device_id) {
+        this.selectedDevice = null;
+        this.selectedDeviceId = null;
+      }
+      await this.deviceService.deleteDevice(device);
     }
   }
 
-  onRename(device: DeviceV2) {
-    const dialogRef = this.dialogs.open(UserPromptNameDialog, {
+  onRename(device: LocalDevice) {
+    let data: UserPromptNameDialogData = {
       title: 'Rename Device',
-      actionButtons: [{ id: 'rename', text: 'Rename', variant: 'primary' }],
+      message: '',
+      actionButtons: [action.normal('rename', 'Rename')],
       type: 'warning',
-    });
+      deviceName: device.device_name,
+      showCancelButton: true,
+    };
+
+    const dialogRef = this.dialogs.open(UserPromptNameDialog, data);
     dialogRef.closed.subscribe(async (result) => {
       if (typeof result !== 'string') return;
       await this.deviceService.updateDeviceName(device.device_id, result);

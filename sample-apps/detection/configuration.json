@@ -1,7 +1,21 @@
 {
-  "dnn_output_detections": 50,
-  "max_detections": 2,
-  "threshold": 0.3,
-  "input_width": 300,
-  "input_height": 300
+  "custom_settings": {
+    "ai_models": {
+      "detection": {
+        "ai_model_bundle_id": "012348",
+        "parameters": {
+          "max_detections": 10,
+          "threshold": 0.3,
+          "input_width": 480,
+          "input_height": 480,
+          "bbox_order": "xyxy",
+          "bbox_normalization": false,
+          "class_score_order": "score_cls"
+        }
+      }
+    },
+    "metadata_settings": {
+      "format": 1
+    }
+  }
 }

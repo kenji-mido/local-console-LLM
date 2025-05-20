@@ -26,67 +26,71 @@
   justify-content: center;
   align-items: center;
   text-align: center;
-  font-size: 14px;
+  color: var(--color-main);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
   font-weight: 400;
-  width: 104px;
-  height: 32px;
-  margin-left: 10px;
-  margin-right: 10px;
+  font-size: 14px;
+  line-height: 22px;
+  width: 110px;
+  padding: 4px 16px;
+
+  &.btn-lg {
+    padding: 8px 32px;
+    width: calc(var(--standard-spacing) * 28); // 224px@8px
+  }
+
+  &.icon-prefix {
+    padding: 5px 16px 5px 8px;
+    gap: 4px;
+  }
 }
 
+// normal button
 %normal-hub-button-rest {
-  color: #ffffff;
-  background: #3e455c;
-  border: 1px solid #3e455c;
+  background: $darkBlue;
+  border: 1px solid $darkBlue;
 }
 
 %normal-hub-button-hover {
   &:hover {
-    color: #ffffff;
     background: linear-gradient(
         0deg,
-        rgba(255, 255, 255, 0.3) 0%,
-        rgba(255, 255, 255, 0.3) 100%
+        rgba(255, 255, 255, 0.08),
+        rgba(255, 255, 255, 0.08)
       ),
       #3e455c;
-    border:
-      1px solid
-        linear-gradient(
-          0deg,
-          rgba(255, 255, 255, 0.3) 0%,
-          rgba(255, 255, 255, 0.3) 100%
-        ),
-      #3e455c;
+    border: 1px solid #4d5469;
   }
 }
 
 %normal-hub-button-pressed {
   &:active {
-    color: #ffffff;
     background: linear-gradient(
         0deg,
-        rgba(0, 0, 0, 0.2) 0%,
-        rgba(0, 0, 0, 0.2) 100%
+        rgba(255, 255, 255, 0.16),
+        rgba(255, 255, 255, 0.16)
       ),
       #3e455c;
-    border:
-      1px solid
-        linear-gradient(0deg, rgba(0, 0, 0, 0.2) 0%, rgba(0, 0, 0, 0.2) 100%),
-      #3e455c;
+    border: 1px solid #5d6376;
   }
 }
 
 %normal-hub-button-disable {
   &:disabled {
-    opacity: 0.3;
+    opacity: 0.38;
     cursor: not-allowed;
+    border: 1px solid rgba(62, 69, 92, 0.38);
   }
 }
 
 .normal-hub-btn {
   @extend %btn;
   border-radius: 8px;
-  opacity: 0px;
+  opacity: 1;
+  color: #ffffff;
+  background: $darkBlue;
+  border: 1px solid $darkBlue;
   cursor: pointer;
   @extend %normal-hub-button-rest;
   @extend %normal-hub-button-disable;
@@ -96,30 +100,24 @@
 
 // Weak Hub Button
 %weak-hub-button-rest {
-  color: rgb(62, 69, 92);
-  background-color: white;
-  border: 1px solid rgb(62, 69, 92);
+  background: none;
 }
 
 %weak-hub-button-hover {
   &:hover {
-    color: rgba(116, 121, 137);
-    background: rgb(240, 240, 240);
-    border: 1px solid rgba(116, 121, 137);
+    background: rgba(62, 69, 92, 0.2);
   }
 }
 
 %weak-hub-button-pressed {
   &:active {
-    color: rgb(62, 69, 92);
-    background: rgb(193, 193, 193);
-    border: 1px solid rgba(62, 69, 92);
+    background: rgba(62, 69, 92, 0.4);
   }
 }
 
 %weak-hub-button-disable {
   &:disabled {
-    opacity: 0.3;
+    opacity: 0.38;
     cursor: not-allowed;
   }
 }
@@ -127,6 +125,10 @@
 .weak-hub-btn {
   @extend %btn;
   border-radius: 8px;
+  opacity: 1;
+  color: $darkBlue;
+  background: white;
+  border: 1px solid $darkBlue;
   cursor: pointer;
   @extend %weak-hub-button-rest;
   @extend %weak-hub-button-disable;
@@ -136,45 +138,37 @@
 
 // Strong-Positive Hub Button
 %strong-positive-hub-button-rest {
-  color: #ffffff;
   background: $accentBlue;
   border: 1px solid $accentBlue;
 }
 
 %strong-positive-hub-button-hover {
   &:hover {
-    color: #ffffff;
     background: linear-gradient(
         0deg,
-        rgba(255, 255, 255, 0.3),
-        rgba(255, 255, 255, 0.3)
+        rgba(255, 255, 255, 0.08),
+        rgba(255, 255, 255, 0.08)
       ),
       $accentBlue;
-    border:
-      1px solid
-        linear-gradient(
-          0deg,
-          rgba(255, 255, 255, 0.3),
-          rgba(255, 255, 255, 0.3)
-        ),
-      $accentBlue;
+    border: 1px solid #4d6cd0;
   }
 }
 
 %strong-positive-hub-button-pressed {
   &:active {
-    color: #ffffff;
-    background: linear-gradient(0deg, rgba(0, 0, 0, 0.2), rgba(0, 0, 0, 0.2)),
+    background: linear-gradient(
+        0deg,
+        rgba(255, 255, 255, 0.16),
+        rgba(255, 255, 255, 0.16)
+      ),
       $accentBlue;
-    border:
-      1px solid linear-gradient(0deg, rgba(0, 0, 0, 0.2), rgba(0, 0, 0, 0.2)),
-      $accentBlue;
+    border: 1px solid #5c79d4;
   }
 }
 
 %strong-positive-hub-button-disable {
   &:disabled {
-    opacity: 0.3;
+    opacity: 0.38;
     cursor: not-allowed;
   }
 }
@@ -182,7 +176,10 @@
 .strong-positive-hub-btn {
   @extend %btn;
   border-radius: 8px;
-  opacity: 0px;
+  opacity: 1;
+  color: #ffffff;
+  background: $accentBlue;
+  border: 1px solid $accentBlue;
   cursor: pointer;
   @extend %strong-positive-hub-button-rest;
   @extend %strong-positive-hub-button-disable;
@@ -192,52 +189,48 @@
 
 // Strong-Negative Hub Button
 %strong-negative-hub-button-rest {
-  color: #ffffff;
-  background: #bf4d4d;
-  border: 1px solid #bf4d4d;
+  background: $strongNegative;
+  border: 1px solid $strongNegative;
 }
 
 %strong-negative-hub-button-hover {
   &:hover {
-    color: #ffffff;
     background: linear-gradient(
         0deg,
-        rgba(255, 255, 255, 0.3),
-        rgba(255, 255, 255, 0.3)
+        rgba(255, 255, 255, 0.08),
+        rgba(255, 255, 255, 0.08)
       ),
-      #bf4d4d;
-    border:
-      1px solid
-        linear-gradient(
-          0deg,
-          rgba(255, 255, 255, 0.3),
-          rgba(255, 255, 255, 0.3)
-        ),
-      #bf4d4d;
+      $strongNegative;
+    border: 1px solid #c45b5b;
   }
 }
 
 %strong-negative-hub-button-pressed {
   &:active {
-    color: #ffffff;
-    background: linear-gradient(0deg, rgba(0, 0, 0, 0.2), rgba(0, 0, 0, 0.2)),
-      #bf4d4d;
-    border:
-      1px solid linear-gradient(0deg, rgba(0, 0, 0, 0.2), rgba(0, 0, 0, 0.2)),
-      #bf4d4d;
+    background: linear-gradient(
+        0deg,
+        rgba(255, 255, 255, 0.16),
+        rgba(255, 255, 255, 0.16)
+      ),
+      $strongNegative;
+    border: 1px solid #c96969;
   }
 }
 
 %strong-negative-hub-button-disable {
   &:disabled {
-    opacity: 0.3;
+    opacity: 0.38;
     cursor: not-allowed;
   }
 }
 
 .strong-negative-hub-btn {
+  @extend %btn;
   border-radius: 8px;
-  opacity: 0px;
+  opacity: 1;
+  color: #ffffff;
+  background: $strongNegative;
+  border: 1px solid $strongNegative;
   cursor: pointer;
   @extend %strong-negative-hub-button-rest;
   @extend %strong-negative-hub-button-disable;

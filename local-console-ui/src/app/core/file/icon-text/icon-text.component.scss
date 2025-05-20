@@ -20,14 +20,21 @@
   display: flex;
   align-items: center;
   background: rgb(240, 240, 240);
-  border-radius: 6px;
+  border-radius: 8px;
+  gap: var(--standard-spacing);
+
+  &.padding-around {
+    padding: 7px 9px 7px 12px;
+  }
 
   img {
-    margin-right: 5px;
+    width: 24px;
+    height: 24px;
   }
 
   span {
     overflow: hidden;
     text-overflow: ellipsis;
+    white-space: nowrap;
   }
 }

@@ -36,16 +36,13 @@
 app-icon-text {
   width: 297px;
   padding: 7px 9px 7px 12px;
+  flex: 1;
+  background-color: #f4f4f4;
+  overflow: auto;
 }
 
 .weak-hub-btn {
   margin-left: 0px;
-}
-
-.file-input-layout {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
 }
 
 button {

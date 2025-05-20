@@ -15,11 +15,17 @@
 # SPDX-License-Identifier: Apache-2.0
 from pathlib import Path
 
+from fastapi import HTTPException
+from fastapi import status
 from fastapi.responses import FileResponse
+from fastapi.responses import Response
+from local_console.core.error.base import UserException
 from local_console.core.files.device import ImageFileManager
+from local_console.core.schemas.schemas import DeviceID
 from local_console.fastapi.pagination import Paginator
 from local_console.fastapi.routes.images.dto import FileDTO
 from local_console.fastapi.routes.images.dto import FileListDTO
+from local_console.utils.timing import as_timestamp
 
 
 class ImagePaginator(Paginator):
@@ -35,21 +41,53 @@ class ImagesController:
         self.image_manager = image_manager
         self.paginator = paginator or ImagePaginator()
 
-    def _to_file_dto(self, img: Path, device_id: int) -> FileDTO:
+    def _to_file_dto(self, img: Path, device_id: DeviceID) -> FileDTO:
         return FileDTO(
             name=img.name, sas_url=f"/images/devices/{device_id}/image/{img.name}"
         )
 
     def list(
-        self, device_id: int, limit: int, starting_after: str | None
+        self, device_id: DeviceID, limit: int, starting_after: str | None
     ) -> FileListDTO:
         paths = self.image_manager.list_for(device_id)
         trimmed, continuation = self.paginator.paginate(paths, limit, starting_after)
-        return FileListDTO(
+        listing = FileListDTO(
             data=[self._to_file_dto(image, device_id) for image in trimmed],
             continuation_token=continuation,
         )
+        try:
+            in_preview = self.image_manager.with_preview(device_id)
+        except UserException:
+            in_preview = False
 
-    def download(self, device_id: int, image_name: str) -> FileResponse:
+        if starting_after is None and in_preview:
+            ts = self.image_manager.ts_preview(device_id)
+            if ts:
+                preview_dto = FileDTO(
+                    name=as_timestamp(ts) + ".jpg",
+                    sas_url=f"/images/devices/{device_id}/preview",
+                )
+                listing.data.insert(0, preview_dto)
+
+        return listing
+
+    def download(self, device_id: DeviceID, image_name: str) -> FileResponse:
         image = self.image_manager.get_file(device_id, image_name)
         return FileResponse(path=image, filename=image.name)
+
+    def get_preview(self, device_id: DeviceID) -> Response:
+        ts = self.image_manager.ts_preview(device_id)
+        if ts:
+            filename = as_timestamp(ts) + ".jpg"
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="No preview image has been received yet from the device.",
+            )
+
+        image = self.image_manager.get_preview(device_id)
+        return Response(
+            content=image,
+            media_type="image/jpg",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )

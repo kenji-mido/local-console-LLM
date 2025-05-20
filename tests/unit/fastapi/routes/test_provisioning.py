@@ -14,28 +14,20 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 import base64
-from unittest.mock import patch
 
 from fastapi.testclient import TestClient
+from local_console.core.camera.qr.schema import QRInfo
 
-from tests.fixtures.fastapi import fa_client
 from tests.mocks.mock_qr import mock_qr
 
 
 def test_success_get_qr_with_defaults(fa_client: TestClient):
-    mocked_ip = "4.3.2.1"
-    with (
-        mock_qr() as qr_constructor,
-        patch(
-            "local_console.utils.local_network.get_my_ip_by_routing",
-            return_value=mocked_ip,
-        ),
-    ):
+    with (mock_qr() as qr_constructor,):
         response = fa_client.get("/provisioning/qrcode")
         assert response.status_code == 200
         assert response.headers["Content-Type"] == "application/json"
         qr_constructor.qr_mocked.add_data.assert_called_once_with(
-            f"AAIAAAAAAAAAAAAAAAAAAA==N=11;E={mocked_ip};H=1883;t=1;T=pool.ntp.org;U1FS"
+            f"AAIAAAAAAAAAAAAAAAAAAA==N=11;E={QRInfo().mqtt_host};H=1883;t=1;T=pool.ntp.org;U1FS"
         )
 
 

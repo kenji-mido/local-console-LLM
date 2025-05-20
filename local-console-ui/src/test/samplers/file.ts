@@ -16,15 +16,21 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { FileInformationEvented } from '@app/core/file/file-input/file-input.component';
+
 export namespace Files {
   export function sample(
-    name: string,
-    contents = 'My content',
-    type = 'text/plain',
+    path: string,
+    contents: string = 'My content',
+    sideloaded = false,
   ) {
-    const blob = new Blob([contents], { type });
-    const file = new File([blob], name);
-    file.text = () => Promise.resolve(contents);
-    return file;
+    const encoder = new TextEncoder();
+    const parts = path.split('/');
+    return <FileInformationEvented>{
+      path: path,
+      basename: parts[parts.length - 1], // Assume tests don't get run on Windows
+      data: encoder.encode(contents),
+      sideloaded: sideloaded,
+    };
   }
 }

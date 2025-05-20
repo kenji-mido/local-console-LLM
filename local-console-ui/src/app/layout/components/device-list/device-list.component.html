@@ -59,7 +59,7 @@
             *matCellDef="let element; let i = index"
             [attr.data-testid]="i + '-port'"
           >
-            {{ element.port }}
+            {{ element.device_id }}
           </td>
         </ng-container>
 
@@ -108,8 +108,9 @@
             [attr.data-testid]="i + '-status'"
             class="col-align-center"
           >
-            <img [src]="element.connection_state | deviceStatusSvg" />
-            <span>{{ element.connection_state }}</span>
+            <app-device-status-badge
+              [deviceStatus]="element.connection_state"
+            ></app-device-status-badge>
           </td>
         </ng-container>
 

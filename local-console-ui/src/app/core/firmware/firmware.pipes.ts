@@ -17,7 +17,7 @@
  */
 
 import { NgModule, Pipe, PipeTransform } from '@angular/core';
-import { DeviceV2 } from '../device/device';
+import { LocalDevice } from '../device/device';
 import { isSysModule } from '../module/module';
 
 @Pipe({
@@ -25,10 +25,10 @@ import { isSysModule } from '../module/module';
   standalone: true,
 })
 export class ProcessorFirmwarePipe implements PipeTransform {
-  transform(device: DeviceV2): string | undefined {
+  transform(device: LocalDevice): string | undefined {
     const sysModule = device.modules?.find(isSysModule);
     const firstValidProcessor =
-      sysModule?.property.state?.device_info?.processors?.find(
+      sysModule?.property.configuration?.device_info?.processors?.find(
         (p) => !!p.firmware_version,
       );
     return firstValidProcessor?.firmware_version;
@@ -40,11 +40,12 @@ export class ProcessorFirmwarePipe implements PipeTransform {
   standalone: true,
 })
 export class SensorFirmwarePipe implements PipeTransform {
-  transform(device: DeviceV2): string | undefined {
+  transform(device: LocalDevice): string | undefined {
     const sysModule = device.modules?.find(isSysModule);
-    const imx500Sensor = sysModule?.property.state?.device_info?.sensors?.find(
-      (s) => s.name === 'IMX500',
-    );
+    const imx500Sensor =
+      sysModule?.property.configuration?.device_info?.sensors?.find(
+        (s) => s.name === 'IMX500',
+      );
     return imx500Sensor?.firmware_version;
   }
 }

@@ -16,37 +16,24 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { FeaturesService } from '@app/core/common/features.service';
-import { DeviceService } from '@app/core/device/device.service';
-import { DeviceV2, LocalDevice } from '@app/core/device/device';
-import { ReplaySubject } from 'rxjs';
 import { Component, Input } from '@angular/core';
-import { ProvisioningScreen } from './provisioning.screen';
-import { NetworkSettingsPane } from './network-settings/network-settings.pane';
-import { DeviceDetailsComponent } from '@app/core/device/device-details/device-details.component';
-import { NoopAnimationsModule } from '@angular/platform-browser/animations';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { FormControl } from '@angular/forms';
+import { NoopAnimationsModule } from '@angular/platform-browser/animations';
+import { LocalDevice } from '@app/core/device/device';
+import { DeviceDetailsComponent } from '@app/core/device/device-details/device-details.component';
+import { DeviceService } from '@app/core/device/device.service';
 import { Device, DeviceList } from '@samplers/device';
+import { ReplaySubject } from 'rxjs';
+import { NetworkSettingsPane } from './network-settings/network-settings.pane';
+import { ProvisioningScreen } from './provisioning.screen';
 
 class MockDeviceService {
   deleteDevice = jest.fn().mockReturnValue(Promise.resolve());
   setSelectedDevice = jest.fn();
   loadDevices = jest.fn().mockImplementation(() => Promise.resolve());
-  devices$ = new ReplaySubject<DeviceV2[]>(1);
+  devices$ = new ReplaySubject<LocalDevice[]>(1);
   createDevice = jest.fn().mockResolvedValue(null);
-}
-
-class MockFeaturesService {
-  getFeatures = jest.fn().mockReturnValue({
-    device_list: {
-      full: true,
-      local_devices: true,
-    },
-    device_registration: {
-      mqtt_port: true,
-    },
-  });
 }
 
 @Component({
@@ -73,7 +60,6 @@ describe('DeviceListComponent', () => {
   let component: ProvisioningScreen;
   let fixture: ComponentFixture<ProvisioningScreen>;
   let deviceService: MockDeviceService;
-  let featuresService: MockFeaturesService;
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
@@ -82,10 +68,7 @@ describe('DeviceListComponent', () => {
         NoopAnimationsModule,
         MockNetworkSettingsPane,
       ],
-      providers: [
-        { provide: DeviceService, useClass: MockDeviceService },
-        { provide: FeaturesService, useClass: MockFeaturesService },
-      ],
+      providers: [{ provide: DeviceService, useClass: MockDeviceService }],
     })
       .overrideComponent(ProvisioningScreen, {
         remove: { imports: [NetworkSettingsPane, DeviceDetailsComponent] },
@@ -99,9 +82,6 @@ describe('DeviceListComponent', () => {
     deviceService = TestBed.inject(
       DeviceService,
     ) as unknown as MockDeviceService;
-    featuresService = TestBed.inject(
-      FeaturesService,
-    ) as unknown as MockFeaturesService;
     component = fixture.componentInstance;
     fixture.detectChanges();
   });
@@ -129,8 +109,8 @@ describe('DeviceListComponent', () => {
     it('should call the service with the correct parameters', async () => {
       const device_name = 'My device';
       const mqtt_port = 12345;
-      const device = Device.sampleLocal(Device.sample(device_name), mqtt_port);
-      const devices = DeviceList.sampleLocal().devices;
+      const device = Device.sample({ device_name, device_id: mqtt_port + '' });
+      const devices = DeviceList.sample().devices;
       devices.push(device);
 
       deviceService.devices$.next(devices);

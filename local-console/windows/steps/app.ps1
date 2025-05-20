@@ -26,6 +26,7 @@ $utils = Join-Path $rootPath "utils.ps1"
 
 # URLs of binary dependencies
 $DepURLFlatc = 'https://github.com/google/flatbuffers/releases/download/v24.3.25/Windows.flatc.binary.zip'
+$DepURLWabt = 'https://github.com/WebAssembly/wabt/releases/download/1.0.36/wabt-1.0.36-windows.tar.gz'
 
 function Main
 {
@@ -40,6 +41,7 @@ function Main
 
     $binPath = Join-Path $VirtualenvDir "Scripts"
     Get-FlatcBinary -ScriptsDir $binPath
+    Get-WasmValidateBinary -ScriptsDir $binPath
 }
 
 function Create-PythonEnvWithExecutable([string]$VirtualenvDir, [string]$WheelPath)
@@ -136,6 +138,54 @@ function Get-FlatcBinary([string]$ScriptsDir)
 
     # Cleanup the downloaded zip file
     Remove-Item -Path $zipPath
+}
+
+function Get-WasmValidateBinary([string]$ScriptsDir)
+{
+    $wasmValidatePath = Join-Path $ScriptsDir "wasm-validate.exe"
+
+    if (Test-Path $wasmValidatePath -PathType Leaf) {
+        Write-LogMessage "wasm-validate already installed at $ScriptsDir"
+        return
+    }
+
+    # Download the tarball file
+    $tarballPath = Join-Path $env:TEMP "wabt-1.0.36-windows.tar.gz"
+
+    # Initialize a flag to indicate the download success status
+    $downloadSuccessful = Test-Path $tarballPath -PathType Leaf
+    # Loop until the download is successful
+    while (-not $downloadSuccessful) {
+        try {
+            $ProgressPreference = 'SilentlyContinue'
+            Invoke-WebRequest -Uri $DepURLWabt -OutFile $tarballPath -Verbose:$false
+            $downloadSuccessful = $true
+        } catch {
+            $statusCode = $_.Exception.Response.StatusCode.value__
+            Write-Output "Download failed (got code $statusCode). Retrying..."
+            Start-Sleep -Seconds 5
+        }
+    }
+    Write-LogMessage "WABT tarball downloaded."
+
+    # Initialize a flag to indicate the download success status
+    $unpackSuccessful = $false
+    # Loop until the download is successful
+    while (-not $unpackSuccessful) {
+        try {
+            $ProgressPreference = 'SilentlyContinue'
+            # Unpack the tarball file directly into the virtual environment's Scripts/ directory
+            python -c "import tarfile; from pathlib import Path; pkg = tarfile.open(r'$tarballPath'); wval = next(t for t in pkg if 'wasm-validate.exe' in t.name.lower()); target = Path(r'$wasmValidatePath'); target.write_bytes(pkg.extractfile(wval).read())"
+            Write-LogMessage "wasm-validate Executable unpacked into $ScriptsDir"
+            $unpackSuccessful = $true
+        } catch {
+            Write-Output "Unpack failed (got $($_.Exception)). Retrying..."
+            Start-Sleep -Seconds 2
+        }
+    }
+
+    # Cleanup the downloaded zip file
+    Remove-Item -Path $tarballPath
 }
 
 function Create-AppDataDirectory([string]$Path)

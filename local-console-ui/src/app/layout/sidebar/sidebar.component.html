@@ -16,49 +16,7 @@
  SPDX-License-Identifier: Apache-2.0
 -->
 <div class="hub-menu">
-  <span class="hub-menu-section"><b>Scenario Hub</b></span>
-  <mat-nav-list>
-    <a
-      mat-list-item
-      routerLink="/{{ PATH.PROVISIONING_HUB }}"
-      routerLinkActive="select"
-      class="hub-list-item"
-    >
-      <img
-        src="images/{{ theme }}/provisioning_hub.svg"
-        alt=""
-        class="hub-menu-icon"
-      />
-      <ng-container i18n>Provisioning</ng-container>
-    </a>
-    <a
-      mat-list-item
-      routerLink="/{{ PATH.DEPLOYMENT_HUB }}"
-      routerLinkActive="select"
-      class="hub-list-item"
-    >
-      <img
-        src="images/{{ theme }}/deployment-hub.svg"
-        alt=""
-        class="hub-menu-icon"
-      />
-      <ng-container i18n>Deployment</ng-container>
-    </a>
-    <a
-      mat-list-item
-      routerLink="/{{ PATH.DATA_HUB }}"
-      routerLinkActive="select"
-      class="hub-list-item"
-    >
-      <img
-        src="images/{{ theme }}/data_hub_sidebar_icon.svg"
-        alt=""
-        class="hub-menu-icon"
-      />
-      <ng-container i18n>Inference</ng-container>
-    </a>
-  </mat-nav-list>
-  <span class="hub-menu-section"><b>Management</b></span>
+  <span class="hub-menu-section text-14 bold">Resource Management</span>
   <mat-nav-list>
     <a
       mat-list-item
@@ -66,12 +24,64 @@
       routerLinkActive="select"
       class="hub-list-item"
     >
-      <img
-        src="images/{{ theme }}/device-management.svg"
-        alt=""
-        class="hub-menu-icon"
-      />
-      <ng-container i18n>Devices</ng-container>
+      <div class="hub-menu-item">
+        <img
+          src="images/{{ theme }}/device-management.svg"
+          alt=""
+          class="hub-menu-icon"
+        />
+        <ng-container i18n>Devices</ng-container>
+      </div>
+    </a>
+  </mat-nav-list>
+  <span class="hub-menu-section text-14 bold">Scenario Hub</span>
+  <mat-nav-list>
+    <a
+      mat-list-item
+      routerLink="/{{ PATH.PROVISIONING_HUB }}"
+      routerLinkActive="select"
+      class="hub-list-item"
+    >
+      <div class="hub-menu-item">
+        <img
+          src="images/{{ theme }}/provisioning_hub.svg"
+          alt=""
+          class="hub-menu-icon"
+        />
+        <div>
+          <ng-container i18n>Edge Provisioning</ng-container>
+        </div>
+      </div>
+    </a>
+    <a
+      mat-list-item
+      routerLink="/{{ PATH.DEPLOYMENT_HUB }}"
+      routerLinkActive="select"
+      class="hub-list-item"
+    >
+      <div class="hub-menu-item">
+        <img
+          src="images/{{ theme }}/deployment-hub.svg"
+          alt=""
+          class="hub-menu-icon"
+        />
+        <ng-container i18n>Deployment</ng-container>
+      </div>
+    </a>
+    <a
+      mat-list-item
+      routerLink="/{{ PATH.DATA_HUB }}"
+      routerLinkActive="select"
+      class="hub-list-item"
+    >
+      <div class="hub-menu-item">
+        <img
+          src="images/{{ theme }}/data_hub.svg"
+          alt=""
+          class="hub-menu-icon"
+        />
+        <ng-container i18n>Inference</ng-container>
+      </div>
     </a>
   </mat-nav-list>
 </div>

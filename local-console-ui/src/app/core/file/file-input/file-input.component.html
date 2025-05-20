@@ -16,34 +16,34 @@
  SPDX-License-Identifier: Apache-2.0
 -->
 
-<div class="file-input-layout">
-  <div>{{ title }}</div>
+<div class="stack gap-1">
+  <div class="row gap-half">
+    <div>{{ title }}</div>
+    @if (required) {
+      <i class="required"></i>
+    }
+  </div>
   @if (!iconButton) {
     <button
       data-testid="actuator"
       class="weak-hub-btn"
       type="button"
-      (click)="fileInput.click()"
+      (click)="openFilePicker()"
+      [disabled]="disabled"
     >
       Select
     </button>
   }
-  <div class="row gap-1 align-center">
+  <div class="row gap-1 align-center disableable" [class.disabled]="disabled">
     <app-icon-text
       data-testid="filename"
       [text]="filename"
       [iconUrl]="iconUrl"
     ></app-icon-text>
-    <input
-      type="file"
-      #fileInput
-      (change)="handleFileSelection(fileInput.files)"
-      [accept]="extension"
-    />
     @if (iconButton) {
       <button
         data-testid="actuator"
-        (click)="fileInput.click()"
+        (click)="openFilePicker()"
         class="stack center align-center bg-edgeaipf round-1 ws-1 hs-1"
       >
         <img class="bleached" [src]="iconButton" />

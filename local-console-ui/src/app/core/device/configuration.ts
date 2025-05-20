@@ -16,10 +16,18 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+export interface ConfigurationStatus {
+  STORAGE_USAGE?: {
+    value: number;
+  };
+  FOLDER_ERROR?: {
+    value: null;
+  };
+}
+
 /* Example configuration JSON
 {
-  "image_dir_path": "/tmp/LocalConsole_p_t2ydha/images",
-  "inference_dir_path": "/tmp/LocalConsole_p_t2ydha/inferences",
+  "device_dir_path": "/tmp/LocalConsole_p_t2ydha",
   "size": "10",
   "unit": "MB",
   "vapp_type": "classification",
@@ -27,13 +35,22 @@
   "vapp_labels_file": null
 }
 */
-export type OperationMode = 'classification' | 'detection';
+export type OperationMode =
+  | 'image'
+  | 'classification'
+  | 'detection'
+  | 'custom'
+  | 'generic_classification'
+  | 'generic_detection';
 export interface Configuration {
-  image_dir_path?: string | null;
-  inference_dir_path?: string | null;
+  device_dir_path?: string | null;
   size?: number | null;
   unit?: string | null;
-  vapp_type?: OperationMode | null;
+  vapp_type?: OperationMode;
   vapp_config_file?: string | null;
   vapp_labels_file?: string | null;
+  ai_model_file?: string | null;
+  module_file?: string | null;
+  auto_deletion?: boolean | null;
+  status?: ConfigurationStatus;
 }

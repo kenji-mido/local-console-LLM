@@ -15,34 +15,50 @@
 # SPDX-License-Identifier: Apache-2.0
 from collections.abc import Generator
 from contextlib import contextmanager
-from pathlib import Path
 from typing import Any
-from unittest.mock import MagicMock
+from unittest.mock import Mock
 from unittest.mock import patch
 
+from local_console.servers.webserver import AsyncWebserver
 
-class MockedHttpServer(MagicMock):
-    def __init__(self, *args: Any, **kw: Any) -> None:
-        super().__init__(*args, **kw)
+MOCKED_WEBSERVER_PORT = 1234
 
-    def initialized_dir(self) -> Path:
-        if self.call_count <= 0:
-            return None
-        return self.call_args.args[0]
 
-    def external_set_dir(self) -> Path:
-        if self.return_value.set_directory.call_count <= 0:
-            return None
-        return self.return_value.set_directory.call_args.args[0]
+class TestAsyncWebserver(AsyncWebserver):
+    """
+    Adds minimal syntactic sugar to support tests
+    """
+
+    async def receives_file(self, path: str, data: bytes) -> None:
+        await self._recv_channel.send(
+            (
+                data,
+                path,
+            )
+        )
 
 
 @contextmanager
-def mocked_http_server() -> Generator[MockedHttpServer, None, None]:
-    http = MockedHttpServer()
-    with (
-        patch("local_console.core.camera.firmware.AsyncWebserver", http),
-        patch("local_console.servers.webserver.SyncWebserver", http),
-        patch("local_console.core.camera.ai_model.AsyncWebserver", http),
-        patch("local_console.core.commands.deploy.SyncWebserver", http),
+def mocked_http_server() -> Generator[AsyncWebserver, None, None]:
+    with patch(
+        "local_console.servers.webserver.GenericWebserver._setup_threads",
+        mock_webserver_threads,
     ):
-        yield http
+        http = TestAsyncWebserver(port=MOCKED_WEBSERVER_PORT)
+        http.start()
+        with (
+            patch("local_console.servers.webserver.AsyncWebserver", http),
+            patch("local_console.servers.webserver.SyncWebserver", http),
+            patch("local_console.core.commands.deploy.SyncWebserver", http),
+        ):
+            yield http
+
+
+def mock_webserver_threads(self: Any):
+    mock_thread = Mock()
+    mock_server = Mock()
+
+    mock_server.server_port = MOCKED_WEBSERVER_PORT
+    mock_thread.is_alive.return_value = True
+
+    return mock_thread, mock_server

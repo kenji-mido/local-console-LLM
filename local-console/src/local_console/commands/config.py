@@ -22,15 +22,22 @@ from typing import Optional
 import trio
 import typer
 from local_console.clients.agent import Agent
-from local_console.core.config import config_obj
+from local_console.commands.utils import find_device_config
+from local_console.core.config import Config
 from local_console.core.config import ConfigError
+from local_console.core.helpers import device_configure
+from local_console.core.helpers import initialize_handshake
+from local_console.core.helpers import publish_configure
 from local_console.core.schemas.schemas import DesiredDeviceConfig
+from local_console.core.schemas.schemas import DeviceConnection
+from local_console.core.schemas.schemas import GlobalConfiguration
 from local_console.core.schemas.schemas import OnWireProtocol
 from local_console.plugin import PluginBase
 from pydantic import ValidationError
-from pydantic.json import pydantic_encoder
+from pydantic_core import to_jsonable_python
 
 logger = logging.getLogger(__name__)
+config_obj = Config()
 app = typer.Typer(help="Configure devices, module instances, and Local Console")
 
 
@@ -44,8 +51,7 @@ def config_get(
         Optional[str],
         typer.Argument(
             help="Section of the configuration to retrieve. If not specified, the entire configuration is returned. "
-            "Use dot notation to navigate through hierarchical sections, e.g., `evp.iot_platform`. "
-            "For device-specific configurations, use the `--device` option."
+            "Use dot notation to navigate through hierarchical sections, e.g., `mqtt.port`. "
         ),
     ] = None,
     device: Annotated[
@@ -53,16 +59,20 @@ def config_get(
         typer.Option(
             "--device",
             "-d",
-            help="Device from which values are modified",
+            help="The name of the device to fetch the configuration parameter from. If not provided, the parameter will be fetched from the global configuration scope.",
+        ),
+    ] = None,
+    port: Annotated[
+        Optional[int],
+        typer.Option(
+            help="An alternative to --device, using the port to identify the device instead of its name. Ignored if the --device option is specified."
         ),
     ] = None,
 ) -> None:
     try:
-        config = (
-            config_obj.get_config()
-            if not device
-            else config_obj.get_device_config_by_name(device)
-        )
+        config: GlobalConfiguration | DeviceConnection = config_obj.data
+        if device or port:
+            config = find_device_config(device, port)
 
         selected_config = config
 
@@ -71,28 +81,17 @@ def config_get(
             for parameter in sections_split:
                 selected_config = getattr(selected_config, parameter)
 
-        print(json.dumps(selected_config, indent=2, default=pydantic_encoder))
+        print(json.dumps(selected_config, indent=2, default=to_jsonable_python))
 
     except ConfigError as e:
         logger.error(f"Configuration error: {e}")
         raise typer.Exit(1)
 
 
-def _set(section: str, new: str | None, device: str | None) -> None:
-    if section.startswith("evp."):
-        __set_evp(section, new, device)
-    else:
-        __set_device_scope(section, new, device)
-
-
-def __set_device_scope(section: str, new: str | None, device: str | None) -> None:
+def _set(section: str, new: str | None, device: str | None, port: int | None) -> None:
     assert not section.startswith("evp.")
 
-    device_config = (
-        config_obj.get_active_device_config()
-        if not device
-        else config_obj.get_device_config_by_name(device)
-    )
+    device_config = find_device_config(device, port)
 
     selected_config = device_config
     sections_split = section.split(".")
@@ -108,25 +107,6 @@ def __set_device_scope(section: str, new: str | None, device: str | None) -> Non
     try:
         setattr(selected_config, parameter, new_val)
 
-        # Ensure consistency of the active device pointer
-        if len(config_obj.config.devices) == 1:
-            config_obj.config.active_device = device_config.mqtt.port
-
-        config_obj.save_config()
-    except ValidationError as e:
-        raise SystemExit(f"Error setting '{section}'. {e.errors()[0]['msg']}.")
-
-
-def __set_evp(section: str, new: str | None, device: str | None) -> None:
-    assert section.startswith("evp.")
-
-    sections_split = section.split(".")
-    selected_config = config_obj.config
-    for parameter in sections_split[:-1]:
-        selected_config = getattr(selected_config, parameter)
-
-    try:
-        setattr(selected_config, sections_split[-1], new)
         config_obj.save_config()
     except ValidationError as e:
         raise SystemExit(f"Error setting '{section}'. {e.errors()[0]['msg']}.")
@@ -137,8 +117,7 @@ def config_set(
     section: Annotated[
         str,
         typer.Argument(
-            help="Section of the configuration to be modified. Use dot notation to express hierarchy, e.g., `evp.iot_platform`"
-            "For device-specific configurations, use the `--device` option."
+            help="Section of the configuration to be modified. Use dot notation to express hierarchy, e.g., `mqtt.port`"
         ),
     ],
     new: Annotated[
@@ -152,11 +131,17 @@ def config_set(
         typer.Option(
             "--device",
             "-d",
-            help="Device from which values are modified",
+            help="The name of the device to fetch the configuration parameter from. If not provided, the parameter will be set on the global configuration scope.",
+        ),
+    ] = None,
+    port: Annotated[
+        Optional[int],
+        typer.Option(
+            help="An alternative to --device, using the port to identify the device instead of its name. Ignored if the --device option is specified."
         ),
     ] = None,
 ) -> None:
-    _set(section, new, device)
+    _set(section, new, device, port)
 
 
 @app.command("unset", help="Removes the value of a nullable configuration key")
@@ -164,8 +149,7 @@ def config_unset(
     section: Annotated[
         str,
         typer.Argument(
-            help="Section of the configuration to be unset. Use dot notation to express hierarchy, e.g., `evp.iot_platform`"
-            "For device-specific configurations, use the `--device` option."
+            help="Section of the configuration to be unset. Use dot notation to express hierarchy, e.g., `mqtt.port`"
         ),
     ],
     device: Annotated[
@@ -173,11 +157,17 @@ def config_unset(
         typer.Option(
             "--device",
             "-d",
-            help="Device from which values are modified",
+            help="The name of the device to fetch the configuration parameter from. If not provided, the parameter will be unset on the global configuration scope.",
+        ),
+    ] = None,
+    port: Annotated[
+        Optional[int],
+        typer.Option(
+            help="An alternative to --device, using the port to identify the device instead of its name. Ignored if the --device option is specified."
         ),
     ] = None,
 ) -> None:
-    _set(section, None, device)
+    _set(section, None, device, port)
 
 
 @app.command("instance", help="Configure an application module instance")
@@ -194,23 +184,31 @@ def config_instance(
         str,
         typer.Argument(help="Data of the configuration"),
     ],
+    port: Annotated[
+        Optional[int],
+        typer.Option(help="TCP port on which the MQTT broker is listening"),
+    ] = None,
 ) -> None:
     try:
-        trio.run(configure_task, instance_id, topic, config)
+        trio.run(configure_task, instance_id, topic, config, port)
     except ConnectionError:
         raise SystemExit(
             f"Connection error while attempting to set configuration topic '{topic}' for instance {instance_id}"
         )
 
 
-async def configure_task(instance_id: str, topic: str, cfg: str) -> None:
-    config = config_obj.get_config()
-    config_device = config_obj.get_active_device_config()
-    schema = OnWireProtocol.from_iot_spec(config.evp.iot_platform)
-    agent = Agent(config_device.mqtt.host, config_device.mqtt.port, schema)
-    await agent.initialize_handshake()
+async def configure_task(
+    instance_id: str, topic: str, cfg: str, port: int | None = None
+) -> None:
+    if not port:
+        config_device = config_obj.get_first_device_config()
+    else:
+        config_device = find_device_config(None, port)
+    schema = config_device.onwire_schema
+    agent = Agent(config_device.mqtt.port)
+    await initialize_handshake(agent)
     async with agent.mqtt_scope([]):
-        await agent.configure(instance_id, topic, cfg)
+        await publish_configure(agent, schema, instance_id, topic, cfg)
 
 
 @app.command("device", help="Configure the device")
@@ -223,13 +221,28 @@ def config_device(
         int,
         typer.Argument(help="Min interval to report"),
     ],
+    device: Annotated[
+        Optional[str],
+        typer.Option(
+            "--device",
+            "-d",
+            help="The name of the device to update the configuration. If omitted it will update the first device on the list.",
+        ),
+    ] = None,
+    port: Annotated[
+        Optional[int],
+        typer.Option(
+            help="An alternative to --device, using the port to identify the device instead of its name. Ignored if the --device option is specified."
+        ),
+    ] = None,
 ) -> None:
     retcode = 1
     try:
+        device_config = find_device_config(device, port)
         desired_device_config = DesiredDeviceConfig(
             reportStatusIntervalMax=interval_max, reportStatusIntervalMin=interval_min
         )
-        retcode = trio.run(config_device_task, desired_device_config)
+        retcode = trio.run(config_device_task, desired_device_config, device_config)
     except ValueError:
         logger.warning("Report status interval out of range.")
     except ConnectionError:
@@ -239,15 +252,15 @@ def config_device(
     raise typer.Exit(code=retcode)
 
 
-async def config_device_task(desired_device_config: DesiredDeviceConfig) -> int:
+async def config_device_task(
+    desired_device_config: DesiredDeviceConfig, config_device: DeviceConnection
+) -> int:
     retcode = 1
-    config = config_obj.get_config()
-    config_device = config_obj.get_active_device_config()
-    schema = OnWireProtocol.from_iot_spec(config.evp.iot_platform)
-    agent = Agent(config_device.mqtt.host, config_device.mqtt.port, schema)
+    schema = config_device.onwire_schema
+    agent = Agent(config_device.mqtt.port)
     if schema == OnWireProtocol.EVP2:
         async with agent.mqtt_scope([]):
-            await agent.device_configure(desired_device_config)
+            await device_configure(agent, schema, desired_device_config)
         retcode = 0
     else:
         logger.warning(f"Unsupported on-wire schema {schema} for this command.")

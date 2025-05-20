@@ -32,7 +32,15 @@ export class HttpApiClient {
 
   async get<T = any>(
     path: string,
-    queryParams?: HttpParams,
+    queryParams?:
+      | HttpParams
+      | {
+          [param: string]:
+            | string
+            | number
+            | boolean
+            | ReadonlyArray<string | number | boolean>;
+        },
     showErrorAlert = true,
   ): Promise<T> {
     return this.mapToHandledPromise(

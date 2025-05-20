@@ -38,7 +38,7 @@ def deploy_config_controller(
         devices=devices,
         configs=config_manager,
         tasks=tasks,
-        params=config.config.config.deployment,
+        params=config.data.config.deployment,
     )
     return DeployConfigController(
         deployer=deployer,

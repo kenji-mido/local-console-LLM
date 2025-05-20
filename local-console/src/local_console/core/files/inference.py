@@ -14,24 +14,33 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 import logging
+from enum import IntEnum
 from pathlib import Path
+from typing import Annotated
+from typing import Any
 
 from local_console.core.files.device import InferenceFileManager
 from local_console.core.files.exceptions import FileNotFound
+from local_console.core.schemas.schemas import DeviceID
 from pydantic import BaseModel
+from pydantic import ConfigDict
 from pydantic import Field
 from pydantic import ValidationError
 
 logger = logging.getLogger(__name__)
 
 
-class InferenceDetail(BaseModel):
-    t: str = Field(..., alias="T")
-    o: str = Field(..., alias="O")
+class InferenceType(IntEnum):
+    FLATBUFFER = 0
+    JSON = 1
 
-    class Config:
-        extra = "allow"
-        populate_by_name = True
+
+class InferenceDetail(BaseModel):
+    t: Annotated[str, Field(..., alias="T")]
+    o: Annotated[Any, Field(..., alias="O")]
+    f: Annotated[InferenceType | None, Field(alias="F")] = None
+
+    model_config = ConfigDict(extra="allow", populate_by_name=True)
 
 
 class Inference(BaseModel):
@@ -40,9 +49,24 @@ class Inference(BaseModel):
     image: bool = Field(..., alias="Image")
     inferences: list[InferenceDetail] = Field(..., alias="Inferences")
 
-    class Config:
-        extra = "allow"
-        populate_by_name = True
+    model_config = ConfigDict(
+        extra="allow", populate_by_name=True, protected_namespaces=()
+    )
+
+
+class InferenceDetailOut(BaseModel):
+    time: Annotated[str, Field(..., serialization_alias="T")]
+    data: Annotated[Any, Field(..., serialization_alias="O")]
+    ftype: Annotated[InferenceType | None, Field(serialization_alias="F")] = None
+
+
+class InferenceOut(BaseModel):
+    device_id: str = Field(..., alias="DeviceID")
+    model_id: str = Field(..., alias="ModelID")
+    image: bool = Field(..., alias="Image")
+    inferences: list[InferenceDetailOut] = Field(..., alias="Inferences")
+
+    model_config = ConfigDict(populate_by_name=True, protected_namespaces=())
 
 
 class InferenceWithSource(BaseModel):
@@ -64,11 +88,11 @@ class InferenceManager:
             logger.error(f"Unknown error from {inference_path}", exc_info=e)
         return None
 
-    def list(self, device_id: int) -> list[InferenceWithSource]:
+    def list(self, device_id: DeviceID) -> list[InferenceWithSource]:
         files = self.files.list_for(device_id)
         return [inf for f in files if (inf := self._inference_or_none(f))]
 
-    def get(self, device_id: int, inference_id: str) -> InferenceWithSource:
+    def get(self, device_id: DeviceID, inference_id: str) -> InferenceWithSource:
         inferences = [
             inf for inf in self.list(device_id) if inf.path.name == inference_id
         ]

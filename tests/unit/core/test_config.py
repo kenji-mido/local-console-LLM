@@ -14,27 +14,63 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 import pytest
+from local_console.core.config import Config
 from local_console.core.error.base import UserException
 from local_console.core.error.code import ErrorCodes
+from local_console.core.schemas.schemas import DeviceConnection
 
-from tests.mocks.mock_configs import config_without_io
+from tests.mocks.config import set_configuration
 from tests.strategies.samplers.configs import GlobalConfigurationSampler
 
 
-def test_remove_device_only_1():
-    simple_conf = GlobalConfigurationSampler(num_of_devices=1).sample()
-    with config_without_io(simple_conf) as config:
-        with pytest.raises(UserException) as e:
-            config.remove_device(simple_conf.active_device)
-            assert e.value.code == ErrorCodes.EXTERNAL_ONE_DEVICE_NEEDED
-            assert e.value.message == "You need at least one device to work with"
+def port(dev: DeviceConnection) -> int:
+    return dev.mqtt.port
+
+
+def test_remove_device_only_1(single_device_config):
+    last_device = single_device_config.devices[0]
+    with pytest.raises(UserException) as e:
+        Config().remove_device(port(last_device))
+        assert e.value.code == ErrorCodes.EXTERNAL_ONE_DEVICE_NEEDED
+        assert e.value.message == "You need at least one device to work with"
 
 
 def test_remove_device_2_devices():
     simple_conf = GlobalConfigurationSampler(num_of_devices=2).sample()
-    with config_without_io(simple_conf) as config:
-        config.remove_device(simple_conf.active_device)
-        with pytest.raises(UserException) as e:
-            config.remove_device(simple_conf.active_device)
-            assert e.value.code == ErrorCodes.EXTERNAL_ONE_DEVICE_NEEDED
-            assert e.value.message == "You need at least one device to work with"
+    set_configuration(simple_conf)
+    device1 = simple_conf.devices[0]
+    device2 = simple_conf.devices[1]
+
+    Config().remove_device(port(device1))
+    with pytest.raises(UserException) as e:
+        Config().remove_device(port(device2))
+        assert e.value.code == ErrorCodes.EXTERNAL_ONE_DEVICE_NEEDED
+        assert e.value.message == "You need at least one device to work with"
+
+
+def test_persistent_attribute_methods(tmp_path, single_device_config):
+    config_obj = Config()
+    persist = config_obj._persistency_obj
+    device1 = single_device_config.devices[0]
+    persistent_attr = "device_dir_path"
+
+    assert len(config_obj.data.devices) == 1
+
+    first_value = config_obj.get_persistent_attr(device1.mqtt.port, persistent_attr)
+    assert persist.read_count == 0
+    assert persist.write_count == 0
+
+    config_obj.update_persistent_attr(device1.mqtt.port, persistent_attr, tmp_path)
+    assert persist.read_count == 0
+    assert persist.write_count == 1
+
+    new_value = config_obj.get_persistent_attr(device1.mqtt.port, persistent_attr)
+    assert persist.read_count == 0
+    assert persist.write_count == 1
+
+    config_obj.read_config()
+    assert persist.read_count == 1
+    assert persist.write_count == 1
+
+    assert new_value != first_value
+    assert new_value == tmp_path

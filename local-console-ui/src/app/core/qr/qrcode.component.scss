@@ -16,48 +16,58 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-:host ::ng-deep {
-  .mat-icon {
+:host {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.qr-header {
+  justify-content: end;
+
+  div {
+    width: 24px;
+    height: 24px;
+    img {
+      width: auto;
+      height: 100%;
+      aspect-ratio: 1;
+    }
+  }
+
+  div:last-child {
+    margin-left: 8px;
     width: 40px;
     height: 40px;
-    display: flex;
-    justify-content: end;
-    align-items: center;
-    margin-right: 32px;
   }
 
-  .mat-icon:last-child {
-    margin-left: 16px;
-  }
-
-  .mat-icon:hover {
+  div:hover {
     cursor: pointer;
   }
 }
 
-.qr-header {
+img {
+  width: auto;
+  aspect-ratio: 1;
+  height: 50vh;
+}
+
+.qr-error {
   color: white;
-  height: 40px;
-  display: flex;
-  justify-content: end;
-  align-items: center;
 }
 
 [class^="qr-body"],
 [class*=" qr-body"] {
-  height: 85vh;
-  color: white;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
-
+  &.fullscreen {
+    img {
+      width: auto;
+      height: 90vh;
+    }
+  }
   .qr-info {
     color: white;
-    width: 512px;
-    height: 146px;
+    width: 650px;
     text-align: left;
-    margin-bottom: 48px;
   }
 
   .qr-code {
@@ -74,57 +84,43 @@
 
 .qr-body-0 {
   img {
-    width: 200px;
-    height: 200px;
+    height: 30vh;
   }
 }
 
 .qr-body-1 {
   img {
-    width: 300px;
-    height: 300px;
+    height: 40vh;
   }
 }
 
 .qr-body-2 {
   img {
-    width: 400px;
-    height: 400px;
+    height: 50vh;
   }
 }
 
 .qr-body-3 {
   img {
-    width: 512px;
-    height: 512px;
+    height: 60vh;
   }
 }
 
 .qr-body-4 {
   img {
-    width: 700px;
-    height: 700px;
+    height: 70vh;
   }
 }
 
 .qr-body-5 {
   img {
-    width: 900px;
-    height: 900px;
+    height: 80vh;
   }
 }
 
 .qr-body-6 {
   img {
-    width: auto;
-    height: 80vh;
-  }
-}
-
-.qr-body-full {
-  img {
-    width: auto;
-    height: 100%;
+    height: 90vh;
   }
 }
 
@@ -133,20 +129,21 @@
     display: flex;
     flex-flow: column;
   }
-
   .qr-header {
     display: none;
   }
 
   [class^="qr-body"],
   [class*=" qr-body"] {
-    order: 1;
-    margin-top: 50px;
-
+    flex-direction: column-reverse;
     .qr-info {
-      order: 2;
       color: black;
       margin-top: 30px;
+    }
+    .qr-code {
+      img {
+        height: 60vh;
+      }
     }
   }
 

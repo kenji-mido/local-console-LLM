@@ -16,28 +16,36 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { DIALOG_DATA, DialogRef } from '@angular/cdk/dialog';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { UserPromptNameDialog } from './user-prompt-name.dialog';
-import { UserPromptDialogData } from '../../../dialogs/user-prompt/user-prompt.dialog';
-import { DialogRef, DIALOG_DATA } from '@angular/cdk/dialog';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
+import { ButtonVariant } from '@app/layout/dialogs/user-prompt/action';
+import {
+  UserPromptNameDialog,
+  UserPromptNameDialogData,
+} from './user-prompt-name.dialog';
 
-describe('UserPromptDialog', () => {
+describe('UserPromptNameDialog', () => {
   let component: UserPromptNameDialog;
   let fixture: ComponentFixture<UserPromptNameDialog>;
   let dialogRefSpy: jest.Mocked<DialogRef<UserPromptNameDialog>>;
-  let dialogData: UserPromptDialogData = {
+  let dialogData: UserPromptNameDialogData = {
     title: 'Test Title',
     message: 'Test message',
     type: 'info',
-    actionButtons: [{ text: 'Test', id: 'test', variant: 'primary' }],
+    actionButtons: [
+      { text: 'Test', id: 'test', variant: ButtonVariant.normal },
+    ],
     closeButtonText: 'Close',
+    showCancelButton: true,
+    deviceName: 'Device1',
   };
+
   beforeEach(async () => {
     dialogRefSpy = { close: jest.fn() } as any;
 
     await TestBed.configureTestingModule({
-      imports: [UserPromptNameDialog, NoopAnimationsModule], // Import standalone component
+      imports: [UserPromptNameDialog, NoopAnimationsModule],
       providers: [
         { provide: DialogRef, useValue: dialogRefSpy },
         { provide: DIALOG_DATA, useValue: dialogData },
@@ -54,18 +62,18 @@ describe('UserPromptDialog', () => {
   });
 
   it('should initialize with provided data', () => {
-    expect(component.device_name).toEqual(null);
+    expect(component.deviceName).toEqual('Device1');
   });
 
-  it('should return null ngOnDestroy', () => {
+  it('should not return name on ngOnDestroy if onApply was not called', () => {
     component.ngOnDestroy();
-    expect(dialogRefSpy.close).toHaveBeenCalledWith(null);
+    expect(dialogRefSpy.close).not.toHaveBeenCalled();
   });
 
   it('should return name ngOnDestroy if onApply was called', () => {
-    component.inputs.value.device_name = 'device_name';
+    component.inputs.value.deviceName = 'mynewname';
     component.onApply();
     component.ngOnDestroy();
-    expect(dialogRefSpy.close).toHaveBeenCalledWith('device_name');
+    expect(dialogRefSpy.close).toHaveBeenCalledWith('mynewname');
   });
 });

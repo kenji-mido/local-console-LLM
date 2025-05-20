@@ -18,53 +18,28 @@
 
 import { DTDLReqInfoV2, DTDLResInfoV2 } from './dtdl';
 
-// Module: system app
-//  - configuration: TODO: Spec unknown
-//  - state
-export interface SysAppModuleConfigurationV2 {
-  deploy_ai_model?: SysAppModuleDeployAiModelV2;
-}
-
-export function isSysModuleConfig(
-  config: any,
-): config is SysAppModuleConfigurationV2 {
-  return !config || 'deploy_ai_model' in config;
+export function isSysModuleConfig(config: any): config is SysAppModuleConfigV2 {
+  return config && 'device_info' in config;
 }
 
 export interface SysAppModuleStateV2 {
-  device_state?: SysAppModuleDeviceStatesV2;
   PRIVATE_endpoint_settings?: SysAppModuleEndpointSettingV2;
   system_settings?: SysAppModuleSystemSettingsV2;
   device_capabilities?: SysAppModuleDeviceCapabilitiesV2;
-  device_info?: SysAppModuleDeviceInfoV2;
   PRIVATE_reserved?: SysAppModuleReservedV2;
   wireless_setting?: SysAppModuleWirelessSettingV2;
   placeholder?: SysAppModulePlaceholderV2;
+}
+
+export interface SysAppModuleConfigV2 {
+  device_state?: SysAppModuleDeviceStatesV2;
+  device_info?: SysAppModuleDeviceInfoV2;
   network_settings?: SysAppModuleNetworkSettingV2;
   periodic_setting?: PeriodicSettingV2;
 }
 
 export function isSysModuleState(state: any): state is SysAppModuleStateV2 {
-  return state && 'device_info' in state;
-}
-
-// Module: system app
-// configuration:
-// - deploy_ai_model
-export interface SysAppModuleDeployAiModelV2 {
-  req_info?: DTDLReqInfoV2;
-  deploy_targets?: SysAppModuleDeployAiModelTargetV2[];
-  res_info?: DTDLResInfoV2;
-}
-
-export interface SysAppModuleDeployAiModelTargetV2 {
-  component?: number;
-  name?: string;
-  package_url?: string;
-  version?: string;
-  hash?: string;
-  progress?: number;
-  process_state?: string;
+  return state && 'PRIVATE_endpoint_settings' in state;
 }
 
 // Module: system app
@@ -256,24 +231,4 @@ export interface SysAppModuleNetworkSettingV2 {
 
 export interface PeriodicSettingV2 {
   ip_addr_setting?: string;
-}
-
-// Module: system app
-// state:
-//  network_setting
-export interface SysAppModuleDeployFirmwareV2 {
-  req_info?: DTDLReqInfoV2;
-  version?: string;
-  targets?: SysAppModuleDeployFirmwareTargetV2[];
-  res_info?: DTDLResInfoV2;
-}
-
-export interface SysAppModuleDeployFirmwareTargetV2 {
-  component: number;
-  name: string;
-  package_url: string;
-  version: string;
-  hash: string;
-  progress: number;
-  process_state: string;
 }

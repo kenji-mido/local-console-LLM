@@ -25,12 +25,15 @@ from local_console.fastapi.dependencies.deploy import InjectModelManager
 from local_console.fastapi.pagination import Paginator
 from local_console.fastapi.routes.commons import EmptySuccess
 from pydantic import BaseModel
+from pydantic import ConfigDict
 
 router = APIRouter(prefix="/models", tags=["Model"])
 
 
 class ModelDTO(BaseModel):
     model_id: str
+
+    model_config = ConfigDict(protected_namespaces=())
 
 
 class GetModelsOutDTO(BaseModel):
