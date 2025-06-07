@@ -1,0 +1,170 @@
+<!--
+ Copyright 2024 Sony Semiconductor Solutions Corp.
+
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
+
+     http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+
+ SPDX-License-Identifier: Apache-2.0
+-->
+<div class="chat-settings-container">
+  <div class="settings-header">
+    <button mat-icon-button (click)="goBack()">
+      <mat-icon>arrow_back</mat-icon>
+    </button>
+    <h1>Chat & MCP Settings</h1>
+  </div>
+
+  <mat-tab-group>
+    <mat-tab label="MCP Configuration">
+      <div class="tab-content">
+        <mat-card>
+          <mat-card-header>
+            <mat-card-title>MCP Server Settings</mat-card-title>
+            <mat-card-subtitle>Configure connection to Model Context Protocol server</mat-card-subtitle>
+          </mat-card-header>
+          <mat-card-content>
+            <form [formGroup]="mcpForm" class="settings-form">
+              <mat-form-field appearance="outline">
+                <mat-label>Server URL</mat-label>
+                <input matInput formControlName="serverUrl" placeholder="ws://localhost:8765">
+                <mat-hint>WebSocket URL for MCP server</mat-hint>
+              </mat-form-field>
+
+              <mat-form-field appearance="outline">
+                <mat-label>API Key (Optional)</mat-label>
+                <input matInput formControlName="apiKey" type="password">
+                <mat-hint>Authentication key if required by server</mat-hint>
+              </mat-form-field>
+
+              <mat-form-field appearance="outline">
+                <mat-label>Timeout (ms)</mat-label>
+                <input matInput formControlName="timeout" type="number">
+                <mat-hint>Request timeout in milliseconds</mat-hint>
+              </mat-form-field>
+            </form>
+          </mat-card-content>
+          <mat-card-actions>
+            <button mat-button (click)="testMcpConnection()" [disabled]="mcpForm.invalid || isTestingMcp">
+              <mat-icon>wifi_tethering</mat-icon>
+              Test Connection
+            </button>
+            <button mat-raised-button color="primary" (click)="saveMcpSettings()" [disabled]="mcpForm.invalid">
+              <mat-icon>save</mat-icon>
+              Save Settings
+            </button>
+          </mat-card-actions>
+        </mat-card>
+      </div>
+    </mat-tab>
+
+    <mat-tab label="LLM Configuration">
+      <div class="tab-content">
+        <mat-card>
+          <mat-card-header>
+            <mat-card-title>LLM API Settings</mat-card-title>
+            <mat-card-subtitle>Configure connection to Large Language Model</mat-card-subtitle>
+          </mat-card-header>
+          <mat-card-content>
+            <form [formGroup]="chatForm" class="settings-form">
+              <mat-form-field appearance="outline">
+                <mat-label>Provider</mat-label>
+                <mat-select formControlName="provider">
+                  @for (provider of providers; track provider.value) {
+                    <mat-option [value]="provider.value">{{ provider.label }}</mat-option>
+                  }
+                </mat-select>
+                <mat-hint>Choose your LLM provider (Ollama is free and runs locally)</mat-hint>
+              </mat-form-field>
+
+              <mat-form-field appearance="outline">
+                <mat-label>API Endpoint</mat-label>
+                <input matInput formControlName="apiEndpoint">
+                <mat-hint>API endpoint URL (auto-filled based on provider)</mat-hint>
+              </mat-form-field>
+
+              <mat-form-field appearance="outline">
+                <mat-label>API Key</mat-label>
+                <input matInput formControlName="apiKey" type="password">
+                <mat-hint>{{ chatForm.get('apiKey')?.hasError('required') ? 'Required for this provider' : 'Optional for local providers' }}</mat-hint>
+              </mat-form-field>
+
+              <mat-form-field appearance="outline">
+                <mat-label>Model</mat-label>
+                <mat-select formControlName="model">
+                  @for (model of availableModels; track trackByValue($index, model)) {
+                    <mat-option [value]="model.value">{{ model.label }}</mat-option>
+                  }
+                </mat-select>
+                <mat-hint>Select the LLM model to use ({{ availableModels.length }} available)</mat-hint>
+              </mat-form-field>
+
+              <mat-form-field appearance="outline">
+                <mat-label>Temperature</mat-label>
+                <input matInput formControlName="temperature" type="number" step="0.1">
+                <mat-hint>Controls randomness (0-2)</mat-hint>
+              </mat-form-field>
+
+              <mat-form-field appearance="outline">
+                <mat-label>Max Tokens</mat-label>
+                <input matInput formControlName="maxTokens" type="number">
+                <mat-hint>Maximum response length</mat-hint>
+              </mat-form-field>
+            </form>
+          </mat-card-content>
+          <mat-card-actions>
+            <button mat-button (click)="testChatConnection()" [disabled]="chatForm.invalid || isTestingChat">
+              <mat-icon>chat</mat-icon>
+              Test Connection
+            </button>
+            <button mat-raised-button color="primary" (click)="saveChatSettings()" [disabled]="chatForm.invalid">
+              <mat-icon>save</mat-icon>
+              Save Settings
+            </button>
+          </mat-card-actions>
+        </mat-card>
+
+        <mat-card class="info-card">
+          <mat-card-header>
+            <mat-card-title>Quick Setup Guide</mat-card-title>
+          </mat-card-header>
+          <mat-card-content>
+            <div class="setup-guide">
+              <h4>🚀 Ollama (Recommended - Free & Local)</h4>
+              <ol>
+                <li>Install Ollama: <code>curl -fsSL https://ollama.ai/install.sh | sh</code></li>
+                <li>Pull a model: <code>ollama pull llama2</code></li>
+                <li>Start Ollama with CORS enabled: <code>OLLAMA_ORIGINS="*" ollama serve</code></li>
+                <li>Or restart the Angular dev server with proxy support</li>
+                <li>Select "Ollama (Local)" as provider above</li>
+              </ol>
+
+              <h4>💎 Groq (Free Tier Available)</h4>
+              <ol>
+                <li>Sign up at <a href="https://console.groq.com" target="_blank">console.groq.com</a></li>
+                <li>Get your free API key</li>
+                <li>Select "Groq (Free Tier)" as provider</li>
+                <li>Paste your API key</li>
+              </ol>
+
+              <h4>🔑 OpenAI</h4>
+              <ol>
+                <li>Get API key from <a href="https://platform.openai.com" target="_blank">platform.openai.com</a></li>
+                <li>Select "OpenAI" as provider</li>
+                <li>Paste your API key</li>
+              </ol>
+            </div>
+          </mat-card-content>
+        </mat-card>
+      </div>
+    </mat-tab>
+  </mat-tab-group>
+</div>

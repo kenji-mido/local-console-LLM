@@ -7,7 +7,7 @@
   "author": "Console Experience Team",
   "scripts": {
     "clean:ng": "node -e \"require('fs').rmSync('.angular', { recursive: true, force: true });\"",
-    "start": "npm run clean:ng && ng serve",
+    "start": "npm run clean:ng && ng serve --proxy-config proxy.conf.json",
     "start:electron": "npm run build:electron && ./dist/LocalConsole-*",
     "start:electron:debug": "npm run build && ./node_modules/.bin/electron --remote-debugging-port=9223 .",
     "start:server": "npx ts-node -r tsconfig-paths/register --transpile-only --cwd ./server-mock server.ts",

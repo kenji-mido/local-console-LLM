@@ -46,4 +46,6 @@ export const ROUTER_LINKS = {
   GLOBAL_PROVISIONER_SCAN: 'provisioning-service/scan',
   GLOBAL_PROVISIONER_FORM: 'provisioning-service/provisioning',
   LOADER: 'loader',
+  CHAT_HUB: 'chat-hub',
+  CHAT_SETTINGS: 'chat-hub/settings',
 };

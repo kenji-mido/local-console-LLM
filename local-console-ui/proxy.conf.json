@@ -1,0 +1,11 @@
+{
+  "/api/ollama/*": {
+    "target": "http://localhost:11434",
+    "secure": false,
+    "changeOrigin": true,
+    "logLevel": "debug",
+    "pathRewrite": {
+      "^/api/ollama": ""
+    }
+  }
+}

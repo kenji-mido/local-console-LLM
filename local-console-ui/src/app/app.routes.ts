@@ -23,6 +23,8 @@ import { DeploymentHubScreen } from './layout/pages/deployment-hub/deployment-hu
 import { DeviceManagementScreen } from './layout/pages/device-management/device-management.screen';
 import { LoadingScreen } from './layout/pages/loader/loading.screen';
 import { ProvisioningScreen } from './layout/pages/provisioning-hub/provisioning.screen';
+import { ChatHubScreen } from './layout/pages/chat-hub/chat-hub.screen';
+import { ChatSettingsScreen } from './layout/pages/chat-hub/chat-settings.screen';
 
 export const routes: Routes = [
   { path: '', redirectTo: ROUTER_LINKS.LOADER, pathMatch: 'full' },
@@ -45,5 +47,13 @@ export const routes: Routes = [
   {
     path: ROUTER_LINKS.DEVICE_MANAGEMENT,
     component: DeviceManagementScreen,
+  },
+  {
+    path: ROUTER_LINKS.CHAT_HUB,
+    component: ChatHubScreen,
+  },
+  {
+    path: ROUTER_LINKS.CHAT_SETTINGS,
+    component: ChatSettingsScreen,
   },
 ];

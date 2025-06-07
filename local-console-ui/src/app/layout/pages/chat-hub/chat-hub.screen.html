@@ -1,0 +1,107 @@
+<!--
+ Copyright 2024 Sony Semiconductor Solutions Corp.
+
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
+
+     http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+
+ SPDX-License-Identifier: Apache-2.0
+-->
+<div class="chat-hub-container">
+  <mat-toolbar class="chat-toolbar">
+    <span>AI Chat Assistant</span>
+    <span class="spacer"></span>
+    <div class="connection-status" [class.connected]="mcpConnected()">
+      <mat-icon>{{ mcpConnected() ? 'cloud_done' : 'cloud_off' }}</mat-icon>
+      <span>{{ mcpConnected() ? 'MCP Connected' : 'MCP Disconnected' }}</span>
+    </div>
+    <button mat-icon-button [matMenuTriggerFor]="menu">
+      <mat-icon>more_vert</mat-icon>
+    </button>
+    <mat-menu #menu="matMenu">
+      <button mat-menu-item (click)="openSettings()">
+        <mat-icon>settings</mat-icon>
+        <span>MCP Settings</span>
+      </button>
+      <button mat-menu-item (click)="clearChat()">
+        <mat-icon>clear</mat-icon>
+        <span>Clear Chat</span>
+      </button>
+    </mat-menu>
+  </mat-toolbar>
+
+  <div class="chat-messages">
+    @for (message of messages(); track message.id) {
+      <div class="message" [class.user]="message.role === 'user'" [class.assistant]="message.role === 'assistant'">
+        <mat-card>
+          <mat-card-content>
+            <div class="message-header">
+              <mat-icon>{{ message.role === 'user' ? 'person' : 'smart_toy' }}</mat-icon>
+              <span class="role">{{ message.role === 'user' ? 'You' : 'Assistant' }}</span>
+              <span class="timestamp">{{ message.timestamp | date:'short' }}</span>
+            </div>
+            <div class="message-content">{{ message.content }}</div>
+            @if (message.mcpData) {
+              <div class="mcp-data-section">
+                <div class="mcp-data-header">
+                  <mat-icon>source</mat-icon>
+                  <span>MCP Data from IMX500 Camera</span>
+                  <button mat-icon-button (click)="toggleMcpData(message.id)" class="toggle-btn">
+                    <mat-icon>{{ isExpandedMcpData(message.id) ? 'expand_less' : 'expand_more' }}</mat-icon>
+                  </button>
+                </div>
+                @if (isExpandedMcpData(message.id)) {
+                  <div class="mcp-data-content">
+                    <pre>{{ formatMcpData(message.mcpData) }}</pre>
+                  </div>
+                }
+              </div>
+            }
+          </mat-card-content>
+        </mat-card>
+      </div>
+    }
+    @if (isLoading()) {
+      <div class="message assistant">
+        <mat-card>
+          <mat-card-content>
+            <div class="message-header">
+              <mat-icon>smart_toy</mat-icon>
+              <span class="role">Assistant</span>
+            </div>
+            <div class="loading-dots">
+              <span></span>
+              <span></span>
+              <span></span>
+            </div>
+          </mat-card-content>
+        </mat-card>
+      </div>
+    }
+  </div>
+
+  <div class="chat-input-container">
+    <mat-form-field appearance="outline" class="chat-input">
+      <mat-label>Type your message...</mat-label>
+      <input matInput 
+             [(ngModel)]="inputMessage" 
+             (keydown.enter)="sendMessage()"
+             [disabled]="isLoading()">
+      <mat-icon matSuffix>chat</mat-icon>
+    </mat-form-field>
+    <button mat-fab 
+            color="primary" 
+            (click)="sendMessage()"
+            [disabled]="!inputMessage.trim() || isLoading()">
+      <mat-icon>send</mat-icon>
+    </button>
+  </div>
+</div>
