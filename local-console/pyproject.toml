@@ -100,6 +100,9 @@ license-files = ["*LICENSE"]
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+local_console = ["assets/**/*"]
+
 # Plugin architecture via entry points
 [project.entry-points."local_console.plugin"]
 base = "local_console.cli:PluginBase"
