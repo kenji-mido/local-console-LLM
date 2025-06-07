@@ -19,6 +19,10 @@
   <mat-toolbar class="chat-toolbar">
     <span>AI Chat Assistant</span>
     <span class="spacer"></span>
+    <div class="model-info">
+      <mat-icon>psychology</mat-icon>
+      <span>{{ getCurrentModel() }}</span>
+    </div>
     <div class="connection-status" [class.connected]="mcpConnected()">
       <mat-icon>{{ mcpConnected() ? 'cloud_done' : 'cloud_off' }}</mat-icon>
       <span>{{ mcpConnected() ? 'MCP Connected' : 'MCP Disconnected' }}</span>
@@ -31,6 +35,14 @@
         <mat-icon>settings</mat-icon>
         <span>MCP Settings</span>
       </button>
+      <button mat-menu-item (click)="sendModelTestMessage()">
+        <mat-icon>psychology</mat-icon>
+        <span>Test Model Identity</span>
+      </button>
+      <button mat-menu-item (click)="testModelSwitch()">
+        <mat-icon>bug_report</mat-icon>
+        <span>Debug Model Config</span>
+      </button>
       <button mat-menu-item (click)="clearChat()">
         <mat-icon>clear</mat-icon>
         <span>Clear Chat</span>
@@ -38,7 +50,7 @@
     </mat-menu>
   </mat-toolbar>
 
-  <div class="chat-messages">
+  <div class="chat-messages" #messagesContainer>
     @for (message of messages(); track message.id) {
       <div class="message" [class.user]="message.role === 'user'" [class.assistant]="message.role === 'assistant'">
         <mat-card>
@@ -92,6 +104,7 @@
     <mat-form-field appearance="outline" class="chat-input">
       <mat-label>Type your message...</mat-label>
       <input matInput 
+             #chatInput
              [(ngModel)]="inputMessage" 
              (keydown.enter)="sendMessage()"
              [disabled]="isLoading()">

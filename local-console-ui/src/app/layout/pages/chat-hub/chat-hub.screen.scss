@@ -32,6 +32,28 @@
     flex: 1;
   }
 
+  .model-info {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 12px;
+    border-radius: 16px;
+    background-color: #e3f2fd;
+    color: #1976d2;
+    margin-right: 16px;
+
+    mat-icon {
+      font-size: 18px;
+      width: 18px;
+      height: 18px;
+    }
+
+    span {
+      font-size: 14px;
+      font-weight: 500;
+    }
+  }
+
   .connection-status {
     display: flex;
     align-items: center;

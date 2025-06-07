@@ -58,6 +58,7 @@ export interface ChatMessage {
 })
 export class ChatHubScreen implements OnInit, AfterViewChecked {
   @ViewChild('messagesContainer') messagesContainer!: ElementRef;
+  @ViewChild('chatInput') chatInput!: ElementRef;
   
   messages = signal<ChatMessage[]>([]);
   inputMessage = '';
@@ -115,6 +116,9 @@ export class ChatHubScreen implements OnInit, AfterViewChecked {
       return;
     }
 
+    // Log current model for debugging
+    console.log('Current model being used:', chatConfig.model);
+
     const userMessage: ChatMessage = {
       id: this.generateId(),
       content: this.inputMessage,
@@ -171,6 +175,7 @@ export class ChatHubScreen implements OnInit, AfterViewChecked {
       };
 
       this.messages.update(msgs => [...msgs, assistantMessage]);
+      this.shouldScrollToBottom = true;
     } catch (error) {
       console.error('Error sending message:', error);
       const errorMessage: ChatMessage = {
@@ -180,8 +185,11 @@ export class ChatHubScreen implements OnInit, AfterViewChecked {
         timestamp: new Date()
       };
       this.messages.update(msgs => [...msgs, errorMessage]);
+      this.shouldScrollToBottom = true;
     } finally {
       this.isLoading.set(false);
+      // Restore focus to input field after response
+      this.focusInput();
     }
   }
 
@@ -196,6 +204,25 @@ export class ChatHubScreen implements OnInit, AfterViewChecked {
       role: 'assistant',
       timestamp: new Date()
     }]);
+    this.shouldScrollToBottom = true;
+  }
+
+  ngAfterViewChecked() {
+    if (this.shouldScrollToBottom) {
+      this.scrollToBottom();
+      this.shouldScrollToBottom = false;
+    }
+  }
+
+  private scrollToBottom(): void {
+    try {
+      if (this.messagesContainer) {
+        const element = this.messagesContainer.nativeElement;
+        element.scrollTop = element.scrollHeight;
+      }
+    } catch (err) {
+      console.error('Error scrolling to bottom:', err);
+    }
   }
 
   toggleMcpData(messageId: string) {
@@ -235,6 +262,52 @@ export class ChatHubScreen implements OnInit, AfterViewChecked {
     } catch (error) {
       return 'Error formatting MCP data: ' + String(mcpData);
     }
+  }
+
+  getCurrentModel(): string {
+    const config = this.chatService.getConfig();
+    if (config && config.model) {
+      // Show friendly name for installed models
+      const modelName = config.model;
+      if (modelName === 'llama2:latest') return 'Llama 2';
+      if (modelName === 'gemma3:4b') return 'Gemma 3 4B';
+      if (modelName === 'qwen3:8b') return 'Qwen 3 8B';
+      return modelName;
+    }
+    return 'No model selected';
+  }
+
+  sendModelTestMessage() {
+    this.inputMessage = 'What model are you?';
+    this.sendMessage();
+  }
+
+  testModelSwitch() {
+    const config = this.chatService.getConfig();
+    if (config) {
+      console.log('=== MODEL VERIFICATION TEST ===');
+      console.log('Current saved config:', config);
+      console.log('Model in config:', config.model);
+      console.log('Provider:', config.provider);
+      console.log('API Endpoint:', config.apiEndpoint);
+      console.log('===============================');
+      
+      this.inputMessage = `Please confirm: What model are you running as? I expect you to say "${config.model}".`;
+      this.sendMessage();
+    }
+  }
+
+  private focusInput(): void {
+    // Use setTimeout to ensure DOM is updated before focusing
+    setTimeout(() => {
+      try {
+        if (this.chatInput && this.chatInput.nativeElement) {
+          this.chatInput.nativeElement.focus();
+        }
+      } catch (error) {
+        console.log('Could not focus input:', error);
+      }
+    }, 100);
   }
 
   private generateId(): string {

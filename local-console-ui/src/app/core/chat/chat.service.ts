@@ -100,6 +100,9 @@ export class ChatService {
       systemMessage += `\n\n🔴 LIVE DATA from IMX500 camera MCP server (retrieved at ${currentTime}):\n${typeof mcpContent === 'string' ? mcpContent : JSON.stringify(mcpContent, null, 2)}`;
       systemMessage += '\n\n⚠️ IMPORTANT: This is REAL-TIME data. Please provide a fresh analysis of the current detection results. Do not reference any previous camera status. Focus on the actual objects detected NOW, their confidence levels, and current camera mode.';
     }
+    
+    // Add model identification to help verify which model is responding
+    systemMessage += `\n\nIMPORTANT: You are currently running as model: ${this.config.model}. When asked "which model are you?" or "what model are you?", you MUST respond with "I am ${this.config.model}" as the first line of your response.`;
 
     // Prepare messages for the API
     const messages = [
@@ -124,8 +127,11 @@ export class ChatService {
       headers = new HttpHeaders(headerOptions);
 
       // Prepare request body (OpenAI-compatible format for all providers)
+      const modelToUse = this.config.model || 'llama2:latest';
+      console.log('Using model:', modelToUse);
+      
       body = {
-        model: this.config.model || 'llama2:latest',
+        model: modelToUse,
         messages,
         temperature: this.config.temperature || 0.7,
         max_tokens: this.config.maxTokens || 1000

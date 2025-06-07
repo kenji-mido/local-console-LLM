@@ -74,10 +74,16 @@ export class ChatSettingsScreen implements OnInit {
     ],
     ollama: [
       { value: 'llama2:latest', label: 'Llama 2 (Installed)' },
-      { value: 'deepseek-coder:6.7b-base', label: 'DeepSeek Coder 6.7B (Installed)' },
+      { value: 'gemma3:4b', label: 'Gemma 3 4B (Installed)' },
+      { value: 'qwen3:8b', label: 'Qwen 3 8B (Installed)' },
+      { value: 'deepseek-coder:6.7b-base', label: 'DeepSeek Coder 6.7B' },
+      { value: 'llama3', label: 'Llama 3' },
+      { value: 'llama3.1', label: 'Llama 3.1' },
+      { value: 'llama3.2', label: 'Llama 3.2' },
+      { value: 'llama4', label: 'Llama 4 (Experimental)' },
       { value: 'mistral', label: 'Mistral' },
       { value: 'codellama', label: 'Code Llama' },
-      { value: 'phi', label: 'Phi-2' },
+      { value: 'phi', label: 'Phi-3' },
       { value: 'neural-chat', label: 'Neural Chat' },
     ],
     groq: [
@@ -122,10 +128,15 @@ export class ChatSettingsScreen implements OnInit {
 
     const chatConfig = this.chatService.getConfig();
     if (chatConfig) {
+      console.log('Loading existing chat config:', chatConfig);
       this.chatForm.patchValue(chatConfig);
       // Update models based on loaded provider
       if (chatConfig.provider) {
         this.onProviderChange(chatConfig.provider);
+        // Ensure model is set after provider change
+        setTimeout(() => {
+          this.chatForm.patchValue({ model: chatConfig.model });
+        }, 100);
       }
     } else {
       // Set initial models for default provider (ollama)
@@ -195,8 +206,23 @@ export class ChatSettingsScreen implements OnInit {
     if (this.chatForm.invalid) return;
 
     const config: ChatConfig = this.chatForm.value;
+    console.log('Saving chat config:', config);
     this.chatService.configure(config);
-    this.snackBar.open('Chat settings saved successfully', 'OK', { duration: 3000 });
+    
+    // Verify the configuration was saved
+    const savedConfig = this.chatService.getConfig();
+    console.log('Saved config verification:', savedConfig);
+    
+    // Show friendly model name in confirmation
+    const friendlyModelName = this.getFriendlyModelName(config.model || '');
+    this.snackBar.open(`Chat settings saved successfully. Model: ${friendlyModelName}`, 'OK', { duration: 5000 });
+  }
+
+  private getFriendlyModelName(modelName: string): string {
+    if (modelName === 'llama2:latest') return 'Llama 2';
+    if (modelName === 'gemma3:4b') return 'Gemma 3 4B';
+    if (modelName === 'qwen3:8b') return 'Qwen 3 8B';
+    return modelName;
   }
 
   async testMcpConnection() {

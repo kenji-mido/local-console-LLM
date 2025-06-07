@@ -141,7 +141,15 @@
               <h4>🚀 Ollama (Recommended - Free & Local)</h4>
               <ol>
                 <li>Install Ollama: <code>curl -fsSL https://ollama.ai/install.sh | sh</code></li>
-                <li>Pull a model: <code>ollama pull llama2</code></li>
+                <li>Pull a model:
+                  <ul>
+                    <li><code>ollama pull llama2</code> - ✅ Already installed</li>
+                    <li><code>ollama pull gemma3:4b</code> - ✅ Already installed (Google's latest)</li>
+                    <li><code>ollama pull qwen3:8b</code> - ✅ Already installed (Alibaba's LLM)</li>
+                    <li><code>ollama pull llama3</code> - Meta's latest</li>
+                    <li><code>ollama pull llama3.1</code> - Most recent version</li>
+                  </ul>
+                </li>
                 <li>Start Ollama with CORS enabled: <code>OLLAMA_ORIGINS="*" ollama serve</code></li>
                 <li>Or restart the Angular dev server with proxy support</li>
                 <li>Select "Ollama (Local)" as provider above</li>
