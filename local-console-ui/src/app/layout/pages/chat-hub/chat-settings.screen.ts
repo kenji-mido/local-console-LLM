@@ -128,7 +128,6 @@ export class ChatSettingsScreen implements OnInit {
 
     const chatConfig = this.chatService.getConfig();
     if (chatConfig) {
-      console.log('Loading existing chat config:', chatConfig);
       this.chatForm.patchValue(chatConfig);
       // Update models based on loaded provider
       if (chatConfig.provider) {
@@ -150,19 +149,16 @@ export class ChatSettingsScreen implements OnInit {
   }
 
   onProviderChange(provider: string) {
-    console.log('Provider changed to:', provider);
     const providerConfig = this.providers.find(p => p.value === provider);
     const apiKeyControl = this.chatForm.get('apiKey');
     const modelControl = this.chatForm.get('model');
     
     // Update available models
     this.availableModels = this.modelsByProvider[provider] || [];
-    console.log('Available models updated:', this.availableModels);
     
     // Set default model for the provider and force update
     if (this.availableModels.length > 0) {
       const defaultModel = this.availableModels[0].value;
-      console.log('Setting default model:', defaultModel);
       modelControl?.setValue(defaultModel);
       modelControl?.updateValueAndValidity();
     }
@@ -206,12 +202,7 @@ export class ChatSettingsScreen implements OnInit {
     if (this.chatForm.invalid) return;
 
     const config: ChatConfig = this.chatForm.value;
-    console.log('Saving chat config:', config);
     this.chatService.configure(config);
-    
-    // Verify the configuration was saved
-    const savedConfig = this.chatService.getConfig();
-    console.log('Saved config verification:', savedConfig);
     
     // Show friendly model name in confirmation
     const friendlyModelName = this.getFriendlyModelName(config.model || '');

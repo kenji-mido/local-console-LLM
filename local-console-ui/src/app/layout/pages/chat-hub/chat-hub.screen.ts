@@ -116,8 +116,6 @@ export class ChatHubScreen implements OnInit, AfterViewChecked {
       return;
     }
 
-    // Log current model for debugging
-    console.log('Current model being used:', chatConfig.model);
 
     const userMessage: ChatMessage = {
       id: this.generateId(),
@@ -132,13 +130,9 @@ export class ChatHubScreen implements OnInit, AfterViewChecked {
     this.shouldScrollToBottom = true;
 
     try {
-      console.log('Sending message:', userMessage.content);
-      
       // Get MCP data if connected
       let mcpData = null;
       if (this.mcpConnected()) {
-        console.log('MCP is connected, querying data...');
-        console.log('User message:', userMessage.content);
         try {
           // Check if user is asking for camera status or detection specifically
           const isRealTimeQuery = userMessage.content.toLowerCase().includes('camera') && 
@@ -147,24 +141,18 @@ export class ChatHubScreen implements OnInit, AfterViewChecked {
                                   userMessage.content.toLowerCase().includes('results'));
           
           if (isRealTimeQuery) {
-            console.log('Calling camera_status tool for real-time data...');
             mcpData = await this.mcpService.callTool('camera_status', {});
           } else {
             mcpData = await this.mcpService.queryData(userMessage.content);
           }
-          console.log('MCP data received:', mcpData);
         } catch (mcpError) {
-          console.error('MCP query failed:', mcpError);
+          console.error('MCP query failed');
           // Continue without MCP data
         }
-      } else {
-        console.log('MCP is not connected, sending message without MCP data');
       }
 
-      console.log('Calling chat service...');
       // Send to chat service
       const response = await this.chatService.sendMessage(userMessage.content, mcpData);
-      console.log('Chat service response:', response);
 
       const assistantMessage: ChatMessage = {
         id: this.generateId(),
@@ -221,7 +209,7 @@ export class ChatHubScreen implements OnInit, AfterViewChecked {
         element.scrollTop = element.scrollHeight;
       }
     } catch (err) {
-      console.error('Error scrolling to bottom:', err);
+      console.error('Error scrolling to bottom');
     }
   }
 
@@ -285,13 +273,6 @@ export class ChatHubScreen implements OnInit, AfterViewChecked {
   testModelSwitch() {
     const config = this.chatService.getConfig();
     if (config) {
-      console.log('=== MODEL VERIFICATION TEST ===');
-      console.log('Current saved config:', config);
-      console.log('Model in config:', config.model);
-      console.log('Provider:', config.provider);
-      console.log('API Endpoint:', config.apiEndpoint);
-      console.log('===============================');
-      
       this.inputMessage = `Please confirm: What model are you running as? I expect you to say "${config.model}".`;
       this.sendMessage();
     }
@@ -305,7 +286,7 @@ export class ChatHubScreen implements OnInit, AfterViewChecked {
           this.chatInput.nativeElement.focus();
         }
       } catch (error) {
-        console.log('Could not focus input:', error);
+        console.log('Could not focus input');
       }
     }, 100);
   }

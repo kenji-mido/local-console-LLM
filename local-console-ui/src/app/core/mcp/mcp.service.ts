@@ -65,6 +65,7 @@ export class McpService {
 
   async connect(config: McpConfig): Promise<boolean> {
     this.config.set(config);
+    // TODO: Consider secure storage for sensitive configuration
     localStorage.setItem('mcp-config', JSON.stringify(config));
 
     if (this.ws) {
@@ -168,7 +169,6 @@ export class McpService {
       }
     };
 
-    console.log('Calling MCP tool:', toolName, 'with arguments:', toolArgs);
     return this.sendRequest(request);
   }
 

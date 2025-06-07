@@ -23,7 +23,7 @@ import { firstValueFrom } from 'rxjs';
 export interface ChatConfig {
   provider: string;
   apiEndpoint: string;
-  apiKey: string;
+  apiKey: string;  // WARNING: Stored in localStorage - use environment variables in production
   model?: string;
   temperature?: number;
   maxTokens?: number;
@@ -60,6 +60,8 @@ export class ChatService {
 
   configure(config: ChatConfig) {
     this.config = config;
+    // TODO: In production, API keys should not be stored in localStorage
+    // Consider using secure backend storage or environment variables
     localStorage.setItem('chat-config', JSON.stringify(config));
   }
 
@@ -79,7 +81,6 @@ export class ChatService {
                             message.toLowerCase().includes('results'));
     
     if (isRealTimeQuery && mcpData) {
-      console.log('Real-time query detected, clearing conversation history for fresh response');
       this.conversationHistory = [];
     }
 
@@ -91,7 +92,6 @@ export class ChatService {
     let systemMessage = `You are a helpful AI assistant integrated with the Local Console application for IMX500 smart cameras. Current time: ${currentTime}`;
     
     if (mcpData) {
-      console.log('Including MCP data in system message:', mcpData);
       // Extract content from MCP response if it has the content structure
       let mcpContent = mcpData;
       if (mcpData.content && Array.isArray(mcpData.content)) {
@@ -128,7 +128,6 @@ export class ChatService {
 
       // Prepare request body (OpenAI-compatible format for all providers)
       const modelToUse = this.config.model || 'llama2:latest';
-      console.log('Using model:', modelToUse);
       
       body = {
         model: modelToUse,
@@ -137,17 +136,12 @@ export class ChatService {
         max_tokens: this.config.maxTokens || 1000
       };
 
-      console.log('Sending request to:', this.config.apiEndpoint);
-      console.log('Request body:', JSON.stringify(body, null, 2));
-
       const response = await firstValueFrom(
         this.http.post<any>(this.config.apiEndpoint, body, { 
           headers,
           observe: 'response'
         })
       );
-
-      console.log('Response received:', response);
       assistantMessage = response.body.choices[0].message.content;
       
       // Add assistant response to history
@@ -159,8 +153,7 @@ export class ChatService {
         usage: undefined // Ollama doesn't provide token usage info
       };
     } catch (error) {
-      console.error('Error calling chat API:', error);
-      console.error('Config:', this.config);
+      console.error('Error calling chat API');
       throw error;
     }
   }
