@@ -125,30 +125,18 @@ export class McpService {
 
     const lowerQuery = query.toLowerCase();
 
-    // Check for specific tool requests
-    if (lowerQuery.includes('camera') && lowerQuery.includes('status')) {
-      return this.callTool('camera_status', {});
-    }
-    
-    if (lowerQuery.includes('switch') && lowerQuery.includes('model')) {
-      // Extract model type from query
-      const modelType = lowerQuery.includes('classification') ? 'classification' : 'detection';
-      return this.callTool('switch_model', { model_type: modelType });
+    // If user asks for tools or capabilities, return available tools
+    if (lowerQuery.includes('tools') || lowerQuery.includes('available') || lowerQuery.includes('capabilities')) {
+      return {
+        availableTools: await this.listTools(),
+        message: 'Here are the available MCP tools. Use specific tool names to execute them.'
+      };
     }
 
-    if (lowerQuery.includes('tools') || lowerQuery.includes('available')) {
-      return this.listTools();
-    }
-
-    // For general queries, try to determine the most appropriate tool
-    // Default to camera_status for camera-related queries
-    if (lowerQuery.includes('camera') || lowerQuery.includes('detection') || lowerQuery.includes('imx500')) {
-      return this.callTool('camera_status', {});
-    }
-
-    // If no specific tool matches, return available tools
+    // For any other query, return available tools for user guidance
+    // The user should specify which tool to use
     return {
-      error: 'No specific tool found for this query. Available tools: camera_status, switch_model',
+      message: 'Please specify which tool you want to use. Ask "what tools are available?" to see all options.',
       availableTools: await this.listTools()
     };
   }
@@ -208,6 +196,19 @@ export class McpService {
 
   getConfig(): McpConfig | null {
     return this.config();
+  }
+
+  async getToolCapabilities(): Promise<{tools: McpTool[], resources: McpResource[]}> {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+      throw new Error('MCP not connected');
+    }
+
+    const [tools, resources] = await Promise.all([
+      this.listTools(),
+      this.listResources()
+    ]);
+
+    return { tools, resources };
   }
 
   private initialize() {

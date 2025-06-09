@@ -47,6 +47,7 @@ export class ChatService {
   private conversationHistory: Array<{role: string; content: string}> = [];
 
   constructor(private http: HttpClient) {
+    
     // Load config from localStorage if exists
     const savedConfig = localStorage.getItem('chat-config');
     if (savedConfig) {
@@ -54,6 +55,17 @@ export class ChatService {
         this.config = JSON.parse(savedConfig);
       } catch (e) {
         console.error('Failed to parse saved chat config:', e);
+      }
+    }
+
+    // Load conversation history from localStorage if exists
+    const savedHistory = localStorage.getItem('chat-history');
+    if (savedHistory) {
+      try {
+        this.conversationHistory = JSON.parse(savedHistory);
+      } catch (e) {
+        console.error('Failed to parse saved chat history:', e);
+        this.conversationHistory = [];
       }
     }
   }
@@ -74,21 +86,17 @@ export class ChatService {
       throw new Error('Chat service not configured');
     }
 
-    // For real-time queries like camera status, clear history to get fresh responses
-    const isRealTimeQuery = message.toLowerCase().includes('camera') && 
-                           (message.toLowerCase().includes('status') || 
-                            message.toLowerCase().includes('detection') ||
-                            message.toLowerCase().includes('results'));
-    
-    if (isRealTimeQuery && mcpData) {
-      this.conversationHistory = [];
-    }
+
 
     // Add user message to history
     this.conversationHistory.push({ role: 'user', content: message });
 
-    // Prepare the system message with MCP data if available
+    // Save history after adding user message
+    this.saveHistory();
+
     const currentTime = new Date().toISOString();
+    
+    // Prepare the system message
     let systemMessage = `You are a helpful AI assistant integrated with the Local Console application for IMX500 smart cameras. Current time: ${currentTime}`;
     
     if (mcpData) {
@@ -97,18 +105,27 @@ export class ChatService {
       if (mcpData.content && Array.isArray(mcpData.content)) {
         mcpContent = mcpData.content.map((item: any) => item.text || item).join('\n');
       }
-      systemMessage += `\n\n🔴 LIVE DATA from IMX500 camera MCP server (retrieved at ${currentTime}):\n${typeof mcpContent === 'string' ? mcpContent : JSON.stringify(mcpContent, null, 2)}`;
-      systemMessage += '\n\n⚠️ IMPORTANT: This is REAL-TIME data. Please provide a fresh analysis of the current detection results. Do not reference any previous camera status. Focus on the actual objects detected NOW, their confidence levels, and current camera mode.';
+      const mcpDataStr = typeof mcpContent === 'string' ? mcpContent : JSON.stringify(mcpContent, null, 2);
+      
+      // Check if this is an "error" response that actually contains useful information
+      if (mcpData.error && mcpData.availableTools) {
+        systemMessage += `\n\nMCP Server Response:\n${mcpDataStr}`;
+        systemMessage += `\n\nThis response shows the available tools and capabilities. Please explain what tools are available and how they can be used, based on the information provided.`;
+      } else {
+        systemMessage += `\n\nCurrent camera status data:\n${mcpDataStr}`;
+        systemMessage += `\n\nBased on this real-time data, please provide a helpful analysis of the current camera status, including any detected objects and their confidence levels.`;
+      }
     }
     
     // Add model identification to help verify which model is responding
     systemMessage += `\n\nIMPORTANT: You are currently running as model: ${this.config.model}. When asked "which model are you?" or "what model are you?", you MUST respond with "I am ${this.config.model}" as the first line of your response.`;
 
-    // Prepare messages for the API
+    // Always send only the current message, no history
     const messages = [
       { role: 'system', content: systemMessage },
-      ...this.conversationHistory.slice(-10) // Keep last 10 messages for context
+      { role: 'user', content: message }
     ];
+    
 
     try {
       let headers: HttpHeaders;
@@ -136,16 +153,21 @@ export class ChatService {
         max_tokens: this.config.maxTokens || 1000
       };
 
+
       const response = await firstValueFrom(
         this.http.post<any>(this.config.apiEndpoint, body, { 
           headers,
           observe: 'response'
         })
       );
+      
       assistantMessage = response.body.choices[0].message.content;
       
       // Add assistant response to history
       this.conversationHistory.push({ role: 'assistant', content: assistantMessage });
+
+      // Save conversation history to localStorage
+      this.saveHistory();
 
       return {
         content: assistantMessage,
@@ -160,9 +182,34 @@ export class ChatService {
 
   clearHistory() {
     this.conversationHistory = [];
+    localStorage.removeItem('chat-history');
   }
 
   getHistory() {
     return [...this.conversationHistory];
+  }
+
+
+  private saveHistory() {
+    // Limit history size to prevent localStorage quota issues
+    const maxHistorySize = 50;
+    if (this.conversationHistory.length > maxHistorySize) {
+      this.conversationHistory = this.conversationHistory.slice(-maxHistorySize);
+    }
+    
+    try {
+      localStorage.setItem('chat-history', JSON.stringify(this.conversationHistory));
+    } catch (e) {
+      console.error('Failed to save chat history:', e);
+      // If localStorage is full, clear old entries
+      if (e instanceof DOMException && e.name === 'QuotaExceededError') {
+        this.conversationHistory = this.conversationHistory.slice(-10);
+        try {
+          localStorage.setItem('chat-history', JSON.stringify(this.conversationHistory));
+        } catch (e2) {
+          console.error('Failed to save reduced chat history:', e2);
+        }
+      }
+    }
   }
 }
