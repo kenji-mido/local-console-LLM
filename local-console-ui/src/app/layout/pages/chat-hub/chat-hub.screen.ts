@@ -30,6 +30,7 @@ import { Router } from '@angular/router';
 import { ROUTER_LINKS } from '../../../core/config/routes';
 import { ChatService } from '../../../core/chat/chat.service';
 import { McpService } from '../../../core/mcp/mcp.service';
+import { ToolMatcherService } from '../../../core/tool-matcher/tool-matcher.service';
 
 export interface ChatMessage {
   id: string;
@@ -70,7 +71,8 @@ export class ChatHubScreen implements OnInit, OnDestroy, AfterViewChecked {
   constructor(
     private chatService: ChatService,
     private mcpService: McpService,
-    private router: Router
+    private router: Router,
+    private toolMatcher: ToolMatcherService
   ) {}
 
   ngOnInit() {
@@ -162,15 +164,32 @@ export class ChatHubScreen implements OnInit, OnDestroy, AfterViewChecked {
       
       if (this.mcpConnected()) {
         try {
-          // Check if user is asking for camera status or detection specifically
-          const isRealTimeQuery = userMessage.content.toLowerCase().includes('camera') && 
-                                 (userMessage.content.toLowerCase().includes('status') || 
-                                  userMessage.content.toLowerCase().includes('detection') ||
-                                  userMessage.content.toLowerCase().includes('results'));
+          // Use tool matcher to determine if user wants to execute a specific tool
+          const availableTools = await this.mcpService.listTools();
+          const matchResult = await this.toolMatcher.matchTool(userMessage.content, availableTools);
           
-          if (isRealTimeQuery) {
-            mcpData = await this.mcpService.callTool('camera_status', {});
+          if (matchResult.confidence > 0.8) {
+            // High confidence: Execute tool directly
+            this.messages.update(msgs => [...msgs, {
+              id: this.generateId(),
+              content: `🔧 Executing ${matchResult.tool}... (This may take up to 2 minutes depending on the operation)`,
+              role: 'assistant',
+              timestamp: new Date()
+            }]);
+            
+            if (matchResult.tool !== 'none') {
+              mcpData = await this.mcpService.callTool(matchResult.tool, matchResult.parameters || {});
+              this.toolMatcher.recordFeedback(userMessage.content, matchResult.tool, true);
+            }
+          } else if (matchResult.confidence > 0.5) {
+            // Medium confidence: Ask for confirmation (we'll implement this UI later)
+            console.log('Would ask for confirmation for:', matchResult.tool);
+            // For now, just execute with lower confidence
+            if (matchResult.tool !== 'none') {
+              mcpData = await this.mcpService.callTool(matchResult.tool, matchResult.parameters || {});
+            }
           } else {
+            // Low confidence: Show available tools
             mcpData = await this.mcpService.queryData(userMessage.content);
           }
         } catch (mcpError) {

@@ -97,7 +97,9 @@ export class ChatService {
     const currentTime = new Date().toISOString();
     
     // Prepare the system message
-    let systemMessage = `You are a helpful AI assistant integrated with the Local Console application for IMX500 smart cameras. Current time: ${currentTime}`;
+    let systemMessage = `You are a helpful AI assistant integrated with the Local Console application for IMX500 smart cameras. Current time: ${currentTime}
+
+IMPORTANT: Always respond in the same language as the user's question. If the user asks in Japanese, respond in Japanese. If the user asks in English, respond in English. Match the user's language exactly.`;
     
     if (mcpData) {
       // Extract content from MCP response if it has the content structure

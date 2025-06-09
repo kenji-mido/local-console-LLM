@@ -241,10 +241,18 @@ export class McpService {
         return;
       }
 
+      // Use longer timeout for all tool calls to handle potentially heavy operations
+      let timeoutMs = this.config()?.timeout || 30000; // default 30s
+      
+      // For tool calls, use extended timeout since we don't know the operation complexity
+      if (request.method === 'tools/call') {
+        timeoutMs = 120000; // 2 minutes for all tool operations
+      }
+
       const timeout = setTimeout(() => {
         this.messageHandlers.delete(request.id);
-        reject(new Error('Request timeout'));
-      }, this.config()?.timeout || 30000);
+        reject(new Error(`Request timeout after ${timeoutMs}ms`));
+      }, timeoutMs);
 
       this.messageHandlers.set(request.id, (response) => {
         clearTimeout(timeout);
